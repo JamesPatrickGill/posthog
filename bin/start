@@ -25,8 +25,59 @@ export DEBUG=${DEBUG:-1}
 export SKIP_SERVICE_VERSION_REQUIREMENTS=${SKIP_SERVICE_VERSION_REQUIREMENTS:-1}
 
 # Limit Rust parallel compilation jobs to reduce CPU contention when multiple
-# services start simultaneously via phrocs (they share a build lock anyway)
+# services start simultaneously via phrocs (they share a build lock anyway).
+# The pre-build step below ignores this and uses full parallelism in one shot;
+# this cap only affects the per-service `cargo run` fallbacks (incremental
+# rebuilds after code edits, or a fresh/skipped pre-build).
 export CARGO_BUILD_JOBS="${CARGO_BUILD_JOBS:-1}"
+
+# Pre-build every Rust service binary the selected intents need, in a single
+# parallel `cargo build` invocation, before phrocs spawns the individual
+# `cargo run --bin <svc>` processes. Without this, those per-service cargo
+# invocations all contend for the rust/target build lock and compile one at a
+# time — and with CARGO_BUILD_JOBS=1 above, each one compiles on a single core.
+# Net effect: a build that cargo could parallelize across all cores becomes a
+# sequential single-core grind. Set POSTHOG_SKIP_RUST_PREBUILD=1 to opt out.
+prebuild_rust_binaries() {
+    local config="$1"
+    [[ -f "$config" ]] || return 0
+    command -v cargo &>/dev/null || return 0
+    [[ -d "$REPOSITORY_ROOT/rust" ]] || return 0
+
+    local seen_bins=()
+    local bin_args=()
+    local svc bin already b
+    while IFS= read -r svc; do
+        # Most services map 1:1 to a binary of the same name. The capture-*
+        # variants all run the `capture` binary in different modes via the
+        # DEV_RUST_SVC_OVERRIDE env var in bin/start-rust-service.
+        case "$svc" in
+            capture-replay | capture-ai) bin="capture" ;;
+            *) bin="$svc" ;;
+        esac
+        already=0
+        for b in "${seen_bins[@]}"; do
+            [[ "$b" == "$bin" ]] && {
+                already=1
+                break
+            }
+        done
+        ((already)) && continue
+        seen_bins+=("$bin")
+        bin_args+=(--bin "$bin")
+    done < <(grep -oE 'start-rust-service [a-zA-Z0-9_-]+' "$config" | awk '{print $2}' | sort -u)
+
+    [[ ${#bin_args[@]} -eq 0 ]] && return 0
+
+    echo "🦀 Pre-building Rust binaries in parallel: ${seen_bins[*]}"
+    (
+        cd "$REPOSITORY_ROOT/rust"
+        # Let cargo pick its default parallelism (all cores). Without unsetting,
+        # the exported CARGO_BUILD_JOBS=1 above would defeat the whole point.
+        unset CARGO_BUILD_JOBS
+        cargo build "${bin_args[@]}"
+    ) || echo "⚠️  Rust pre-build failed; phrocs will fall back to per-service compilation"
+}
 
 # Use sccache for Rust compilation caching (if available via flox or homebrew)
 if [[ -z "${RUSTC_WRAPPER:-}" ]] && command -v sccache &>/dev/null; then
@@ -156,7 +207,7 @@ if [[ "$*" == *"--custom"* ]]; then
         echo "Error: --custom requires a config path"
         exit 1
     fi
-    "$PROCESS_MANAGER" --config "$config_path"
+    PHROCS_CONFIG="$config_path"
 else
     GENERATED_CONFIG="$REPOSITORY_ROOT/.posthog/.generated/mprocs.yaml"
 
@@ -167,9 +218,15 @@ else
     fi
 
     if [[ -f "$GENERATED_CONFIG" ]]; then
-        "$PROCESS_MANAGER" --config "$GENERATED_CONFIG"
+        PHROCS_CONFIG="$GENERATED_CONFIG"
     else
         # Fallback if hogli not available
-        "$PROCESS_MANAGER" --config "$REPOSITORY_ROOT/bin/mprocs.yaml"
+        PHROCS_CONFIG="$REPOSITORY_ROOT/bin/mprocs.yaml"
     fi
 fi
+
+if [[ "${POSTHOG_SKIP_RUST_PREBUILD:-}" != "1" ]]; then
+    prebuild_rust_binaries "$PHROCS_CONFIG"
+fi
+
+"$PROCESS_MANAGER" --config "$PHROCS_CONFIG"
