@@ -6,6 +6,9 @@ Use this reference after the frontend QA loop completes and findings are settled
 
 PR mode only. Upload is optional and must be explicitly approved before any file
 leaves the developer's machine. Local mode never uploads evidence.
+Use a dedicated Cloudinary account/API key for QA evidence, not a production or
+customer-media account. Treat uploaded files as public PR evidence: anyone with
+the URL may be able to view them.
 
 Required environment variable:
 
@@ -20,11 +23,13 @@ into chat, logs, artifacts, or PR comments.
 The upload script loads the repo `.env` through `python-dotenv`, so no manual
 sourcing is needed when invoking it through `uv run`.
 
-If `CLOUDINARY_URL` is missing, tell the user that evidence cannot be uploaded
-and the PR comment will reference local paths only. Continue the QA run.
+If `CLOUDINARY_URL` is missing and the user wants uploaded evidence, tell them
+to add the internal 1Password value to the local repo `.env`, or continue with
+text-only/local evidence. Never expose local filesystem paths in PR comments.
 
-Before upload, show the user the exact upload set and ask for approval. Pick only
-human-facing evidence:
+Before upload, show the user the exact upload set and ask for approval. Upload
+only reviewed screenshots/GIFs that do not show secrets, private customer data,
+or unrelated local context. Pick only human-facing evidence:
 
 - `frontend-qa.gif`, only if generated and inspected as readable
 - 1-3 key screenshots that match the findings or PASS narrative
@@ -39,13 +44,14 @@ Invoke with the active skill directory:
 ```bash
 uv run python "<skill_dir>/scripts/upload-evidence.py" \
   --pr "$PR_NUMBER" \
+  --run-dir ".qa-frontend/runs/<run-id>" \
   --output ".qa-frontend/runs/<run-id>/upload-manifest.json" \
   --file ".qa-frontend/runs/<run-id>/frontend-qa.gif:flow-overview" \
   --file ".qa-frontend/runs/<run-id>/<screenshot>.png:<kebab-finding-description>"
 ```
 
 If the upload script is unreachable at the expected path, do not write a custom
-uploader. Surface the issue and fall back to local-path evidence.
+uploader. Surface the issue and omit evidence links from the PR comment.
 
 The script emits a manifest JSON with `uploaded`, `failed`, and
 `skipped_no_env` fields. Exit codes:
@@ -53,13 +59,14 @@ The script emits a manifest JSON with `uploaded`, `failed`, and
 - `0` - at least one file uploaded, none failed
 - `1` - partial failure, some files uploaded
 - `2` - `CLOUDINARY_URL` missing, nothing attempted
-- `3` - fatal error
+- `3` - fatal error, or upload attempted but no files uploaded
 
 Substitute uploaded URLs into the PR comment using the `url` field from each
 `uploaded` entry. Do not reconstruct URLs from `public_id`.
 
-For failed or skipped files, fall back to the local path and note
-`(upload failed)`. Never block the run on upload failure.
+For failed or skipped files, omit local paths from PR comments and note
+`evidence captured locally; upload failed or was skipped`. Never block the run
+on upload failure. Local reports may still reference local relative paths.
 
 Never echo `CLOUDINARY_URL`, the API secret, or raw upload response bodies into
 evidence files or PR comments.
@@ -154,8 +161,10 @@ PR mode only, same-repo PR only, at least one confident fix commit only:
 3. Re-fetch and verify the remote did not move.
 
 ```bash
-git fetch origin "$headRefName"
-git push --force-with-lease origin HEAD:"$headRefName"
+PR_HEAD_REF=$(gh pr view "$PR_REF" --json headRefName --jq '.headRefName')
+test -n "$PR_HEAD_REF"
+git fetch origin "$PR_HEAD_REF"
+git push --force-with-lease origin HEAD:"$PR_HEAD_REF"
 ```
 
 If the remote moved, do not push. Post or print a report explaining that local
