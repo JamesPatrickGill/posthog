@@ -52,6 +52,7 @@ export function MetricsTable({
         updateMetricBreakdown,
         removeMetricBreakdown,
         updateMetricAttribution,
+        updateMetricBreakdownLimit,
         removeMetric,
         removeSharedMetricFromExperiment,
     } = useActions(experimentLogic)
@@ -186,6 +187,13 @@ export function MetricsTable({
                                     }
 
                                     updateMetricAttribution(metric.uuid, attributionType, attributionValue)
+                                }}
+                                onBreakdownLimitChange={(breakdownLimit) => {
+                                    if (!metric.uuid) {
+                                        return
+                                    }
+
+                                    updateMetricBreakdownLimit(metric.uuid, breakdownLimit)
                                 }}
                                 error={error}
                                 isLoading={isLoading}
