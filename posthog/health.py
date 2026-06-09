@@ -32,6 +32,7 @@ from structlog import get_logger
 
 from posthog.celery import app
 from posthog.database_healthcheck import DATABASE_FOR_FLAG_MATCHING
+from posthog.git import get_git_commit_full
 from posthog.security.outbound_proxy import internal_requests
 
 logger = get_logger(__name__)
@@ -85,8 +86,13 @@ def livez(request: HttpRequest):
     interested that the service hasn't completely locked up. It's a weaker check
     than readyz but we can hit this harder such that we can take obviously
     broken pods out asap.
+
+    We also surface the full commit SHA the running image was built from. It is
+    unauthenticated (this endpoint short-circuits before auth) but a bare 40-char
+    SHA is opaque until the commit is published, so it lets external tooling confirm
+    which build is actually serving traffic without leaking anything resolvable.
     """
-    return JsonResponse({"http": True})
+    return JsonResponse({"http": True, "commit": get_git_commit_full() or "unknown"})
 
 
 def is_shutting_down() -> bool:

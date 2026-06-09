@@ -24,6 +24,19 @@ def get_git_commit_short() -> Optional[str]:
         return None
 
 
+def get_git_commit_full() -> Optional[str]:
+    """Return the full (untruncated) hash of the last commit. Will return None in case of failure.
+
+    Example: get_git_commit_full() => "86a3c3b529b25fb5b0e34900d5d56b8051ebf0c8"
+    """
+    if _git_commit_baked_in:
+        return _git_commit_baked_in
+    try:
+        return subprocess.check_output(["git", "rev-parse", "HEAD"]).decode("utf-8").strip()
+    except Exception:
+        return None
+
+
 def get_git_branch() -> Optional[str]:
     """Returns the symbolic name of the current active branch. Will return None in case of failure.
 

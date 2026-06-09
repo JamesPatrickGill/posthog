@@ -83,7 +83,28 @@ def test_livez_returns_200_and_doesnt_require_any_dependencies(client: Client):
 
     assert resp.status_code == 200, resp.content
     data = resp.json()
-    assert data == {"http": True}
+    assert data["http"] is True
+    assert "commit" in data
+
+
+def test_livez_returns_full_commit_sha_when_baked_in(client: Client):
+    full_sha = "86a3c3b529b25fb5b0e34900d5d56b8051ebf0c8"
+    with patch("posthog.git._git_commit_baked_in", full_sha):
+        resp = get_livez(client)
+
+    assert resp.status_code == 200, resp.content
+    assert resp.json() == {"http": True, "commit": full_sha}
+
+
+def test_livez_reports_unknown_commit_when_not_baked_in(client: Client):
+    with (
+        patch("posthog.git._git_commit_baked_in", None),
+        patch("posthog.git.subprocess.check_output", side_effect=Exception("not a git repo")),
+    ):
+        resp = get_livez(client)
+
+    assert resp.status_code == 200, resp.content
+    assert resp.json() == {"http": True, "commit": "unknown"}
 
 
 # Role based tests
