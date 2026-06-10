@@ -1363,8 +1363,10 @@ class DiscordBotClient:
 
     def _post(self, op: str, **fields: Any) -> dict[str, Any]:
         payload = {"op": op, **{key: value for key, value in fields.items() if value is not None}}
+        # DISCORD_BOT_ACTIONS_URL may be the full actions endpoint or the service root.
+        actions_url = self.base_url if self.base_url.endswith("/actions") else f"{self.base_url}/actions"
         response = requests.post(
-            f"{self.base_url}/actions",
+            actions_url,
             json=payload,
             headers={"Authorization": f"Bearer {self.shared_secret}"},
             timeout=self.timeout,
@@ -1377,6 +1379,10 @@ class DiscordBotClient:
             return response.json()
         except ValueError:
             return {}
+
+    def connect_guild(self, guild_id: str, region: str, project_api_key: str) -> dict[str, Any]:
+        """Provision guild analytics on the bot side; an empty ``project_api_key`` disconnects."""
+        return self._post("connect_guild", guild_id=guild_id, region=region, project_api_key=project_api_key)
 
     def create_thread(self, channel_id: str, name: str, message_id: str | None = None) -> dict[str, Any]:
         return self._post("create_thread", channel_id=channel_id, name=name, message_id=message_id)
@@ -1449,6 +1455,11 @@ class DiscordIntegration:
 
 def discord_bridge_configured() -> bool:
     return bool(settings.DISCORD_BOT_ACTIONS_URL and settings.DISCORD_BRIDGE_SHARED_SECRET)
+
+
+def discord_deployment_region() -> str:
+    """Region tag ("us"|"eu") sent with connect_guild so the bot captures to the right cloud."""
+    return "eu" if settings.CLOUD_DEPLOYMENT == "EU" else "us"
 
 
 def verify_discord_bridge_bearer(request: HttpRequest | Request) -> None:

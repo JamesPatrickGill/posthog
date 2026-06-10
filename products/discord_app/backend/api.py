@@ -14,7 +14,13 @@ import requests
 import structlog
 from temporalio.common import WorkflowIDConflictPolicy, WorkflowIDReusePolicy
 
-from posthog.models.integration import DiscordIntegrationError, Integration, verify_discord_bridge_bearer
+from posthog.models.integration import (
+    DiscordBotClient,
+    DiscordIntegrationError,
+    Integration,
+    discord_deployment_region,
+    verify_discord_bridge_bearer,
+)
 from posthog.models.organization import OrganizationMembership
 from posthog.models.team import Team
 from posthog.models.user import User
@@ -85,9 +91,14 @@ def _account_link_url(*, integration_id: int, discord_user_id: str) -> str:
     return f"{settings.SITE_URL}/api/discord/oauth/link/start?{urlencode({'state': state})}"
 
 
-def _server_connect_url(*, guild_id: str, guild_name: str, discord_user_id: str) -> str:
+def _server_connect_url(*, guild_id: str, guild_name: str, discord_user_id: str, project_id_hint: str = "") -> str:
     state = signing.dumps(
-        {"guild_id": guild_id, "guild_name": guild_name, "discord_user_id": discord_user_id},
+        {
+            "guild_id": guild_id,
+            "guild_name": guild_name,
+            "discord_user_id": discord_user_id,
+            "project_id_hint": str(project_id_hint or ""),
+        },
         salt=SERVER_CONNECT_SALT,
     )
     return f"{settings.SITE_URL}/api/discord/connect/start?{urlencode({'state': state})}"
@@ -140,18 +151,20 @@ def _handle_command(payload: dict[str, Any]) -> HttpResponse:
     discord_user_id = user.get("id", "")
     guild_id = payload.get("guild_id", "")
 
-    resolution = _resolve_integration(payload)
-    integration = resolution.integration
-
-    # `/posthog-connect` bootstraps the guild ↔ project mapping, so it must work before
-    # anything is connected. Completing the link requires PostHog org admin, checked web-side.
-    if command == "posthog-connect":
+    # `/ph connect` bootstraps the guild ↔ project mapping, so it must work before anything
+    # is connected (no resolution needed — also keeps the reply inside the bot's ~10s budget).
+    # Completing the link requires PostHog org admin, checked web-side.
+    if command in ("connect", "posthog-connect"):
         url = _server_connect_url(
             guild_id=guild_id,
             guild_name=payload.get("guild_name", ""),
             discord_user_id=discord_user_id,
+            project_id_hint=(payload.get("options") or {}).get("project_id", ""),
         )
-        return _ephemeral(f"Connect this server to a PostHog project (requires PostHog org admin): {url}")
+        return _ephemeral(f"Connect this server: {url}")
+
+    resolution = _resolve_integration(payload)
+    integration = resolution.integration
 
     # `/posthog-project` must work without a resolved default — it's the command that sets one.
     if command == "posthog-project":
@@ -159,7 +172,7 @@ def _handle_command(payload: dict[str, Any]) -> HttpResponse:
 
     if integration is None:
         if not resolution.candidates:
-            return _ephemeral("This server isn't connected to PostHog yet. Connect it with `/posthog-connect`.")
+            return _ephemeral("This server isn't connected to PostHog yet. Connect it with `/ph connect`.")
         return _ephemeral("Multiple PostHog projects are connected. Set yours with `/posthog-project set <id>`.")
 
     if command == "posthog":
@@ -233,7 +246,7 @@ def _handle_project_command(
         if resolution.integration is not None:
             return _ephemeral(commands_dispatch.handle_project_show(resolution.integration))
         if not resolution.candidates:
-            return _ephemeral("This server isn't connected to PostHog yet. Connect it with `/posthog-connect`.")
+            return _ephemeral("This server isn't connected to PostHog yet. Connect it with `/ph connect`.")
         return _ephemeral(
             "No default project set. Connected projects:\n"
             + format_project_candidate_list(resolution.candidates)
@@ -434,8 +447,14 @@ def discord_connect_start(request: HttpRequest) -> HttpResponse:
 
     # Re-sign with the session user baked in so confirm can detect a session swap mid-flow.
     confirm_state = signing.dumps({**data, "user_id": request.user.id}, salt=SERVER_CONNECT_SALT)
+
+    # Pre-select the /ph connect project_id hint when valid, else the user's current project.
+    hint = data.get("project_id_hint") or ""
+    team_ids = {team.id for team in teams}
+    preselected = int(hint) if hint.isdigit() and int(hint) in team_ids else request.user.current_team_id
     options = "".join(
-        f'<option value="{team.id}">{escape(team.organization.name)} · {escape(team.name)} (id {team.id})</option>'
+        f'<option value="{team.id}"{" selected" if team.id == preselected else ""}>'
+        f"{escape(team.organization.name)} · {escape(team.name)} (id {team.id})</option>"
         for team in teams
     )
     guild_label = escape(data.get("guild_name") or data["guild_id"])
@@ -482,8 +501,27 @@ def discord_connect_confirm(request: HttpRequest) -> HttpResponse:
         integration_id=data["guild_id"],
         defaults={"created_by": request.user, "config": {"guild_name": data.get("guild_name", "")}},
     )
+
+    # Provision analytics on the bot side — this push is what wires up guild capture.
+    provision_error: str | None = None
+    try:
+        result = DiscordBotClient().connect_guild(
+            guild_id=data["guild_id"],
+            region=discord_deployment_region(),
+            project_api_key=team.api_token,
+        )
+        if not result.get("ok"):
+            provision_error = f"bot replied {result!r}"
+    except Exception as e:
+        provision_error = str(e)
+    if provision_error:
+        logger.warning("discord_connect_guild_provision_failed", guild_id=data["guild_id"], error=provision_error)
+
     guild_label = escape(data.get("guild_name") or data["guild_id"])
-    return HttpResponse(
+    message = (
         f"Discord server {guild_label} is now connected to project {escape(team.name)} (id {team.id}). "
-        "You can close this tab and run /posthog in Discord."
+        "You can close this tab and run /ph in Discord."
     )
+    if provision_error:
+        message += " Note: provisioning analytics on the bot failed — reconnect to retry."
+    return HttpResponse(message)

@@ -98,3 +98,46 @@ class TestDiscordThreadHandler:
         handler.context.anchor_message_id = None
         handler.update_reaction("x")
         client.add_reaction.assert_not_called()
+
+
+class TestBotClientOutbound:
+    @override_settings(DISCORD_BOT_ACTIONS_URL="http://bot.local:8129/actions", DISCORD_BRIDGE_SHARED_SECRET="s3cret")
+    @pytest.mark.parametrize("project_api_key", ["phc_abc", ""])
+    def test_connect_guild_sends_bearer_to_actions_url(self, project_api_key):
+        from posthog.models.integration import DiscordBotClient
+
+        response = MagicMock(status_code=200)
+        response.json.return_value = {"ok": True}
+        with pytest.MonkeyPatch.context() as mp:
+            post = MagicMock(return_value=response)
+            mp.setattr("posthog.models.integration.requests.post", post)
+            result = DiscordBotClient().connect_guild(guild_id="g1", region="us", project_api_key=project_api_key)
+        assert result == {"ok": True}
+        assert post.call_args.args[0] == "http://bot.local:8129/actions"
+        assert post.call_args.kwargs["headers"]["Authorization"] == "Bearer s3cret"
+        # empty key (disconnect) must be sent, not stripped like None fields are
+        assert post.call_args.kwargs["json"] == {
+            "op": "connect_guild",
+            "guild_id": "g1",
+            "region": "us",
+            "project_api_key": project_api_key,
+        }
+
+    @override_settings(DISCORD_BOT_ACTIONS_URL="http://bot.local:8129", DISCORD_BRIDGE_SHARED_SECRET="s3cret")
+    def test_actions_suffix_appended_when_url_is_service_root(self):
+        from posthog.models.integration import DiscordBotClient
+
+        response = MagicMock(status_code=200)
+        response.json.return_value = {"ok": True}
+        with pytest.MonkeyPatch.context() as mp:
+            post = MagicMock(return_value=response)
+            mp.setattr("posthog.models.integration.requests.post", post)
+            DiscordBotClient().connect_guild(guild_id="g1", region="eu", project_api_key="phc_x")
+        assert post.call_args.args[0] == "http://bot.local:8129/actions"
+
+    @override_settings(DISCORD_BOT_ACTIONS_URL="", DISCORD_BRIDGE_SHARED_SECRET="")
+    def test_unconfigured_bridge_raises(self):
+        from posthog.models.integration import DiscordBotClient, DiscordIntegrationError
+
+        with pytest.raises(DiscordIntegrationError):
+            DiscordBotClient()
