@@ -166,20 +166,23 @@ def _handle_command(payload: dict[str, Any]) -> HttpResponse:
     resolution = _resolve_integration(payload)
     integration = resolution.integration
 
-    # `/posthog-project` must work without a resolved default — it's the command that sets one.
-    if command == "posthog-project":
+    # `/ph project` must work without a resolved default — it's the command that sets one.
+    if command in ("project", "posthog-project"):
         return _handle_project_command(payload, resolution, guild_id, discord_user_id)
 
     if integration is None:
         if not resolution.candidates:
             return _ephemeral("This server isn't connected to PostHog yet. Connect it with `/ph connect`.")
-        return _ephemeral("Multiple PostHog projects are connected. Set yours with `/posthog-project set <id>`.")
+        return _ephemeral("Multiple PostHog projects are connected. Set yours with `/ph project set <id>`.")
 
-    if command == "posthog":
+    # The bot relays `/ph <subcommand>` as command=<subcommand>; the posthog-* spellings
+    # predate that convention and are kept as aliases.
+    if command in ("code", "posthog"):
         return _handle_posthog_command(payload, integration, guild_id, discord_user_id)
-    if command == "posthog-rules":
+    if command in ("rules", "posthog-rules"):
         return _handle_rules_command(payload, integration, discord_user_id)
-    return JsonResponse({"error": "unknown command"}, status=400)
+    logger.info("discord_unknown_command", command=command, guild_id=guild_id)
+    return JsonResponse({"error": f"unknown command: {command}"}, status=400)
 
 
 def _linked_user(integration: Integration, discord_user_id: str) -> DiscordUserLink | None:
@@ -218,7 +221,7 @@ def _handle_posthog_command(
 def _handle_rules_command(payload: dict[str, Any], integration: Integration, discord_user_id: str) -> HttpResponse:
     link = _linked_user(integration, discord_user_id)
     if link is None:
-        return _ephemeral("Link your PostHog account first with `/posthog`.")
+        return _ephemeral("Link your PostHog account first with `/ph code`.")
     options = payload.get("options") or {}
     sub = payload.get("subcommand")
     if sub == "list":
@@ -234,7 +237,7 @@ def _handle_rules_command(payload: dict[str, Any], integration: Integration, dis
         )
     if sub == "remove":
         return _ephemeral(commands_dispatch.handle_rules_remove(integration=integration, ids=options.get("ids", "")))
-    return _ephemeral("Usage: `/posthog-rules list|add|remove`.")
+    return _ephemeral("Usage: `/ph rules list|add|remove`.")
 
 
 def _handle_project_command(
@@ -250,7 +253,7 @@ def _handle_project_command(
         return _ephemeral(
             "No default project set. Connected projects:\n"
             + format_project_candidate_list(resolution.candidates)
-            + "\n\nSet yours with `/posthog-project set <id>`."
+            + "\n\nSet yours with `/ph project set <id>`."
         )
 
     target = _integration_for_project_id(guild_id, options.get("project_id", ""))
@@ -265,7 +268,7 @@ def _handle_project_command(
         if not _is_org_admin(target, discord_user_id):
             return _ephemeral("Setting the server-wide default requires being a PostHog org admin.")
         return _ephemeral(commands_dispatch.handle_project_set_workspace(guild_id=guild_id, integration=target))
-    return _ephemeral("Usage: `/posthog-project show|set|workspace`.")
+    return _ephemeral("Usage: `/ph project show|set|workspace`.")
 
 
 def _integration_for_project_id(guild_id: str, project_id: str) -> Integration | None:
@@ -430,7 +433,7 @@ def discord_oauth_link_callback(request: HttpRequest) -> HttpResponse:
 
 
 def discord_connect_start(request: HttpRequest) -> HttpResponse:
-    """Begin server-connect from `/posthog-connect`: requires a PostHog session, then shows a
+    """Begin server-connect from `/ph connect`: requires a PostHog session, then shows a
     project picker limited to orgs where the user is an admin."""
     if not request.user.is_authenticated:
         return HttpResponseRedirect(f"/login?next={request.get_full_path()}")

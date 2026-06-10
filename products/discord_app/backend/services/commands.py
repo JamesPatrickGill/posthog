@@ -32,7 +32,7 @@ def handle_project_set_workspace(*, guild_id: str, integration: Integration) -> 
 def handle_rules_list(integration: Integration) -> str:
     rules = list(RepoRoutingRule.objects.filter(team_id=integration.team_id).order_by("priority", "id"))
     if not rules:
-        return "No routing rules configured. Add one with `/posthog-rules add`."
+        return "No routing rules configured. Add one with `/ph rules add`."
     lines = [f"{idx + 1}. {r.rule_text} → `{r.repository}`" for idx, r in enumerate(rules)]
     return "Routing rules:\n" + "\n".join(lines)
 
