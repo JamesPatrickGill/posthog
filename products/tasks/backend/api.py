@@ -1901,10 +1901,14 @@ class TaskRunViewSet(TeamAndOrgViewSetMixin, viewsets.ModelViewSet):
         if task_run.is_terminal:
             return Response({"status": "skipped"})
 
-        # Skip relay for non-Slack tasks — no thread to post to
+        # Skip relay for tasks without a chat thread to post to (Slack or Discord)
+        from products.discord_app.backend.models import DiscordThreadTaskMapping
         from products.slack_app.backend.models import SlackThreadTaskMapping
 
-        if not SlackThreadTaskMapping.objects.filter(task_run=task_run).exists():
+        if (
+            not SlackThreadTaskMapping.objects.filter(task_run=task_run).exists()
+            and not DiscordThreadTaskMapping.objects.unscoped().filter(task_run=task_run).exists()
+        ):
             return Response({"status": "skipped"})
 
         text = request.validated_data["text"].strip()

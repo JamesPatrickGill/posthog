@@ -13,6 +13,7 @@ from .create_snapshot.activities import (
     setup_repository as snapshot_setup_repository,
 )
 from .create_snapshot.workflow import CreateSnapshotForRepositoryWorkflow
+from .discord_relay import relay_discord_message
 from .process_task.activities import (
     checkout_branch_in_sandbox,
     cleanup_sandbox,
@@ -74,6 +75,7 @@ ACTIVITIES = [
     update_task_run_status,
     get_pr_context,
     relay_slack_message,
+    relay_discord_message,
     run_task_automation_activity,
     # create_snapshot activities
     get_snapshot_context,
