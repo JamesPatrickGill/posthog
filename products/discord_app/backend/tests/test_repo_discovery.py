@@ -114,3 +114,18 @@ class TestDiscordRepoCascade:
         ):
             post_discord_repo_picker_activity(_inputs(), "t1", "wf-1", note)
         assert client.post_message.call_args.kwargs["content"].startswith(expected_prefix)
+
+
+class TestFailureMessages:
+    def test_missing_access_in_cause_chain_gets_channel_message(self):
+        from posthog.temporal.ai.posthog_code_discord_mention import (
+            CHANNEL_ACCESS_ERROR_MESSAGE,
+            INTERNAL_ERROR_MESSAGE,
+            _failure_message_for,
+        )
+
+        inner = RuntimeError("Discord bot action 'create_thread' failed: 403 DiscordAPIError[50001]: Missing Access")
+        outer = RuntimeError("activity task failed")
+        outer.__cause__ = inner
+        assert _failure_message_for(outer) == CHANNEL_ACCESS_ERROR_MESSAGE
+        assert _failure_message_for(RuntimeError("sandbox died")) == INTERNAL_ERROR_MESSAGE

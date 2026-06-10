@@ -23,10 +23,35 @@ _EYES = "\U0001f440"
 REPO_SELECT_CUSTOM_ID = "posthog_code_repo_select"
 REPO_NONE_CUSTOM_ID = "posthog_code_repo_none"
 
-INTERNAL_ERROR_MESSAGE = "**Something went wrong** ❌\nI ran into an internal error and couldn't start the task. Please try `/posthog` again."
+INTERNAL_ERROR_MESSAGE = "**Something went wrong** ❌\nI ran into an internal error and couldn't start the task. Please try `/ph code` again."
+CHANNEL_ACCESS_ERROR_MESSAGE = (
+    "**I can't access this channel** ❌\n"
+    "Discord refused the bot (Missing Access). Make sure the PostHog bot can see this channel "
+    "(View channel + Create public threads + Send messages in threads — for private channels, add the bot "
+    "explicitly), then try `/ph code` again."
+)
+
+
+def _failure_message_for(exc: BaseException) -> str:
+    """Pick the user-facing failure message by walking the activity error's cause chain.
+
+    Discord's 50001 Missing Access (bot can't see the channel) is an actionable user error,
+    not an internal one — surface instructions instead of a generic apology.
+    """
+    seen: list[str] = []
+    current: BaseException | None = exc
+    while current is not None and len(seen) < 10:
+        seen.append(str(current))
+        current = current.__cause__ or current.__context__
+    blob = " ".join(seen)
+    if "Missing Access" in blob or "50001" in blob:
+        return CHANNEL_ACCESS_ERROR_MESSAGE
+    return INTERNAL_ERROR_MESSAGE
+
+
 PICKER_TIMEOUT_MESSAGE = (
     f"**No repository selected** — I waited {POSTHOG_CODE_DISCORD_PICKER_TIMEOUT_MINUTES} minutes, "
-    "so this task wasn't started. Run `/posthog` again when you're ready."
+    "so this task wasn't started. Run `/ph code` again when you're ready."
 )
 
 
@@ -155,7 +180,7 @@ class PostHogCodeDiscordMentionWorkflow(PostHogWorkflow):
                 "posthog_code_discord_mention_failed",
                 extra={"guild_id": inputs.guild_id, "error": str(exc), "error_type": type(exc).__name__},
             )
-            await self._notify_failure(inputs, thread_id, anchor_message_id, INTERNAL_ERROR_MESSAGE)
+            await self._notify_failure(inputs, thread_id, anchor_message_id, _failure_message_for(exc))
 
     async def _pick_repository_interactively(
         self,
