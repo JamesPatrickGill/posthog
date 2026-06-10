@@ -5,6 +5,8 @@ from unittest.mock import MagicMock, patch
 
 from django.test import RequestFactory
 
+from posthog.models.integration import Integration
+
 from products.discord_app.backend import api
 from products.discord_app.backend.services.integration_resolver import ResolutionResult
 
@@ -135,6 +137,23 @@ class TestIngestDispatch:
         assert "No default project set" in body["content"]
         assert "Team One" in body["content"]
 
+    def test_connect_command_returns_signed_url_when_unconnected(self):
+        with patch.object(api, "load_integrations", return_value=_resolution(None)):
+            resp = api.discord_interactions_ingest(
+                _ingest_request(
+                    {
+                        "kind": "command",
+                        "command": "posthog-connect",
+                        "guild_id": "g42",
+                        "guild_name": "My Server",
+                        "user": {"id": "u"},
+                    }
+                )
+            )
+        body = json.loads(resp.content)
+        assert body["action"] == "ephemeral"
+        assert "/api/discord/connect/start?state=" in body["content"]
+
     def test_repo_select_component_signals_workflow(self):
         with patch.object(api, "_signal_workflow") as signal:
             resp = api.discord_interactions_ingest(
@@ -150,3 +169,70 @@ class TestIngestDispatch:
         signal.assert_called_once()
         assert signal.call_args.args[0] == "wf-123"
         assert signal.call_args.args[2] == "acme/widgets"
+
+
+@pytest.mark.django_db
+class TestServerConnect:
+    def _setup(self, level=None):
+        from posthog.models import Organization, Team, User
+        from posthog.models.organization import OrganizationMembership
+
+        org = Organization.objects.create(name="Acme")
+        team = Team.objects.create(organization=org, name="Web")
+        user = User.objects.create_user(email="admin@acme.com", password=None, first_name="A")
+        OrganizationMembership.objects.create(
+            organization=org, user=user, level=level or OrganizationMembership.Level.ADMIN
+        )
+        return org, team, user
+
+    def _state(self, user_id=None):
+        from django.core import signing
+
+        payload = {"guild_id": "g42", "guild_name": "My Server", "discord_user_id": "du1"}
+        if user_id is not None:
+            payload["user_id"] = user_id
+        return signing.dumps(payload, salt=api.SERVER_CONNECT_SALT)
+
+    def test_start_rejects_bad_state(self):
+        _, _, user = self._setup()
+        request = RequestFactory().get("/api/discord/connect/start", {"state": "garbage"})
+        request.user = user
+        assert api.discord_connect_start(request).status_code == 400
+
+    def test_start_renders_picker_for_org_admin(self):
+        _, team, user = self._setup()
+        request = RequestFactory().get("/api/discord/connect/start", {"state": self._state()})
+        request.user = user
+        resp = api.discord_connect_start(request)
+        assert resp.status_code == 200
+        assert "My Server" in resp.content.decode()
+        assert f'value="{team.id}"' in resp.content.decode()
+
+    def test_start_forbidden_for_non_admin(self):
+        from posthog.models.organization import OrganizationMembership
+
+        _, _, user = self._setup(level=OrganizationMembership.Level.MEMBER)
+        request = RequestFactory().get("/api/discord/connect/start", {"state": self._state()})
+        request.user = user
+        assert api.discord_connect_start(request).status_code == 403
+
+    def test_confirm_creates_integration(self):
+        _, team, user = self._setup()
+        request = RequestFactory().post(
+            "/api/discord/connect/confirm", {"state": self._state(user_id=user.id), "team_id": str(team.id)}
+        )
+        request.user = user
+        resp = api.discord_connect_confirm(request)
+        assert resp.status_code == 200
+        integration = Integration.objects.get(kind="discord", integration_id="g42")
+        assert integration.team_id == team.id
+        assert integration.config.get("guild_name") == "My Server"
+
+    def test_confirm_rejects_session_mismatch(self):
+        _, team, user = self._setup()
+        request = RequestFactory().post(
+            "/api/discord/connect/confirm", {"state": self._state(user_id=user.id + 999), "team_id": str(team.id)}
+        )
+        request.user = user
+        assert api.discord_connect_confirm(request).status_code == 403
+        assert not Integration.objects.filter(kind="discord").exists()

@@ -6,6 +6,8 @@ from urllib.parse import urlencode
 from django.conf import settings
 from django.core import signing
 from django.http import HttpRequest, HttpResponse, HttpResponseRedirect, JsonResponse
+from django.middleware.csrf import get_token
+from django.utils.html import escape
 from django.views.decorators.csrf import csrf_exempt
 
 import requests
@@ -14,6 +16,8 @@ from temporalio.common import WorkflowIDConflictPolicy, WorkflowIDReusePolicy
 
 from posthog.models.integration import DiscordIntegrationError, Integration, verify_discord_bridge_bearer
 from posthog.models.organization import OrganizationMembership
+from posthog.models.team import Team
+from posthog.models.user import User
 from posthog.temporal.ai.posthog_code_discord_interactivity import (
     PostHogCodeDiscordInteractivityInputs,
     PostHogCodeDiscordTerminateTaskWorkflow,
@@ -40,6 +44,7 @@ logger = structlog.get_logger(__name__)
 
 DISCORD_API_BASE = "https://discord.com/api/v10"
 ACCOUNT_LINK_SALT = "discord_app:account_link"
+SERVER_CONNECT_SALT = "discord_app:server_connect"
 ACCOUNT_LINK_MAX_AGE_SECONDS = 900
 TERMINATE_CUSTOM_ID = "posthog_code_terminate_task"
 
@@ -78,6 +83,22 @@ def _account_link_url(*, integration_id: int, discord_user_id: str) -> str:
         salt=ACCOUNT_LINK_SALT,
     )
     return f"{settings.SITE_URL}/api/discord/oauth/link/start?{urlencode({'state': state})}"
+
+
+def _server_connect_url(*, guild_id: str, guild_name: str, discord_user_id: str) -> str:
+    state = signing.dumps(
+        {"guild_id": guild_id, "guild_name": guild_name, "discord_user_id": discord_user_id},
+        salt=SERVER_CONNECT_SALT,
+    )
+    return f"{settings.SITE_URL}/api/discord/connect/start?{urlencode({'state': state})}"
+
+
+def _admin_teams(user: User) -> list[Team]:
+    """Projects the user may connect a guild to: teams in orgs where they are org admin."""
+    admin_org_ids = OrganizationMembership.objects.filter(
+        user=user, level__gte=OrganizationMembership.Level.ADMIN
+    ).values_list("organization_id", flat=True)
+    return list(user.teams.filter(organization_id__in=admin_org_ids).select_related("organization").order_by("id"))
 
 
 @csrf_exempt
@@ -122,13 +143,23 @@ def _handle_command(payload: dict[str, Any]) -> HttpResponse:
     resolution = _resolve_integration(payload)
     integration = resolution.integration
 
+    # `/posthog-connect` bootstraps the guild ↔ project mapping, so it must work before
+    # anything is connected. Completing the link requires PostHog org admin, checked web-side.
+    if command == "posthog-connect":
+        url = _server_connect_url(
+            guild_id=guild_id,
+            guild_name=payload.get("guild_name", ""),
+            discord_user_id=discord_user_id,
+        )
+        return _ephemeral(f"Connect this server to a PostHog project (requires PostHog org admin): {url}")
+
     # `/posthog-project` must work without a resolved default — it's the command that sets one.
     if command == "posthog-project":
         return _handle_project_command(payload, resolution, guild_id, discord_user_id)
 
     if integration is None:
         if not resolution.candidates:
-            return _ephemeral("This server isn't connected to PostHog yet.")
+            return _ephemeral("This server isn't connected to PostHog yet. Connect it with `/posthog-connect`.")
         return _ephemeral("Multiple PostHog projects are connected. Set yours with `/posthog-project set <id>`.")
 
     if command == "posthog":
@@ -202,7 +233,7 @@ def _handle_project_command(
         if resolution.integration is not None:
             return _ephemeral(commands_dispatch.handle_project_show(resolution.integration))
         if not resolution.candidates:
-            return _ephemeral("This server isn't connected to PostHog yet.")
+            return _ephemeral("This server isn't connected to PostHog yet. Connect it with `/posthog-connect`.")
         return _ephemeral(
             "No default project set. Connected projects:\n"
             + format_project_candidate_list(resolution.candidates)
@@ -383,3 +414,76 @@ def discord_oauth_link_callback(request: HttpRequest) -> HttpResponse:
         defaults={"user": request.user, "discord_username": me.get("username", "")},
     )
     return HttpResponse("Your PostHog account is now linked to Discord. You can close this tab.")
+
+
+def discord_connect_start(request: HttpRequest) -> HttpResponse:
+    """Begin server-connect from `/posthog-connect`: requires a PostHog session, then shows a
+    project picker limited to orgs where the user is an admin."""
+    if not request.user.is_authenticated:
+        return HttpResponseRedirect(f"/login?next={request.get_full_path()}")
+    try:
+        data = signing.loads(
+            request.GET.get("state", ""), salt=SERVER_CONNECT_SALT, max_age=ACCOUNT_LINK_MAX_AGE_SECONDS
+        )
+    except signing.BadSignature:
+        return JsonResponse({"error": "invalid or expired link"}, status=400)
+
+    teams = _admin_teams(request.user)
+    if not teams:
+        return HttpResponse("Connecting a Discord server requires being an organization admin in PostHog.", status=403)
+
+    # Re-sign with the session user baked in so confirm can detect a session swap mid-flow.
+    confirm_state = signing.dumps({**data, "user_id": request.user.id}, salt=SERVER_CONNECT_SALT)
+    options = "".join(
+        f'<option value="{team.id}">{escape(team.organization.name)} · {escape(team.name)} (id {team.id})</option>'
+        for team in teams
+    )
+    guild_label = escape(data.get("guild_name") or data["guild_id"])
+    html = f"""<!doctype html><html><head><title>Connect Discord server</title></head>
+<body style="font-family: sans-serif; max-width: 32rem; margin: 4rem auto;">
+<h2>Connect Discord server</h2>
+<p>Connect the Discord server <strong>{guild_label}</strong> to a PostHog project. Tasks started
+from that server will run in the selected project, and PostHog data may be surfaced there.</p>
+<form method="post" action="/api/discord/connect/confirm">
+<input type="hidden" name="csrfmiddlewaretoken" value="{get_token(request)}">
+<input type="hidden" name="state" value="{escape(confirm_state)}">
+<label>Project:<br><select name="team_id" style="margin: 0.5rem 0;">{options}</select></label><br>
+<button type="submit">Connect server</button>
+</form>
+</body></html>"""
+    return HttpResponse(html)
+
+
+def discord_connect_confirm(request: HttpRequest) -> HttpResponse:
+    """Complete server-connect: verify state + org admin, then persist the Integration row."""
+    if request.method != "POST":
+        return JsonResponse({"error": "method not allowed"}, status=405)
+    if not request.user.is_authenticated:
+        return JsonResponse({"error": "not authenticated"}, status=403)
+    try:
+        data = signing.loads(
+            request.POST.get("state", ""), salt=SERVER_CONNECT_SALT, max_age=ACCOUNT_LINK_MAX_AGE_SECONDS
+        )
+    except signing.BadSignature:
+        return JsonResponse({"error": "invalid or expired link"}, status=400)
+    if data.get("user_id") != request.user.id:
+        return JsonResponse({"error": "session mismatch"}, status=403)
+
+    team_id_raw = request.POST.get("team_id", "")
+    if not team_id_raw.isdigit():
+        return JsonResponse({"error": "invalid project"}, status=400)
+    team = next((t for t in _admin_teams(request.user) if t.id == int(team_id_raw)), None)
+    if team is None:
+        return JsonResponse({"error": "connecting requires org admin access to that project"}, status=403)
+
+    Integration.objects.update_or_create(
+        team=team,
+        kind="discord",
+        integration_id=data["guild_id"],
+        defaults={"created_by": request.user, "config": {"guild_name": data.get("guild_name", "")}},
+    )
+    guild_label = escape(data.get("guild_name") or data["guild_id"])
+    return HttpResponse(
+        f"Discord server {guild_label} is now connected to project {escape(team.name)} (id {team.id}). "
+        "You can close this tab and run /posthog in Discord."
+    )

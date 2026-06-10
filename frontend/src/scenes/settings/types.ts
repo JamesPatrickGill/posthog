@@ -161,6 +161,7 @@ export type SettingId =
     | 'heatmaps'
     | 'hedgehog-mode'
     | 'human-friendly-comparison-periods'
+    | 'integration-discord'
     | 'integration-error-tracking'
     | 'integration-github'
     | 'integration-ip-allowlist'

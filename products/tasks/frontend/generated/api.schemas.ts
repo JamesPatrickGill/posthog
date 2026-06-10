@@ -293,6 +293,7 @@ export interface PatchedTaskAutomationApi {
  * * `user_created` - User Created
  * * `automation` - Automation
  * * `slack` - Slack
+ * * `discord` - Discord
  * * `support_queue` - Support Queue
  * * `session_summaries` - Session Summaries
  * * `signal_report` - Signal Report
@@ -306,6 +307,7 @@ export const OriginProductEnumApi = {
     UserCreated: 'user_created',
     Automation: 'automation',
     Slack: 'slack',
+    Discord: 'discord',
     SupportQueue: 'support_queue',
     SessionSummaries: 'session_summaries',
     SignalReport: 'signal_report',
@@ -348,6 +350,7 @@ export interface TaskApi {
      * * `user_created` - User Created
      * * `automation` - Automation
      * * `slack` - Slack
+     * * `discord` - Discord
      * * `support_queue` - Support Queue
      * * `session_summaries` - Session Summaries
      * * `signal_report` - Signal Report
@@ -430,6 +433,7 @@ export interface PatchedTaskApi {
      * * `user_created` - User Created
      * * `automation` - Automation
      * * `slack` - Slack
+     * * `discord` - Discord
      * * `support_queue` - Support Queue
      * * `session_summaries` - Session Summaries
      * * `signal_report` - Signal Report

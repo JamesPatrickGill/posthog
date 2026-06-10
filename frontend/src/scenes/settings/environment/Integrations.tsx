@@ -41,6 +41,10 @@ export function JiraIntegration({ next }: { next?: string }): JSX.Element {
     return <OAuthIntegration kind="jira" connectText="Connect site" next={next} />
 }
 
+export function DiscordIntegration({ next }: { next?: string }): JSX.Element {
+    return <OAuthIntegration kind="discord" connectText="Connect server" next={next} />
+}
+
 const OAuthIntegration = ({
     kind,
     connectText,

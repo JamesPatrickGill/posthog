@@ -87,7 +87,7 @@ import { FeaturePreviewsComingSoon, FeaturePreviewsSettings } from './environmen
 import { GroupAnalyticsConfig } from './environment/GroupAnalyticsConfig'
 import { HeatmapsSettings } from './environment/HeatmapsSettings'
 import { HumanFriendlyComparisonPeriodsSetting } from './environment/HumanFriendlyComparisonPeriodsSetting'
-import { GithubIntegration, LinearIntegration } from './environment/Integrations'
+import { DiscordIntegration, GithubIntegration, LinearIntegration } from './environment/Integrations'
 import { IPAllowListInfo } from './environment/IPAllowListInfo'
 import { IPCapture } from './environment/IPCapture'
 import { JsSnippetVersionPin } from './environment/JsSnippetVersionPin'
@@ -1424,6 +1424,13 @@ export const SETTINGS_MAP: SettingSection[] = [
                 docsUrl: 'https://posthog.com/docs/webhooks/slack',
                 component: <SlackIntegration />,
                 keywords: ['slack', 'channel', 'notification', 'subscribe', 'report'],
+            },
+            {
+                id: 'integration-discord',
+                title: 'Discord integration',
+                description: 'Connect a Discord server so PostHog Code can run tasks from Discord slash commands.',
+                component: <DiscordIntegration />,
+                keywords: ['discord', 'bot', 'server', 'posthog code'],
             },
             {
                 id: 'integration-github',

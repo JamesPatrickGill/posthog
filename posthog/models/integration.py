@@ -272,6 +272,21 @@ class OauthConfig:
     additional_authorize_params: dict[str, str] | None = None
 
 
+# Permission bitfield the PostHog Code bot requests at guild install time. Bits per
+# https://discord.com/developers/docs/topics/permissions — kept in sync with what the
+# companion bot needs to create threads, post/edit progress messages, and react.
+POSTHOG_DISCORD_BOT_PERMISSIONS = (
+    (1 << 6)  # ADD_REACTIONS
+    | (1 << 10)  # VIEW_CHANNEL
+    | (1 << 11)  # SEND_MESSAGES
+    | (1 << 14)  # EMBED_LINKS
+    | (1 << 16)  # READ_MESSAGE_HISTORY
+    | (1 << 18)  # USE_EXTERNAL_EMOJIS
+    | (1 << 34)  # MANAGE_THREADS
+    | (1 << 35)  # CREATE_PUBLIC_THREADS
+    | (1 << 38)  # SEND_MESSAGES_IN_THREADS
+)
+
 POSTHOG_SLACK_SCOPE = ",".join(
     [
         "channels:read",
@@ -295,6 +310,7 @@ POSTHOG_SLACK_SCOPE = ",".join(
 class OauthIntegration:
     supported_kinds = [
         "slack",
+        "discord",
         "salesforce",
         "hubspot",
         "google-ads",
@@ -344,6 +360,22 @@ class OauthIntegration:
                 scope=POSTHOG_SLACK_SCOPE,
                 id_path="team.id",
                 name_path="team.name",
+            )
+        elif kind == "discord":
+            if not settings.DISCORD_APP_CLIENT_ID or not settings.DISCORD_APP_CLIENT_SECRET:
+                raise NotImplementedError("Discord app not configured")
+
+            return OauthConfig(
+                authorize_url="https://discord.com/oauth2/authorize",
+                token_url="https://discord.com/api/v10/oauth2/token",
+                client_id=settings.DISCORD_APP_CLIENT_ID,
+                client_secret=settings.DISCORD_APP_CLIENT_SECRET,
+                # The `bot` scope adds the bot to the guild the installer picks, and makes
+                # Discord return that guild in the token response (hence the id/name paths).
+                scope="bot applications.commands",
+                additional_authorize_params={"permissions": str(POSTHOG_DISCORD_BOT_PERMISSIONS)},
+                id_path="guild.id",
+                name_path="guild.name",
             )
         elif kind == "salesforce":
             if not settings.SALESFORCE_CONSUMER_KEY or not settings.SALESFORCE_CONSUMER_SECRET:

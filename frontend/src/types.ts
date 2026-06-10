@@ -5226,6 +5226,7 @@ export const INTEGRATION_KINDS = [
     'customerio-app',
     'customerio-webhook',
     'customerio-track',
+    'discord',
 ] as const
 
 export type IntegrationKind = (typeof INTEGRATION_KINDS)[number]

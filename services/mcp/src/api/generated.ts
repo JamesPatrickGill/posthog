@@ -21496,6 +21496,7 @@ export namespace Schemas {
      * * `customerio-track` - Customerio Track
      * * `customerio-webhook` - Customerio Webhook
      * * `databricks` - Databricks
+     * * `discord` - Discord
      * * `email` - Email
      * * `firebase` - Firebase
      * * `github` - Github
@@ -21537,6 +21538,7 @@ export namespace Schemas {
       CustomerioTrack: 'customerio-track',
       CustomerioWebhook: 'customerio-webhook',
       Databricks: 'databricks',
+      Discord: 'discord',
       Email: 'email',
       Firebase: 'firebase',
       Github: 'github',
@@ -24247,6 +24249,7 @@ export namespace Schemas {
      * * `user_created` - User Created
      * * `automation` - Automation
      * * `slack` - Slack
+     * * `discord` - Discord
      * * `support_queue` - Support Queue
      * * `session_summaries` - Session Summaries
      * * `signal_report` - Signal Report
@@ -24261,6 +24264,7 @@ export namespace Schemas {
       UserCreated: 'user_created',
       Automation: 'automation',
       Slack: 'slack',
+      Discord: 'discord',
       SupportQueue: 'support_queue',
       SessionSummaries: 'session_summaries',
       SignalReport: 'signal_report',
@@ -27443,6 +27447,7 @@ export namespace Schemas {
        * * `user_created` - User Created
        * * `automation` - Automation
        * * `slack` - Slack
+       * * `discord` - Discord
        * * `support_queue` - Support Queue
        * * `session_summaries` - Session Summaries
        * * `signal_report` - Signal Report
@@ -33706,6 +33711,7 @@ export namespace Schemas {
        * * `user_created` - User Created
        * * `automation` - Automation
        * * `slack` - Slack
+       * * `discord` - Discord
        * * `support_queue` - Support Queue
        * * `session_summaries` - Session Summaries
        * * `signal_report` - Signal Report
@@ -45027,6 +45033,7 @@ export namespace Schemas {
      * * `customerio-track` - Customerio Track
      * * `customerio-webhook` - Customerio Webhook
      * * `databricks` - Databricks
+     * * `discord` - Discord
      * * `email` - Email
      * * `firebase` - Firebase
      * * `github` - Github
@@ -45079,6 +45086,7 @@ export namespace Schemas {
       CustomerioTrack: 'customerio-track',
       CustomerioWebhook: 'customerio-webhook',
       Databricks: 'databricks',
+      Discord: 'discord',
       Email: 'email',
       Firebase: 'firebase',
       Github: 'github',
@@ -50802,6 +50810,7 @@ export namespace Schemas {
      * * `customerio-track` - Customerio Track
      * * `customerio-webhook` - Customerio Webhook
      * * `databricks` - Databricks
+     * * `discord` - Discord
      * * `email` - Email
      * * `firebase` - Firebase
      * * `github` - Github
@@ -50854,6 +50863,7 @@ export namespace Schemas {
       CustomerioTrack: 'customerio-track',
       CustomerioWebhook: 'customerio-webhook',
       Databricks: 'databricks',
+      Discord: 'discord',
       Email: 'email',
       Firebase: 'firebase',
       Github: 'github',

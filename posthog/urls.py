@@ -50,6 +50,8 @@ from products.ai_observability.backend.api.personal_spend import personal_spend_
 from products.cdp.backend.api import hog_function_template
 from products.data_warehouse.backend.api.public_source_configs import PublicSourceConfigViewSet
 from products.discord_app.backend.api import (
+    discord_connect_confirm,
+    discord_connect_start,
     discord_interactions_ingest,
     discord_oauth_link_callback,
     discord_oauth_link_start,
@@ -372,6 +374,8 @@ urlpatterns = [
     opt_slash_path("api/discord/repos", discord_repos),
     opt_slash_path("api/discord/oauth/link/start", discord_oauth_link_start),
     opt_slash_path("api/discord/oauth/link/callback", discord_oauth_link_callback),
+    opt_slash_path("api/discord/connect/start", discord_connect_start),
+    opt_slash_path("api/discord/connect/confirm", discord_connect_confirm),
     re_path(r"^api.+", api_not_found),
     path("authorize_and_redirect/", login_required(authorize_and_redirect)),
     path(
