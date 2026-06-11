@@ -63,9 +63,6 @@ def post_discord_update(input: PostDiscordUpdateInput) -> None:
             if creator_has_access
             else None
         )
-        logs_deeplink: str | None = (
-            f"posthog-code://task/{task_run.task_id}/run/{task_run.id}" if creator_has_access else None
-        )
         pr_url = (task_run.output or {}).get("pr_url")
 
         if input.sandbox_cleaned:
@@ -105,7 +102,9 @@ def post_discord_update(input: PostDiscordUpdateInput) -> None:
                 handler.delete_progress()
                 return
             stage = _get_stage_from_status(task_run.status, task_run.stage)
-            handler.post_or_update_progress(stage, logs_deeplink)
+            # Discord link buttons only allow http(s)/discord schemes, so the progress
+            # button gets the web task URL, not the posthog-code:// desktop deeplink.
+            handler.post_or_update_progress(stage, task_url)
     except Exception:
         logger.exception("post_discord_update_failed", run_id=input.run_id)
 
