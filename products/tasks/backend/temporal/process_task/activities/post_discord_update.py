@@ -48,6 +48,12 @@ def post_discord_update(input: PostDiscordUpdateInput) -> None:
         logger.warning("post_discord_update_task_run_not_found", run_id=input.run_id)
         return
 
+    if task_run.is_terminal:
+        # The conversation is over — deregister the thread from the bot's reply
+        # forwarding. Idempotent on the bot side; fired before the final status post
+        # since ordering doesn't matter (it gates forwarding, not posting).
+        _unwatch_thread_for_run(task_run)
+
     try:
         context = DiscordThreadContext.from_dict(input.discord_thread_context)
         handler = DiscordThreadHandler(context)
@@ -102,6 +108,22 @@ def post_discord_update(input: PostDiscordUpdateInput) -> None:
             handler.post_or_update_progress(stage, logs_deeplink)
     except Exception:
         logger.exception("post_discord_update_failed", run_id=input.run_id)
+
+
+def _unwatch_thread_for_run(task_run) -> None:
+    from posthog.models.integration import DiscordBotClient, discord_bridge_configured
+
+    from products.discord_app.backend.models import DiscordThreadTaskMapping
+
+    if not discord_bridge_configured():
+        return
+    mapping = DiscordThreadTaskMapping.objects.unscoped().filter(task_run=task_run).first()
+    if mapping is None:
+        return
+    try:
+        DiscordBotClient().unwatch_thread(guild_id=mapping.guild_id, thread_id=mapping.thread_id)
+    except Exception as e:
+        logger.warning("post_discord_update_unwatch_failed", run_id=str(task_run.id), error=str(e))
 
 
 def _get_stage_from_status(status: str, stage: str | None = None) -> str:

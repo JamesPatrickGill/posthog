@@ -1388,6 +1388,18 @@ class DiscordBotClient:
         """Provision guild analytics on the bot side; an empty ``project_api_key`` disconnects."""
         return self._post("connect_guild", guild_id=guild_id, region=region, project_api_key=project_api_key)
 
+    def watch_thread(self, guild_id: str, thread_id: str) -> dict[str, Any]:
+        """Register a thread so the bot forwards its replies as kind=message. Idempotent.
+
+        Needed for threads PostHog creates (task threads); forum-post threads under a
+        watched forum are forwarded by the bot without registration.
+        """
+        return self._post("watch_thread", guild_id=guild_id, thread_id=thread_id)
+
+    def unwatch_thread(self, guild_id: str, thread_id: str) -> dict[str, Any]:
+        """Stop forwarding a thread's replies (call when its task reaches a terminal state)."""
+        return self._post("unwatch_thread", guild_id=guild_id, thread_id=thread_id)
+
     def create_thread(self, channel_id: str, name: str, message_id: str | None = None) -> dict[str, Any]:
         return self._post("create_thread", channel_id=channel_id, name=name, message_id=message_id)
 

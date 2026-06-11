@@ -282,6 +282,14 @@ def prepare_discord_thread_activity(inputs: PostHogCodeDiscordMentionWorkflowInp
     thread = client.create_thread(channel_id=channel_id, name=title, message_id=inputs.interaction.get("message_id"))
     thread_id = str(thread.get("thread_id") or "") or channel_id
 
+    # Register the thread so the bot forwards replies in it back as kind=message.
+    # Best-effort: a failure only disables conversational follow-ups, not the task.
+    if thread.get("thread_id"):
+        try:
+            client.watch_thread(guild_id=inputs.guild_id, thread_id=thread_id)
+        except Exception:
+            logger.warning("posthog_code_discord_watch_thread_failed", thread_id=thread_id)
+
     # Discord renders :shortcodes: in API-sent content literally, so use unicode emoji.
     anchor = client.post_message(target_id=thread_id, content="**PostHog Code is on it…** ⏳")
     anchor_message_id = anchor.get("message_id", "")

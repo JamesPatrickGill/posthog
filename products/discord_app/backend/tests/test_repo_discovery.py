@@ -129,3 +129,52 @@ class TestFailureMessages:
         outer.__cause__ = inner
         assert _failure_message_for(outer) == CHANNEL_ACCESS_ERROR_MESSAGE
         assert _failure_message_for(RuntimeError("sandbox died")) == INTERNAL_ERROR_MESSAGE
+
+
+class TestThreadWatchLifecycle:
+    def test_prepare_watches_created_thread(self):
+        from posthog.temporal.ai.posthog_code_discord_mention import prepare_discord_thread_activity
+
+        client = MagicMock()
+        client.create_thread.return_value = {"thread_id": "t9"}
+        client.post_message.return_value = {"message_id": "a1"}
+        with patch(
+            "posthog.temporal.ai.posthog_code_discord_mention._get_integration_and_client",
+            return_value=(MagicMock(), client),
+        ):
+            result = prepare_discord_thread_activity(_inputs())
+        client.watch_thread.assert_called_once_with(guild_id="g1", thread_id="t9")
+        assert result == {"anchor_message_id": "a1", "thread_id": "t9"}
+
+    def test_prepare_skips_watch_when_thread_creation_fell_back(self):
+        from posthog.temporal.ai.posthog_code_discord_mention import prepare_discord_thread_activity
+
+        client = MagicMock()
+        client.create_thread.return_value = {}  # bot couldn't create; falls back to channel
+        client.post_message.return_value = {"message_id": "a1"}
+        with patch(
+            "posthog.temporal.ai.posthog_code_discord_mention._get_integration_and_client",
+            return_value=(MagicMock(), client),
+        ):
+            prepare_discord_thread_activity(_inputs())
+        client.watch_thread.assert_not_called()
+
+    def test_terminal_update_unwatches_thread(self, settings):
+        settings.DISCORD_BOT_ACTIONS_URL = "http://bot.local/actions"
+        settings.DISCORD_BRIDGE_SHARED_SECRET = "s"
+        from products.tasks.backend.temporal.process_task.activities.post_discord_update import _unwatch_thread_for_run
+
+        mapping = MagicMock(guild_id="g1", thread_id="t9")
+        chain = MagicMock()
+        chain.filter.return_value.first.return_value = mapping
+        client = MagicMock()
+        with (
+            patch(
+                "products.discord_app.backend.models.DiscordThreadTaskMapping.objects.unscoped",
+                return_value=chain,
+            ),
+            patch("posthog.models.integration.DiscordBotClient", return_value=client) as client_cls,
+        ):
+            _unwatch_thread_for_run(MagicMock(id="r1"))
+        client_cls.assert_called_once()
+        client.unwatch_thread.assert_called_once_with(guild_id="g1", thread_id="t9")
