@@ -6752,6 +6752,8 @@ class SurveyAppearanceSchema(BaseModel):
     model_config = ConfigDict(
         extra="forbid",
     )
+    allowGoBack: bool | None = None
+    backButtonText: str | None = None
     backgroundColor: str | None = None
     borderColor: str | None = None
     buttonColor: str | None = None
@@ -22371,6 +22373,8 @@ class ErrorTrackingQuery(BaseModel):
         title="ErrorTrackingQueryStatus",
     )
     tags: QueryLogTags | None = None
+    useQueryV2: bool | None = None
+    useQueryV3: bool | None = None
     version: float | None = Field(default=None, description="version of the node, used for schema migrations")
     volumeResolution: int
     withAggregations: bool | None = None
