@@ -1,7 +1,8 @@
 # Workflows in this module run on the max-ai temporal task queue.
 import json
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from datetime import timedelta
+from typing import Any
 
 import structlog
 from temporalio import activity, workflow
@@ -31,6 +32,10 @@ class PostHogCodeDiscordFollowupInputs:
     text: str
     discord_user_id: str
     message_id: str | None = None
+    # Forwarded thread history (oldest-first) and the specific message this reply targets.
+    # Both optional and backward-compatible: absent means "no extra context".
+    context: list[dict[str, Any]] = field(default_factory=list)
+    replied_to: dict[str, Any] | None = None
 
 
 @workflow.defn(name="posthog-code-discord-followup-processing")
@@ -57,6 +62,7 @@ def forward_discord_followup_activity(inputs: PostHogCodeDiscordFollowupInputs) 
     """Deliver a thread follow-up to the running sandbox agent. Mirrors the Slack
     follow-up path (minus cross-user identity resolution — the ingest layer already
     required an account-linked sender)."""
+    from products.discord_app.backend.conversation_context import build_followup_with_context
     from products.discord_app.backend.discord_thread import DiscordThreadContext, DiscordThreadHandler
     from products.discord_app.backend.models import DiscordThreadTaskMapping
     from products.tasks.backend.services.agent_command import send_user_message
@@ -95,15 +101,19 @@ def forward_discord_followup_activity(inputs: PostHogCodeDiscordFollowupInputs) 
     if not text:
         return
 
+    # Frame the forwarded thread history and reply target around the new message so a
+    # context-dependent follow-up resolves even if the agent never saw those messages.
+    message = build_followup_with_context(text, inputs.context, inputs.replied_to)
+
     auth_token = None
     created_by = mapping.task.created_by
     if created_by and created_by.id:
         distinct_id = created_by.distinct_id or f"user_{created_by.id}"
         auth_token = create_sandbox_connection_token(task_run, user_id=created_by.id, distinct_id=distinct_id)
 
-    result = send_user_message(task_run, text, auth_token=auth_token, timeout=90)
+    result = send_user_message(task_run, message, auth_token=auth_token, timeout=90)
     if not result.success and result.retryable and result.status_code != 504:
-        result = send_user_message(task_run, text, auth_token=auth_token, timeout=90)
+        result = send_user_message(task_run, message, auth_token=auth_token, timeout=90)
 
     if result.success or (result.retryable and result.status_code == 504):
         # 504 means the agent is mid-turn; the relay posts its reply when it finishes.

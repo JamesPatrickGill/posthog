@@ -236,6 +236,9 @@ def _handle_posthog_command(
             # `/ph code` in an unmanaged thread starts a fresh task there: threads can't
             # nest, so the workflow runs in the current thread instead of creating one.
             "channel_is_thread": bool(payload.get("channel_is_thread")),
+            # Surrounding channel messages (oldest-first), framed as background so a
+            # context-dependent prompt like "review this" resolves. Optional.
+            "context": payload.get("context"),
         },
         integration_id=integration.id,
         guild_id=guild_id,
@@ -255,7 +258,15 @@ def _followup_display_name(user: dict[str, Any]) -> str:
 
 
 def _start_followup_workflow(
-    *, guild_id: str, thread_id: str, text: str, discord_user_id: str, dedupe_key: str, message_id: str | None = None
+    *,
+    guild_id: str,
+    thread_id: str,
+    text: str,
+    discord_user_id: str,
+    dedupe_key: str,
+    message_id: str | None = None,
+    context: list[dict[str, Any]] | None = None,
+    replied_to: dict[str, Any] | None = None,
 ) -> None:
     inputs = PostHogCodeDiscordFollowupInputs(
         guild_id=guild_id,
@@ -263,6 +274,8 @@ def _start_followup_workflow(
         text=text,
         discord_user_id=discord_user_id,
         message_id=message_id,
+        context=context or [],
+        replied_to=replied_to,
     )
     _start_workflow(
         PostHogCodeDiscordFollowupWorkflow,
@@ -290,6 +303,8 @@ def _handle_followup_command(payload: dict[str, Any], mapping: Any, discord_user
             text=text,
             discord_user_id=discord_user_id,
             dedupe_key=payload.get("interaction_id") or mapping.thread_id,
+            # `/ph code` carries channel history but no reply target.
+            context=payload.get("context"),
         )
     except Exception:
         logger.exception("discord_followup_workflow_start_failed", thread_id=mapping.thread_id)
@@ -341,6 +356,8 @@ def _handle_thread_message(payload: dict[str, Any]) -> HttpResponse:
             discord_user_id=discord_user_id,
             dedupe_key=payload.get("message_id") or payload.get("interaction_id") or thread_id,
             message_id=payload.get("message_id"),
+            context=payload.get("context"),
+            replied_to=payload.get("replied_to"),
         )
     except Exception:
         logger.exception("discord_thread_message_forward_failed", thread_id=thread_id)

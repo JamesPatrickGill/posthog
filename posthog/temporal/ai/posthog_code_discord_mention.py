@@ -344,8 +344,9 @@ def resolve_discord_repository_activity(inputs: PostHogCodeDiscordMentionWorkflo
 def classify_discord_task_needs_repo_activity(inputs: PostHogCodeDiscordMentionWorkflowInputs) -> bool:
     """Haiku gate: does this prompt need repository access at all?
 
-    Slash commands carry no thread history at invocation, so the classifier runs on the
-    prompt alone. Defaults to True on error (shared classifier is conservative).
+    Runs on the prompt alone: forwarded conversation context frames the task description
+    but is deliberately kept out of the repo classifier, which keys off the explicit ask.
+    Defaults to True on error (shared classifier is conservative).
     """
     from products.tasks.backend.repo_selection.classifier import classify_task_needs_repo
 
@@ -489,6 +490,7 @@ def create_discord_task_activity(
     """Create the Task + TaskRun + thread mapping, then start the process workflow."""
     from posthog.models.scoping import team_scope
 
+    from products.discord_app.backend.conversation_context import build_prompt_with_context
     from products.discord_app.backend.discord_thread import DiscordThreadContext
     from products.discord_app.backend.models import DiscordThreadTaskMapping
     from products.tasks.backend.models import Task, TaskRun
@@ -497,7 +499,9 @@ def create_discord_task_activity(
     integration, _client = _get_integration_and_client(inputs.integration_id)
     options = inputs.interaction.get("options") or {}
     prompt = (options.get("prompt") or "Task from Discord").strip()
+    # Title stays the bare prompt (a short label); the description carries the framed context.
     title = prompt[:80] or "PostHog Code task"
+    description = build_prompt_with_context(prompt, inputs.interaction.get("context"))
 
     thread_context = DiscordThreadContext(
         integration_id=integration.id,
@@ -513,7 +517,7 @@ def create_discord_task_activity(
         task = Task.create_and_run(
             team=integration.team,
             title=title,
-            description=prompt,
+            description=description,
             origin_product=Task.OriginProduct.DISCORD,
             user_id=inputs.user_id,
             repository=repository,
