@@ -21,11 +21,13 @@ import { CdpPrecalculatedFiltersConsumer } from './cdp/consumers/cdp-precalculat
 import { CdpRerunWorkerConsumer } from './cdp/consumers/cdp-rerun-worker.consumer'
 import { createCdpProducerRegistry } from './cdp/outputs/producer-registry'
 import { CdpProducerName } from './cdp/outputs/producers'
+import { createCdpOutputsRegistry } from './cdp/outputs/registry'
 import { CyclotronV2JanitorService } from './cdp/services/cyclotron-v2'
 import { HogFlowScheduleService } from './cdp/services/hogflow-schedule/hogflow-schedule.service'
 import { CyclotronJobQueueKafka } from './cdp/services/job-queue/job-queue-kafka'
 import { CyclotronJobQueuePostgres } from './cdp/services/job-queue/job-queue-postgres'
 import { CyclotronJobQueuePostgresV2 } from './cdp/services/job-queue/job-queue-postgres-v2'
+import { HogInvocationResultsService } from './cdp/services/monitoring/hog-invocation-results.service'
 import { EncryptedFields } from './cdp/utils/encryption-utils'
 import { defaultConfig } from './config/config'
 import { createIngestionRedisConnectionConfig, createPosthogRedisConnectionConfig } from './config/redis-pools'
@@ -97,7 +99,10 @@ export class PluginServer implements NodeServer {
             capabilities.cdpCohortMembership ||
             capabilities.cdpBatchHogFlow ||
             capabilities.cdpHogflowSubscriptionMatcher ||
-            capabilities.cdpRerunWorker
+            capabilities.cdpRerunWorker ||
+            // The janitor records poison-pill give-ups as failed invocation
+            // results, so it needs the CDP producer registry + outputs.
+            capabilities.cdpCyclotronV2Janitor
         )
         // 1. Shared infrastructure (always needed)
         const { teamManager } = await this.createSharedInfrastructure()
@@ -219,18 +224,29 @@ export class PluginServer implements NodeServer {
                 throw new Error('CYCLOTRON_NODE_DATABASE_URL not configured but required for CyclotronV2JanitorService')
             }
             serviceLoaders.push(async () => {
-                const janitor = new CyclotronV2JanitorService({
-                    pool: {
-                        dbUrl: this.config.CYCLOTRON_NODE_DATABASE_URL!,
-                        maxConnections: this.config.CYCLOTRON_NODE_MAX_CONNECTIONS,
-                        idleTimeoutMs: this.config.CYCLOTRON_NODE_IDLE_TIMEOUT_MS,
+                // Build a results service so the janitor can record poison-pill
+                // give-ups as failed, replayable invocation results before
+                // deleting the cyclotron row.
+                const outputs = createCdpOutputsRegistry().build(this.cdpProducerRegistry!, this.config)
+                const invocationResults = new HogInvocationResultsService(outputs, this.config)
+                const janitor = new CyclotronV2JanitorService(
+                    {
+                        pool: {
+                            dbUrl: this.config.CYCLOTRON_NODE_DATABASE_URL!,
+                            maxConnections: this.config.CYCLOTRON_NODE_MAX_CONNECTIONS,
+                            idleTimeoutMs: this.config.CYCLOTRON_NODE_IDLE_TIMEOUT_MS,
+                        },
+                        cleanupBatchSize: this.config.CYCLOTRON_NODE_JANITOR_CLEANUP_BATCH_SIZE,
+                        cleanupIntervalMs: this.config.CYCLOTRON_NODE_JANITOR_CLEANUP_INTERVAL_MS,
+                        stallTimeoutMs: this.config.CYCLOTRON_NODE_JANITOR_STALL_TIMEOUT_MS,
+                        maxTouchCount: this.config.CYCLOTRON_NODE_JANITOR_MAX_TOUCH_COUNT,
+                        cleanupGraceMs: this.config.CYCLOTRON_NODE_JANITOR_CLEANUP_GRACE_MS,
+                        fleetStallRatioThreshold: this.config.CYCLOTRON_NODE_JANITOR_FLEET_STALL_RATIO_THRESHOLD,
+                        fleetHealthWindowMs: this.config.CYCLOTRON_NODE_JANITOR_FLEET_HEALTH_WINDOW_MS,
+                        fleetMinStalledCount: this.config.CYCLOTRON_NODE_JANITOR_FLEET_MIN_STALLED_COUNT,
                     },
-                    cleanupBatchSize: this.config.CYCLOTRON_NODE_JANITOR_CLEANUP_BATCH_SIZE,
-                    cleanupIntervalMs: this.config.CYCLOTRON_NODE_JANITOR_CLEANUP_INTERVAL_MS,
-                    stallTimeoutMs: this.config.CYCLOTRON_NODE_JANITOR_STALL_TIMEOUT_MS,
-                    maxTouchCount: this.config.CYCLOTRON_NODE_JANITOR_MAX_TOUCH_COUNT,
-                    cleanupGraceMs: this.config.CYCLOTRON_NODE_JANITOR_CLEANUP_GRACE_MS,
-                })
+                    invocationResults
+                )
                 await janitor.start()
                 return janitor.service
             })

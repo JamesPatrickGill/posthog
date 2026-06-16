@@ -1,8 +1,17 @@
+import { DateTime } from 'luxon'
 import { Pool } from 'pg'
 import { Counter, Gauge } from 'prom-client'
 
 import { logger } from '../../../utils/logger'
-import { CyclotronV2CleanupResult, CyclotronV2JanitorConfig } from './types'
+import { CyclotronJobInvocationHogFlow } from '../../types'
+import { v2JobToInvocation } from '../job-queue/job-queue-postgres-v2'
+import { HogInvocationResultsService } from '../monitoring/hog-invocation-results.service'
+import { CyclotronV2CleanupResult, CyclotronV2DequeuedJob, CyclotronV2JanitorConfig } from './types'
+
+// Stable, low-cardinality `error_kind` stamped on the failed invocation result
+// the janitor writes when it gives up on a poison pill. Lets operators target
+// exactly these give-ups from the rerun tooling (rerun filter `error_kind`).
+export const JANITOR_POISON_PILL_ERROR_KIND = 'janitor_poison_pill'
 
 const janitorDeletedCounter = new Counter({
     name: 'cdp_cyclotron_v2_janitor_deleted',
@@ -17,7 +26,12 @@ const janitorStalledCounter = new Counter({
 
 const janitorPoisonedCounter = new Counter({
     name: 'cdp_cyclotron_v2_janitor_poisoned',
-    help: 'Number of poison pill jobs failed by the janitor',
+    help: 'Number of poison pill jobs given up on (recorded as failed, replayable) by the janitor',
+})
+
+const janitorGiveUpSkippedCounter = new Counter({
+    name: 'cdp_cyclotron_v2_janitor_give_up_skipped',
+    help: 'Poison pills the janitor could not record a recovery row for, so kept (not deleted)',
 })
 
 const janitorRunCounter = new Counter({
@@ -31,6 +45,28 @@ const queueDepthGauge = new Gauge({
     labelNames: ['queue'],
 })
 
+const poisoningPausedGauge = new Gauge({
+    name: 'cdp_cyclotron_v2_janitor_poisoning_paused',
+    help: 'Whether giving up on poison pills is paused because stalls look fleet-wide (1) or active (0)',
+})
+
+interface PoisonRow {
+    id: string
+    team_id: number
+    function_id: string | null
+    queue_name: string
+    priority: number
+    scheduled: Date
+    created: Date
+    parent_run_id: string | null
+    state: Buffer | null
+    distinct_id: string | null
+    person_id: string | null
+    action_id: string | null
+    janitor_touch_count: number
+    transition_count: number
+}
+
 export class CyclotronV2Janitor {
     private pool: Pool
     private intervalHandle: ReturnType<typeof setInterval> | null = null
@@ -40,8 +76,23 @@ export class CyclotronV2Janitor {
     private readonly stallTimeoutMs: number
     private readonly maxTouchCount: number
     private readonly cleanupGraceMs: number
+    private readonly fleetStallRatioThreshold: number
+    private readonly fleetHealthWindowMs: number
+    private readonly fleetMinStalledCount: number
 
-    constructor(config: CyclotronV2JanitorConfig) {
+    // Rolling window of completion counts seen per run — the denominator for the
+    // fleet-health ratio. Steady-state completions are non-zero, so a healthy
+    // fleet with one bad job stays well below the stall-ratio bar.
+    private completionSamples: { ts: number; completed: number }[] = []
+
+    constructor(
+        config: CyclotronV2JanitorConfig,
+        // Optional so the v1 postgres paths and unit tests that don't exercise
+        // the give-up path can construct a janitor without Kafka. When absent
+        // the janitor never deletes poison pills (it only resets/retries) — it
+        // refuses to drop a job it can't record a recovery row for.
+        private invocationResults?: HogInvocationResultsService
+    ) {
         this.pool = new Pool({
             connectionString: config.pool.dbUrl,
             max: config.pool.maxConnections ?? 5,
@@ -52,6 +103,9 @@ export class CyclotronV2Janitor {
         this.stallTimeoutMs = config.stallTimeoutMs ?? 30000
         this.maxTouchCount = config.maxTouchCount ?? 3
         this.cleanupGraceMs = config.cleanupGraceMs ?? 10000
+        this.fleetStallRatioThreshold = config.fleetStallRatioThreshold ?? 0.5
+        this.fleetHealthWindowMs = config.fleetHealthWindowMs ?? 300000
+        this.fleetMinStalledCount = config.fleetMinStalledCount ?? 5
     }
 
     async start(): Promise<void> {
@@ -69,17 +123,38 @@ export class CyclotronV2Janitor {
     }
 
     async runOnce(): Promise<CyclotronV2CleanupResult> {
-        const deleted = await this.cleanupTerminalJobs()
-        const poisoned = await this.failPoisonPills()
+        const deletedCounts = await this.cleanupTerminalJobs()
+        const deleted = Object.values(deletedCounts).reduce((a, b) => a + b, 0)
+
+        this.recordCompletionSample(deletedCounts['completed'] ?? 0)
+
+        // Gate the give-up on fleet health: during a fleet-wide outage every
+        // in-flight job stalls at once, and giving up on them would drop work a
+        // recovered fleet could still run. In that state only reset/retry.
+        const stalledNow = await this.countStalledRunningJobs()
+        const poisoningPaused = this.isFleetUnhealthy(stalledNow)
+        poisoningPausedGauge.set(poisoningPaused ? 1 : 0)
+
+        let poisonedIds: string[] = []
+        if (poisoningPaused) {
+            logger.warn('CyclotronV2Janitor poisoning paused, fleet unhealthy', {
+                stalledNow,
+                completedInWindow: this.completedInWindow(),
+                fleetStallRatioThreshold: this.fleetStallRatioThreshold,
+            })
+        } else {
+            poisonedIds = await this.recordAndDeletePoisonPills()
+        }
+
         const stalled = await this.resetStalledJobs()
         const depths = await this.measureQueueDepths()
 
         janitorRunCounter.inc()
 
-        return { deleted, stalled, poisoned, depths }
+        return { deleted, stalled, poisoned: poisonedIds.length, poisonedIds, poisoningPaused, depths }
     }
 
-    private async cleanupTerminalJobs(): Promise<number> {
+    private async cleanupTerminalJobs(): Promise<Record<string, number>> {
         const cutoff = new Date(Date.now() - this.cleanupGraceMs)
 
         const result = await this.pool.query<{ status: string; count: string }>(
@@ -114,35 +189,143 @@ export class CyclotronV2Janitor {
             logger.info('CyclotronV2Janitor cleaned up terminal jobs', { counts, total })
         }
 
-        return total
+        return counts
     }
 
-    private async failPoisonPills(): Promise<number> {
-        // Poison pills: running jobs with stale heartbeats that have been reset too many times
+    private recordCompletionSample(completed: number): void {
+        const now = Date.now()
+        this.completionSamples.push({ ts: now, completed })
+        this.completionSamples = this.completionSamples.filter((s) => s.ts > now - this.fleetHealthWindowMs)
+    }
+
+    private completedInWindow(): number {
+        return this.completionSamples.reduce((acc, s) => acc + s.completed, 0)
+    }
+
+    private async countStalledRunningJobs(): Promise<number> {
+        const heartbeatCutoff = new Date(Date.now() - this.stallTimeoutMs)
+        const result = await this.pool.query<{ count: string }>(
+            `SELECT COUNT(*) AS count FROM cyclotron_jobs
+             WHERE status = 'running' AND COALESCE(last_heartbeat, $1) <= $1`,
+            [heartbeatCutoff]
+        )
+        return parseInt(result.rows[0].count, 10)
+    }
+
+    // Stalls are fleet-wide when many jobs are stalled at once AND stalls
+    // dominate completions over the rolling window. Both bars must be cleared so
+    // an idle-but-healthy fleet (few completions, a couple of stalls) doesn't
+    // trip the gate.
+    private isFleetUnhealthy(stalledNow: number): boolean {
+        if (stalledNow < this.fleetMinStalledCount) {
+            return false
+        }
+        const completed = this.completedInWindow()
+        return stalledNow / (stalledNow + completed) > this.fleetStallRatioThreshold
+    }
+
+    /**
+     * Give up on poison pills: running jobs with a stale heartbeat that have
+     * been reset too many times. Each one is recorded as a `failed`, replayable
+     * invocation result (discoverable in the Invocations UI, re-runnable by the
+     * existing rerun tooling) and only then deleted — so there is never a window
+     * where the cyclotron row is gone but no recovery record exists. The
+     * original incident deleted these with no trace; here every give-up is
+     * logged with its id and recorded for replay.
+     */
+    private async recordAndDeletePoisonPills(): Promise<string[]> {
         const heartbeatCutoff = new Date(Date.now() - this.stallTimeoutMs)
 
-        const result = await this.pool.query(
-            `UPDATE cyclotron_jobs
-             SET status = 'failed', lock_id = NULL, last_heartbeat = NULL,
-                 last_transition = NOW(), transition_count = transition_count + 1
-             WHERE id IN (
-                 SELECT id
-                 FROM cyclotron_jobs
-                 WHERE status = 'running'
-                   AND COALESCE(last_heartbeat, $1) <= $1
-                   AND janitor_touch_count >= $2
-                 FOR UPDATE SKIP LOCKED
-             )`,
-            [heartbeatCutoff, this.maxTouchCount]
+        const result = await this.pool.query<PoisonRow>(
+            `SELECT id, team_id, function_id, queue_name, priority, scheduled, created,
+                    parent_run_id, state, distinct_id, person_id, action_id,
+                    janitor_touch_count, transition_count
+             FROM cyclotron_jobs
+             WHERE status = 'running'
+               AND COALESCE(last_heartbeat, $1) <= $1
+               AND janitor_touch_count >= $2
+             ORDER BY last_transition ASC
+             LIMIT $3`,
+            [heartbeatCutoff, this.maxTouchCount, this.cleanupBatchSize]
         )
 
-        const count = result.rowCount ?? 0
-        if (count > 0) {
-            janitorPoisonedCounter.inc(count)
-            logger.warn('CyclotronV2Janitor failed poison pill jobs', { count })
+        if (result.rows.length === 0) {
+            return []
         }
 
-        return count
+        if (!this.invocationResults) {
+            // No way to record a recovery row — keep the jobs rather than drop
+            // them silently. resetStalledJobs will retry them this cycle.
+            janitorGiveUpSkippedCounter.inc(result.rows.length)
+            logger.warn('CyclotronV2Janitor cannot record poison pill recovery (no results service), keeping jobs', {
+                count: result.rows.length,
+            })
+            return []
+        }
+
+        const recordedIds: string[] = []
+        let skipped = 0
+        for (const row of result.rows) {
+            const invocation = this.poisonRowToInvocation(row)
+            const ok = await this.invocationResults.recordTerminalFailureDurably(invocation, {
+                error: `poison pill: stalled and reset ${row.janitor_touch_count} times without completing`,
+                errorKind: JANITOR_POISON_PILL_ERROR_KIND,
+            })
+            if (ok) {
+                recordedIds.push(row.id)
+            } else {
+                skipped++
+            }
+        }
+
+        if (skipped > 0) {
+            janitorGiveUpSkippedCounter.inc(skipped)
+            logger.warn('CyclotronV2Janitor kept poison pills it could not durably record', { count: skipped })
+        }
+
+        if (recordedIds.length > 0) {
+            // Re-guard on status='running' so we never delete a row a worker
+            // legitimately transitioned between the SELECT and now.
+            await this.pool.query(`DELETE FROM cyclotron_jobs WHERE id = ANY($1::uuid[]) AND status = 'running'`, [
+                recordedIds,
+            ])
+            janitorPoisonedCounter.inc(recordedIds.length)
+            logger.warn('CyclotronV2Janitor gave up on poison pill jobs (recorded as failed, replayable)', {
+                count: recordedIds.length,
+                ids: recordedIds,
+            })
+        }
+
+        return recordedIds
+    }
+
+    // Turn a raw poisoned row into a hog flow invocation the results service can
+    // serialize. postgres-v2 backs hog flows, so we tag it as such — the stub
+    // `hogFlow` carries only the id the lifecycle row needs (function_id), while
+    // the rerun path rebuilds the full flow from the function id on replay.
+    private poisonRowToInvocation(row: PoisonRow): CyclotronJobInvocationHogFlow {
+        const job: CyclotronV2DequeuedJob = {
+            id: row.id,
+            teamId: row.team_id,
+            functionId: row.function_id,
+            queueName: row.queue_name,
+            priority: row.priority,
+            scheduled: DateTime.fromJSDate(row.scheduled),
+            created: DateTime.fromJSDate(row.created),
+            parentRunId: row.parent_run_id,
+            transitionCount: row.transition_count,
+            state: row.state,
+            distinctId: row.distinct_id,
+            personId: row.person_id,
+            actionId: row.action_id,
+            ack: () => Promise.resolve(),
+            fail: () => Promise.resolve(),
+            reschedule: () => Promise.resolve(),
+            cancel: () => Promise.resolve(),
+            heartbeat: () => Promise.resolve(),
+        }
+        const invocation = v2JobToInvocation(job)
+        return { ...invocation, hogFlow: { id: invocation.functionId } } as CyclotronJobInvocationHogFlow
     }
 
     private async resetStalledJobs(): Promise<number> {
