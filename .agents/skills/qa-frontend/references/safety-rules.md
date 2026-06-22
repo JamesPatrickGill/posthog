@@ -20,8 +20,8 @@ chosen). Stop before checkout, comments, or edits when:
 Stop rules that apply to both modes:
 
 - The local PostHog stack is not reachable.
-- Playwright MCP cannot navigate or login. (Credentials always resolve to at
-  least the documented seed defaults, so a missing-credentials stop is no
+- Browser MCP/tooling cannot navigate or login. (Credentials always resolve to
+  at least the documented seed defaults, so a missing-credentials stop is no
   longer separately required; if the resolved credentials do not work, the
   login step itself fails and aborts here.)
 
@@ -73,14 +73,15 @@ interactive terminal UI from a headless agent session unless the user explicitly
 asks for it. Stop only the stack the agent started, and do not stop a stack the
 user started themselves unless they explicitly approve.
 
-After startup, use `_preflight` plus process-specific phrocs MCP checks
-(`backend`, `frontend`, and any target-specific process) as the readiness gate.
-Do not rely only on the all-process status call or on `hogli wait`; both can
-report failures while the UI is usable, especially when an unrelated configured
-process crashed. If backend or frontend is not ready, stop before checkout,
-edits, uploads, comments, or pushes. If unrelated processes crashed, read their
-phrocs logs, record the degraded stack in the run notes, and continue only when
-the crash is unrelated to the QA target.
+After startup, use the current repo-local `run-posthog` readiness checks when
+available, plus process-specific phrocs MCP checks (`backend`, `frontend`, and
+any target-specific process) as the readiness gate. Do not rely only on the
+all-process status call or on `hogli wait`; both can report failures while the
+UI is usable, especially when an unrelated configured process crashed. If
+backend or frontend is not ready, stop before checkout, edits, uploads,
+comments, or pushes. If unrelated processes crashed, read their phrocs logs,
+record the degraded stack in the run notes, and continue only when the crash is
+unrelated to the QA target.
 
 Prefer phrocs MCP logs. Fall back to `.posthog/.generated/logs/` only when MCP
 is unavailable.
@@ -90,7 +91,7 @@ is unavailable.
 If `isCrossRepository` is true:
 
 - Default to static review/comment-only. Do not check out the fork, start the
-  local stack for the fork, run Playwright against it, log in, seed data,
+  local stack for the fork, run browser QA against it, log in, seed data,
   upload evidence, or push.
 - Use `gh pr view`, `gh pr diff`, and other read-only GitHub inspection
   commands for the static review path.

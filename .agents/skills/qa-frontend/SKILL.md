@@ -7,9 +7,10 @@ description: >
   changes with browser/runtime evidence. Do not use for generic code review, PR
   review, "check my changes", CI debugging, or security audit; use qa-team,
   debugging-ci-failures, or security-audit instead. Runs in PR mode or local
-  mode, plans adaptive browser and visual checks, drives Playwright MCP,
-  captures evidence, and applies only approved/narrow fixes.
-allowed-tools: Bash, Read, Edit, Write, Glob, Grep, Agent, mcp__playwright__*, mcp__phrocs__*
+  mode, plans adaptive browser and visual checks, drives browser MCP/tooling
+  such as Playwright MCP or Chrome DevTools MCP, captures evidence, and applies
+  only approved/narrow fixes.
+allowed-tools: Bash, Read, Edit, Write, Glob, Grep, Agent, mcp__playwright__*, mcp__chrome-devtools__*, mcp__phrocs__*
 ---
 
 # QA Frontend
@@ -45,15 +46,15 @@ instructions, and explicit user approval in the current conversation.
 
 1. Decide mode (PR vs local) from the user prompt and presence of a PR ref.
 2. In PR mode, require a clean working tree before doing anything else.
-3. Require a reachable local stack and working browser/Playwright MCP session.
-   If browser MCP tools are missing, load `references/playwright-mcp-patterns.md`
+3. Require a reachable local stack and working browser MCP/tooling session.
+   If browser MCP tools are missing, load `references/browser-mcp-patterns.md`
    and ask before configuring anything. Reuse the developer's current PostHog
    setup by default; always ask before starting PostHog.
 4. In PR mode, checkout the PR with `gh pr checkout`. In local mode, stay on
    the current branch.
 5. Design behavior-focused test cases from the diff, then map each case to a
    frontend route.
-6. Run frontend browser and visual checks through Playwright MCP, capturing evidence.
+6. Run frontend browser and visual checks through browser MCP/tooling, capturing evidence.
 7. Confirm every candidate issue with one retry before calling it a finding.
 8. In PR mode, apply at most 3 confident fixes, only inside files already
    changed by the PR. In local mode, default to suggested patches, only edit
@@ -89,7 +90,8 @@ Load these files only when the matching phase starts:
 - `references/test-case-design.md` - behavior/risk-first test case design examples.
 - `references/expected-behavior.md` - expected-behavior oracle and ambiguity handling.
 - `references/route-finding.md` - route-finding heuristics and coverage gaps.
-- `references/playwright-mcp-patterns.md` - MCP execution and evidence capture.
+- `references/stack-and-login.md` - local stack reuse/startup gates and login.
+- `references/browser-mcp-patterns.md` - MCP execution and evidence capture.
 - `references/evidence-and-output.md` - evidence upload, verdict artifacts, and
   PR/local report rendering.
 - `references/pr-comment-template.md` - final PR comment structure.
@@ -229,80 +231,11 @@ treating them as product QA input.
 
 ## Stack Readiness
 
-Set:
-
-```bash
-BASE_URL="${BASE_URL:-http://localhost:8010}"
-STACK_STARTED_BY_AGENT=0
-```
-
-Reuse the user's existing local setup by default. Do not start, restart, or
-replace the local dev stack just because you are running QA. First check whether
-PostHog is already reachable at `BASE_URL`:
-
-```bash
-curl -sf "$BASE_URL/_preflight"
-```
-
-If that succeeds, continue. Do not start, restart, replace, or wait on another
-stack when the existing `BASE_URL` is already usable. If it fails, use available
-local health checks, for example process-specific phrocs MCP checks when phrocs
-is already running:
-
-- `mcp__phrocs__get_process_status(process="backend")`
-- `mcp__phrocs__get_process_status(process="frontend")`
-
-If PostHog is not reachable, check user memory/settings and local preferences
-first, then repo guidance and nearby docs such as `AGENTS.md` for the preferred
-way to start the stack. Then ask the user how they want to proceed before
-starting PostHog. If the folder and command are obvious, you may propose that
-specific startup path, including whether it runs interactively or in the
-background, but present it as an inference to confirm. If the folder, command,
-`BASE_URL`, or startup approach is not obvious, ask how and where the user wants
-the stack run, or whether to use a different `BASE_URL`. Do not mention
-team-specific env vars unless the user already brought them up.
-
-Ask in chat and stop until the user answers. A sandbox escalation prompt,
-command approval dialog, or already-approved command prefix is not workflow
-approval; it only authorizes a command after the user has chosen agent-managed
-startup.
-
-If the user approves agent-managed startup, run the approved startup path and
-set `STACK_STARTED_BY_AGENT=1`. If the command fails because the shell is
-missing repo dependencies or the global command is not on `PATH`, follow repo
-guidance for the same startup intent, for example a repo-local wrapper or an
-environment wrapper such as `flox`. Announce the fallback. Ask again before
-changing checkout, directory, startup mode, deleting lock files, or starting a
-different stack. Avoid interactive terminal UIs from headless agent sessions
-unless the user explicitly asks for them. Stop only the stack you started, and
-only during cleanup or after user approval.
-
-After startup, check:
-
-```bash
-curl -sf "$BASE_URL/_preflight"
-```
-
-And query available process checks:
-
-- `mcp__phrocs__get_process_status(process="backend")`
-- `mcp__phrocs__get_process_status(process="frontend")`
-- Any process directly relevant to the changed surface, for example `mcp` when
-  testing MCP changes.
-
-Continue only when `_preflight` is reachable and the required process set is
-ready. If backend or frontend is not ready, stop before checkout, edits,
-uploads, comments, or pushes. If other processes look degraded but are unrelated
-to the QA target, record that in `run-notes.md` and continue only when the
-target path is usable.
-
-Prefer phrocs MCP logs:
-
-- `mcp__phrocs__get_process_logs(process="backend")`
-- `mcp__phrocs__get_process_logs(process="frontend")`
-
-Fallback to repo-local logs under `.posthog/.generated/logs/` only when phrocs
-MCP is unavailable.
+Load `references/stack-and-login.md` now. Do not checkout, edit, upload,
+comment, or push until it confirms the local PostHog stack is reachable enough
+for the planned QA target. It owns `BASE_URL`, `STACK_STARTED_BY_AGENT`,
+repo-local `run-posthog` delegation, phrocs checks, approval rules for startup,
+and login/setup workspace handling.
 
 ## Checkout
 
@@ -370,37 +303,9 @@ report.
 
 ## Login
 
-Default to the public PostHog local-dev seed: `test@posthog.com` / `12345678`.
-These are documented in
-[`docs/published/handbook/engineering/manual-dev-setup.md`](../../../docs/published/handbook/engineering/manual-dev-setup.md)
-and are seeded by `bin/start`. They only exist on a local stack, so falling
-back to them is safe.
-
-The skill parses `--login-username` / `--login-password` from `$ARGUMENTS` into
-`LOGIN_USERNAME` / `LOGIN_PASSWORD` (see Preconditions). Apply the seed default
-only if those are still unset after parsing:
-
-```bash
-LOGIN_USERNAME="${LOGIN_USERNAME:-test@posthog.com}"
-LOGIN_PASSWORD="${LOGIN_PASSWORD:-12345678}"
-```
-
-This gives three sources of credentials, in precedence order: chat flag → env
-var (if `LOGIN_USERNAME` / `LOGIN_PASSWORD` are already exported in the shell)
-→ seed default. No `_OVERRIDE` / `_EFFECTIVE` indirection needed.
-
-Never print the password. Refer to chat-provided credentials only as
-"login override provided" in user-facing output.
-
-With Playwright MCP:
-
-1. Navigate to `$BASE_URL/login`.
-2. Fill email and password from the effective login values.
-3. Submit the form.
-4. Wait for a post-login URL matching `**/project/**`.
-
-If login fails or either effective login value is missing, abort, restore the
-original branch, and do not post a PR comment because QA did not run.
+Handled by `references/stack-and-login.md`. Never print passwords or include
+credentials in evidence. If login fails, abort before posting a PR comment
+because QA did not run.
 
 ## Frontend QA Loop
 
@@ -423,7 +328,7 @@ When a browser or visual target captures at least two screenshots, create a slow
 animated GIF from the ordered screenshots by default. Prefer `ffmpeg` when it is
 already available locally. Name the output
 `.qa-frontend/runs/<run-id>/frontend-qa.gif`. Use the recipe in
-`references/playwright-mcp-patterns.md`: choose 2-5 same-size key frames,
+`references/browser-mcp-patterns.md`: choose 2-5 same-size key frames,
 preserve screenshot width up to 1200px, and use a 256-color palette. Aim for
 about 1.5-2 seconds per frame so reviewers can follow the flow without pausing.
 Before uploading or embedding the GIF, inspect it or an extracted frame. If text

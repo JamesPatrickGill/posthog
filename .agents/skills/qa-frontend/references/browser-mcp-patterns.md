@@ -1,13 +1,16 @@
-# Playwright MCP Patterns
+# Browser MCP Patterns
 
-Use Playwright MCP as the browser lens. Prefer user-visible assertions over
-implementation assertions.
+Use browser MCP/tooling as the browser lens. Prefer user-visible assertions over
+implementation assertions. Playwright MCP is the known-good concrete example in
+this repo; Chrome DevTools MCP or another browser MCP is fine when it exposes
+the same primitives: navigate, interact, evaluate JavaScript in page context,
+capture screenshots, and inspect console/network signals.
 
 ## MCP Availability
 
-This skill requires browser MCP/tooling. If no Playwright/browser MCP tools are
+This skill requires browser MCP/tooling. If no browser MCP tools are
 available in the current session, stop and ask before configuring anything:
-"I do not see a Playwright/browser MCP tool in this session. Do you want me to
+"I do not see a browser MCP tool in this session. Do you want me to
 configure one for this agent environment, or would you prefer to set it up
 yourself? If I configure it, should it be local to this repo/workspace,
 user-wide, or another scope supported by your client?"
@@ -22,16 +25,26 @@ Client-specific examples are guidance, not universal instructions:
 
 - Claude Code local scope:
   `claude mcp add --scope local playwright -- npx -y @playwright/mcp@0.0.75`
+- Chrome DevTools MCP: the server is commonly named `chrome-devtools`, which
+  maps to a `mcp__chrome-devtools__*` tool namespace in clients that preserve
+  server names. Use the browser MCP setup already preferred by the current
+  client or repo guidance; keep it local/user-scoped, not committed.
 - Cursor or other clients: use that client's local or user MCP settings, not
   repo-committed config.
-- Codex: use available Browser/Playwright tooling if exposed; otherwise ask the
+- Codex: use available browser tooling if exposed; otherwise ask the
   user how they want browser automation configured for their Codex environment.
 
 ## Browser Flow Skeleton
 
-1. `mcp__playwright__browser_navigate` to the target URL.
+The names below use Playwright MCP as examples. With Chrome DevTools MCP or
+another browser MCP, use the equivalent navigate, snapshot/DOM, evaluate,
+screenshot, console, and network tools exposed by that server.
+
+1. Navigate to the target URL, for example
+   `mcp__playwright__browser_navigate`.
 2. Read the action response. Navigation often includes an automatic snapshot.
-3. Call `mcp__playwright__browser_snapshot` when the page state is unclear.
+3. Call a snapshot/DOM inspection tool when the page state is unclear, for
+   example `mcp__playwright__browser_snapshot`.
 4. Interact by role, text, or accessible snapshot reference. Prefer visible
    controls over CSS selectors.
 5. After each meaningful action, assert on UI state: changed text, toast,
@@ -41,8 +54,8 @@ Client-specific examples are guidance, not universal instructions:
 
 ## Locked Browser Profile
 
-If Playwright MCP reports that the browser profile is already in use, treat it
-as an infrastructure blocker, not a QA result.
+If browser MCP/tooling reports that the browser profile is already in use,
+treat it as an infrastructure blocker, not a QA result.
 
 1. Prefer the MCP/browser option that starts a fresh isolated profile, when one
    is available.
@@ -58,8 +71,8 @@ without explicit approval.
 
 ## Browser Session Cleanup
 
-At the end of the QA run, close the browser automation session if the browser or
-Playwright MCP exposes a close-page, close-context, close-browser, or end-session
+At the end of the QA run, close the browser automation session if the browser
+MCP/tooling exposes a close-page, close-context, close-browser, or end-session
 action. This prevents stale Chromium sessions from holding profile locks or
 confusing later QA attempts.
 
@@ -133,11 +146,11 @@ swallowing console output erodes trust in the report.
 
 ## Page Context Helpers
 
-Use authenticated `fetch` from the Playwright page context only to set up or
+Use authenticated `fetch` from the browser page context only to set up or
 inspect frontend state that the visible flow needs. Cookies and CSRF state come
 from the browser session. Do not turn this into a standalone backend test plan.
 
-Use shell `curl` only for unauthenticated health checks like `_preflight`.
+Use shell `curl` only for unauthenticated health checks such as `_health`.
 
 ## Reproducibility
 
@@ -158,7 +171,7 @@ To exercise dark/light variants of a scene, patch the authenticated user's
 theme switcher uses and is the only reliable lever:
 
 ```js
-// via mcp__playwright__browser_evaluate, in the authenticated page context
+// via the browser MCP evaluate tool, in the authenticated page context
 ;async () => {
   const csrf = document.cookie.match(/csrftoken=([^;]+)/)?.[1]
   const r = await fetch('/api/users/@me/', {
@@ -170,7 +183,7 @@ theme switcher uses and is the only reliable lever:
 }
 ```
 
-Then `browser_navigate` to the target route (a navigation reloads kea state).
+Then navigate to the target route (a navigation reloads kea state).
 Verify the toggle took effect by reading the computed background color, not
 DOM attributes: PostHog does not set a `dark` class, `data-theme`, or
 `data-color-mode` on `<html>` - the kea state drives CSS variables directly.
@@ -234,8 +247,8 @@ Discipline:
 
 If the PR's behavior is gated behind a feature flag that is not enabled for
 the seed user's project, the new UI stays hidden and the QA loop never
-exercises it. Override the flag from the browser console via Playwright
-MCP - no backend changes needed:
+exercises it. Override the flag from the authenticated browser page context -
+no backend changes needed:
 
 ```js
 // Enable a boolean flag
@@ -248,10 +261,10 @@ posthog.featureFlags.overrideFeatureFlags({ flags: { 'my-flag-key': 'variant-nam
 posthog.featureFlags.overrideFeatureFlags(false)
 ```
 
-Issue these via `mcp__playwright__browser_evaluate` in the authenticated
-page context, then navigate to the target route (a navigation reloads the
-flag-driven render). Verify by snapshotting the page and confirming the
-gated UI is now present.
+Issue these via the active browser MCP evaluate tool in the authenticated page
+context, then navigate to the target route (a navigation reloads the flag-driven
+render). Verify by snapshotting the page and confirming the gated UI is now
+present.
 
 At end of the QA loop, call `overrideFeatureFlags(false)` to clear the
 override so the dev environment is left as found. Note the override step in
@@ -282,8 +295,9 @@ When using `ffmpeg` from zsh, quote every filtergraph argument so brackets are
 not treated as shell globs.
 
 Prefer the PostHog workspace's existing browser tooling for screenshots: capture
-frames through Playwright MCP or the repo's existing `@playwright/test`
-dependency. Do not add screenshot or GIF packages to `package.json`.
+frames through the active browser MCP/tooling or the repo's existing
+`@playwright/test` dependency. Do not add screenshot or GIF packages to
+`package.json`.
 
 For stitching, prefer `ffmpeg` when available. Do not blindly include every PNG
 in the run directory: choose 2-5 meaningful same-size key frames. Full-page
@@ -308,7 +322,7 @@ ffmpeg -y -framerate 0.5 \
 ```
 
 Set `gif_width` to the selected screenshots' native width, capped at 1200. For
-the usual 1200px Playwright screenshots, keep `gif_width=1200`. Do not downscale
+the usual 1200px browser screenshots, keep `gif_width=1200`. Do not downscale
 to 900px. Avoid 128-color Bayer-dither recipes because they can make PostHog UI
 screenshots look blurry or yellow-stippled. The command above was checked
 against real 1200x985 `.qa-frontend` screenshots and produced a readable

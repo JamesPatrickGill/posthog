@@ -22,7 +22,7 @@ the run directory in place.
 ## Browser Session
 
 After the final report is written, end the browser automation session if the
-browser or Playwright MCP exposes a close-page, close-context, close-browser, or
+browser MCP/tooling exposes a close-page, close-context, close-browser, or
 end-session action. This prevents stale Chromium sessions from blocking later QA
 runs.
 
