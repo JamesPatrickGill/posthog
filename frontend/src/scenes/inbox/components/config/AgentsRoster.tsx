@@ -155,6 +155,7 @@ export function AgentsRoster(): JSX.Element {
         linearIssuesConfig,
         zendeskTicketsConfig,
         pgAnalyzeIssuesConfig,
+        healthChecksConfig,
         errorTrackingIsFullyEnabled,
         isSessionAnalysisToggling,
         isConversationsToggling,
@@ -163,9 +164,15 @@ export function AgentsRoster(): JSX.Element {
         isLinearIssuesToggling,
         isZendeskTicketsToggling,
         isPgAnalyzeIssuesToggling,
+        isHealthChecksToggling,
     } = useValues(signalSourcesLogic)
-    const { toggleSessionAnalysis, toggleConversations, toggleErrorTracking, initiateDataWarehouseSourceToggle } =
-        useActions(signalSourcesLogic)
+    const {
+        toggleSessionAnalysis,
+        toggleConversations,
+        toggleErrorTracking,
+        toggleHealthChecks,
+        initiateDataWarehouseSourceToggle,
+    } = useActions(signalSourcesLogic)
 
     const stateFor = useCallback(
         (source: AgentRosterSource): AgentSourceState => {
@@ -198,6 +205,13 @@ export function AgentsRoster(): JSX.Element {
                         requiresSetup: false,
                         syncStatus: sessionAnalysisConfig?.status,
                     }
+                case 'health_checks':
+                    return {
+                        armed: !!healthChecksConfig?.enabled,
+                        loading: isHealthChecksToggling,
+                        requiresSetup: false,
+                        syncStatus: healthChecksConfig?.status,
+                    }
                 case 'github':
                     return dwState(githubIssuesConfig, isGithubIssuesToggling)
                 case 'linear':
@@ -215,6 +229,8 @@ export function AgentsRoster(): JSX.Element {
             isConversationsToggling,
             sessionAnalysisConfig,
             isSessionAnalysisToggling,
+            healthChecksConfig,
+            isHealthChecksToggling,
             githubIssuesConfig,
             isGithubIssuesToggling,
             linearIssuesConfig,
@@ -238,6 +254,9 @@ export function AgentsRoster(): JSX.Element {
                 case 'session_replay':
                     toggleSessionAnalysis()
                     return
+                case 'health_checks':
+                    toggleHealthChecks()
+                    return
                 case 'github':
                     initiateDataWarehouseSourceToggle('Github')
                     return
@@ -252,7 +271,13 @@ export function AgentsRoster(): JSX.Element {
                     return
             }
         },
-        [toggleErrorTracking, toggleConversations, toggleSessionAnalysis, initiateDataWarehouseSourceToggle]
+        [
+            toggleErrorTracking,
+            toggleConversations,
+            toggleSessionAnalysis,
+            toggleHealthChecks,
+            initiateDataWarehouseSourceToggle,
+        ]
     )
 
     return (

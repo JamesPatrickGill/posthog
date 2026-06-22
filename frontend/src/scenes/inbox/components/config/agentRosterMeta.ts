@@ -11,6 +11,7 @@ export type AgentRosterSource =
     | 'error_tracking'
     | 'conversations'
     | 'session_replay'
+    | 'health_checks'
     | 'github'
     | 'linear'
     | 'zendesk'
@@ -66,6 +67,12 @@ export const AGENT_ROSTER_GROUPS: AgentRosterGroup[] = [
                 docsUrl: 'https://posthog.com/docs/session-replay',
                 docsLabel: 'Session replay',
                 alpha: true,
+            },
+            {
+                source: 'health_checks',
+                sourceProduct: SignalSourceProduct.HEALTH_CHECKS,
+                label: 'Health checks',
+                description: 'Instrumentation issues – missing events, proxy gaps, and outdated SDKs.',
             },
         ],
     },
