@@ -272,7 +272,14 @@ async def merge_similar_fingerprints_activity(
 ) -> FingerprintEmbeddingMergeResult:
     model_name: str | None = None
     try:
-        team = await Team.objects.aget(id=inputs.team_id)
+        try:
+            team = await Team.objects.aget(id=inputs.team_id)
+        except Team.DoesNotExist:
+            # The workflow sleeps before invoking this activity, so the team can be deleted in that
+            # window. Auto-merge would be a no-op for a missing team — treat it as a terminal no-op
+            # instead of capturing and re-raising (which would also trigger the workflow's retries).
+            return FingerprintEmbeddingMergeResult()
+
         model_name = _select_model_name(inputs.model_names)
 
         start = time.monotonic()
