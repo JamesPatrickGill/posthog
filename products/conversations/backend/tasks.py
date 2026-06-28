@@ -28,6 +28,7 @@ from posthog.comment.formatting import (
     rich_content_to_slack_payload,
 )
 from posthog.egress.github.transport import GitHubRateLimitError
+from posthog.helpers.slack_identity import resolve_slack_avatar_by_email
 from posthog.models.activity_logging.activity_log import Change, Detail, log_activity
 from posthog.models.comment import Comment as CommentModel
 from posthog.models.github_integration_base import GitHubIntegrationError
@@ -68,7 +69,6 @@ from products.conversations.backend.slack import (
     handle_support_mention,
     handle_support_message,
     handle_support_reaction,
-    resolve_slack_avatar_by_email,
     ticket_created_text,
 )
 from products.conversations.backend.support_teams import (
