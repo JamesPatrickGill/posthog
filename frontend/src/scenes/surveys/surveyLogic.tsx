@@ -96,6 +96,7 @@ import {
 } from './constants'
 import type { surveyLogicType } from './surveyLogicType'
 import { getSurveyStatus, surveysLogic } from './surveysLogic'
+import { buildChoiceTranslationMap } from './surveyTranslationUtils'
 import { SurveyFeatureWarning, getSurveyWarnings } from './surveyVersionRequirements'
 import {
     DATE_FORMAT,
@@ -361,20 +362,26 @@ function processChoiceQuestion(
 ): ChoiceQuestionProcessedResponses {
     const totalEntry = entries.find(([l]) => l === '__total__')
     const dataEntries = entries.filter(([l]) => l !== '__total__')
-    const predefined = new Set(question.choices ?? [])
+    const choiceMap = buildChoiceTranslationMap(question)
 
     let total = 0
     const noResponseEntry = entries.find(([l]) => l === '__no_response__')
     const noResponseCount = noResponseEntry ? noResponseEntry[1] : 0
     const filteredEntries = dataEntries.filter(([l]) => l !== '__no_response__')
 
-    const data: ChoiceQuestionResponseData[] = filteredEntries
-        .map(([label, count]) => {
-            if (questionType === SurveyQuestionType.SingleChoice) {
-                total += count
-            }
-            return { label, value: count, isPredefined: predefined.has(label) }
-        })
+    // Normalise each response to its base-language choice so answers given in different
+    // languages aggregate under one option instead of splitting into separate rows.
+    const countsByLabel = new Map<string, number>()
+    for (const [label, count] of filteredEntries) {
+        const normalizedLabel = choiceMap.get(label) ?? label
+        countsByLabel.set(normalizedLabel, (countsByLabel.get(normalizedLabel) ?? 0) + count)
+        if (questionType === SurveyQuestionType.SingleChoice) {
+            total += count
+        }
+    }
+
+    const data: ChoiceQuestionResponseData[] = [...countsByLabel.entries()]
+        .map(([label, value]) => ({ label, value, isPredefined: choiceMap.has(label) }))
         .sort((a, b) => b.value - a.value)
 
     if (questionType === SurveyQuestionType.MultipleChoice && totalEntry) {
@@ -507,7 +514,7 @@ function collectOpenChoiceResponses(
     distinctIdIdx: number,
     timestampIdx: number
 ): ChoiceQuestionResponseData[] {
-    const predefined = new Set(question.choices ?? [])
+    const choiceMap = buildChoiceTranslationMap(question)
     const otherData: ChoiceQuestionResponseData[] = []
 
     for (const row of rows) {
@@ -525,7 +532,7 @@ function collectOpenChoiceResponses(
         }
 
         for (const choice of choices) {
-            if (choice && !predefined.has(choice)) {
+            if (choice && !choiceMap.has(choice)) {
                 otherData.push({
                     label: choice,
                     value: 1,
