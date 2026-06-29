@@ -8,6 +8,7 @@ import { pngHoggie } from 'lib/brand/hoggies'
 
 import { CommentWithReplies } from './Comment'
 import { CommentsLogicProps, commentsLogic } from './commentsLogic'
+import { SendCommentToSlackModal } from './SendCommentToSlackModal'
 
 const HedgehogPhoneCall = pngHoggie(phoneCall)
 
@@ -49,6 +50,7 @@ export const CommentsList = ({ noun = 'page', ...props }: CommentsListProps): JS
                         <CommentWithReplies key={x.id} commentWithReplies={x} />
                     ))}
                 </div>
+                <SendCommentToSlackModal />
             </div>
         </BindLogic>
     )
