@@ -119,8 +119,14 @@ def iter_component_tables(schemas_response: dict[str, Any]) -> Generator[tuple[s
     """
     if not isinstance(schemas_response, dict) or not schemas_response:
         return
-    first_value = next(iter(schemas_response.values()))
-    grouped = isinstance(first_value, dict) and "type" not in first_value and "properties" not in first_value
+    # The grouped shape always includes the root component under the "" key, and "" is never a valid
+    # table name — so its presence reliably marks the grouped shape. Only when it's absent do we fall
+    # back to inspecting the first value (a {table: schema} map carries no "type"/"properties").
+    if _ROOT_COMPONENT in schemas_response:
+        grouped = True
+    else:
+        first_value = next(iter(schemas_response.values()))
+        grouped = isinstance(first_value, dict) and "type" not in first_value and "properties" not in first_value
     if grouped:
         for component_path, tables in schemas_response.items():
             if isinstance(tables, dict):
