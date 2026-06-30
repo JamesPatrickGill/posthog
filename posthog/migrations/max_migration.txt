@@ -1,1 +1,1 @@
-1224_columnconfiguration_properties
+1245_duckgres_sink_schema_state

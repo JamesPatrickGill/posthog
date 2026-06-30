@@ -87,6 +87,7 @@ export const sourceCatalogLogic = kea<sourceCatalogLogicType>([
         setSearch: (search: string) => ({ search }),
         setSelectedCategory: (category: SourceCategoryFilter) => ({ category }),
         registerInterest: (item: CatalogItem) => ({ item }),
+        selectSourceType: (item: CatalogItem) => ({ item }),
         showSourceRequest: true,
         hideSourceRequest: true,
         setSourceRequestText: (text: string) => ({ text }),
@@ -219,7 +220,7 @@ export const sourceCatalogLogic = kea<sourceCatalogLogicType>([
             },
         ],
     }),
-    listeners(({ values }) => ({
+    listeners(({ values, actions }) => ({
         registerInterest: ({ item }) => {
             posthog.capture('notify_me_pipeline', {
                 name: item.label,
@@ -229,8 +230,22 @@ export const sourceCatalogLogic = kea<sourceCatalogLogicType>([
             })
             lemonToast.success('Thank you for your interest! We will notify you when this source is available.')
         },
+        selectSourceType: ({ item }) => {
+            posthog.capture('selected source type', {
+                name: item.label,
+                type: item.name,
+                category: item.category,
+                release_status: item.releaseStatus,
+            })
+        },
         showSourceRequest: () => {
             posthog.capture('survey shown', { $survey_id: SOURCE_REQUEST_SURVEY_ID })
+            // Seed the request with whatever the user just searched, so a "searched for X →
+            // no results → request X" flow doesn't make them retype the same term.
+            const seed = values.search.trim()
+            if (seed) {
+                actions.setSourceRequestText(seed)
+            }
         },
         submitSourceRequest: () => {
             const response = values.sourceRequestText.trim()

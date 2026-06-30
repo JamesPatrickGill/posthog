@@ -1,1 +1,1 @@
-0005_release_skills_to_skills_app
+0010_add_minimax_provider

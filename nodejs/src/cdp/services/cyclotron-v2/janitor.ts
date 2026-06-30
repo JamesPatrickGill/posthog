@@ -2,7 +2,8 @@ import { DateTime } from 'luxon'
 import { Pool } from 'pg'
 import { Counter, Gauge } from 'prom-client'
 
-import { logger } from '../../../utils/logger'
+import { logger } from '~/common/utils/logger'
+
 import { CyclotronJobInvocationHogFlow } from '../../types'
 import { v2JobToInvocation } from '../job-queue/job-queue-postgres-v2'
 import { HogInvocationResultsService } from '../monitoring/hog-invocation-results.service'
@@ -215,7 +216,13 @@ export class CyclotronV2Janitor {
     // Stalls are fleet-wide when many jobs are stalled at once AND stalls
     // dominate completions over the rolling window. Both bars must be cleared so
     // an idle-but-healthy fleet (few completions, a couple of stalls) doesn't
-    // trip the gate.
+    // trip the gate. Note the asymmetry: `stalledNow` is instantaneous while the
+    // denominator sums completions over `fleetHealthWindowMs`, so pre-incident
+    // throughput keeps the ratio low until those samples age out. That means
+    // `fleetHealthWindowMs` is also the worst-case detection lag — but a job
+    // needs ~`maxTouchCount * cleanupIntervalMs` of sustained stalling to even
+    // become a poison pill, so by the time give-up is on the table the window
+    // has typically cleared its pre-incident completions.
     private isFleetUnhealthy(stalledNow: number): boolean {
         if (stalledNow < this.fleetMinStalledCount) {
             return false
@@ -283,20 +290,37 @@ export class CyclotronV2Janitor {
             logger.warn('CyclotronV2Janitor kept poison pills it could not durably record', { count: skipped })
         }
 
-        if (recordedIds.length > 0) {
-            // Re-guard on status='running' so we never delete a row a worker
-            // legitimately transitioned between the SELECT and now.
-            await this.pool.query(`DELETE FROM cyclotron_jobs WHERE id = ANY($1::uuid[]) AND status = 'running'`, [
-                recordedIds,
-            ])
-            janitorPoisonedCounter.inc(recordedIds.length)
+        if (recordedIds.length === 0) {
+            return []
+        }
+
+        // Re-assert the FULL poison predicate (not just status='running') in the
+        // DELETE. Between the SELECT and here a row could have been reset to
+        // 'available' and re-dequeued by a worker — that re-dequeue stamps a
+        // fresh heartbeat, so the stale-heartbeat / touch-count guard no longer
+        // matches and we won't delete an actively-running job. RETURNING gives
+        // the rows actually removed, so the metric/log reflect real give-ups
+        // even if a concurrent janitor or worker raced us to some of them.
+        const deleted = await this.pool.query<{ id: string }>(
+            `DELETE FROM cyclotron_jobs
+             WHERE id = ANY($1::uuid[])
+               AND status = 'running'
+               AND COALESCE(last_heartbeat, $2) <= $2
+               AND janitor_touch_count >= $3
+             RETURNING id`,
+            [recordedIds, heartbeatCutoff, this.maxTouchCount]
+        )
+        const deletedIds = deleted.rows.map((r) => r.id)
+
+        if (deletedIds.length > 0) {
+            janitorPoisonedCounter.inc(deletedIds.length)
             logger.warn('CyclotronV2Janitor gave up on poison pill jobs (recorded as failed, replayable)', {
-                count: recordedIds.length,
-                ids: recordedIds,
+                count: deletedIds.length,
+                ids: deletedIds,
             })
         }
 
-        return recordedIds
+        return deletedIds
     }
 
     // Turn a raw poisoned row into a hog flow invocation the results service can
@@ -323,6 +347,7 @@ export class CyclotronV2Janitor {
             reschedule: () => Promise.resolve(),
             cancel: () => Promise.resolve(),
             heartbeat: () => Promise.resolve(),
+            bulkCreateAndCheckIn: () => Promise.resolve({ newJobIds: [] }),
         }
         const invocation = v2JobToInvocation(job)
         return { ...invocation, hogFlow: { id: invocation.functionId } } as CyclotronJobInvocationHogFlow

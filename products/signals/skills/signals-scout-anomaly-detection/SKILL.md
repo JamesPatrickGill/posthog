@@ -1,15 +1,9 @@
 ---
 name: signals-scout-anomaly-detection
 description: >
-  Signals scout that watches a PostHog project's most-viewed dashboards and insights for
-  recent anomalies — sudden bursts, drops, flat-lines, and trend breaks at the daily or
-  hourly level. It discovers what the team actually looks at (view counts, dashboard
-  access), curates a durable watchlist in the scratchpad, and balances re-checking known
-  high-value insights (exploit) against discovering new ones (explore) across runs, since
-  no single run can cover a busy project. Anomalies are scored by robust deviation from
-  each insight's own seasonality-matched baseline; it emits a finding only when a move
-  clears the confidence bar, otherwise it updates the baseline memory and closes out
-  empty. Self-contained peer in the signals-scout-* fleet.
+  Signals scout that watches a project's most-viewed dashboards and insights for recent
+  anomalies — bursts, drops, flat-lines, and trend breaks scored against each insight's own
+  seasonality-matched baseline.
 compatibility: >
   Runs as the PostHog Signals scout in a Claude sandbox with read-only analytics scopes
   plus signal_scout_internal:write (scratchpad + emit) and notebook:write (the notebook
@@ -107,6 +101,17 @@ Only score the **latest complete bucket** — the current in-progress hour or da
 and will always look like a drop (see the partial-bucket guard in `anomaly-methods.md`).
 
 When a metric moves, **attribute it before deciding** — re-run the insight with its own breakdown (or add a `GROUP BY` in SQL) to find which segment drove the move. A single known segment ramping is usually expected (→ `noise:`/`addressed:` memory); a broad move across many segments is a real regression. See [`references/anomaly-methods.md`](references/anomaly-methods.md).
+
+**Change-detection lens (optional).** Point/level scoring catches an outlier _bucket_; it
+misses a metric whose mean holds but whose **distribution shifts shape** (variance, tail, mix)
+and it won't tell you _where_ a drift began. For that, run a two-sample Kolmogorov-Smirnov test
+in `Bash` + `python3` — inline as a self-contained heredoc, or fetch the bundled
+`scripts/ks2.py` via `llma-skill-file-get` and write it to `/tmp` first (it is **not** on disk
+in a scheduled run). Compare two seasonality-matched windows, or sweep an ordered series for
+the changepoint. Pull **histograms** (`GROUP BY` a value bucket), not raw rows, to stay cheap
+and under the `execute-sql` cap. Full recipe, calibration (incl. the changepoint multiple-
+comparisons caveat), and the seasonality caveat in
+[`references/anomaly-methods.md`](references/anomaly-methods.md).
 
 ### Explore — discover new high-value insights/dashboards to add
 
@@ -210,6 +215,10 @@ Direct (read-only):
   non-saved series or custom baselines.
 - `read-data-schema` — confirm events/properties before any SQL.
 - `inbox-reports-list` — check whether the move is already reported before emitting.
+
+Local: `Bash` + `python3` — the distribution-shift lens: run a pure-stdlib two-sample KS /
+changepoint inline, or fetch the bundled `scripts/ks2.py` via `llma-skill-file-get` and write
+it to `/tmp` first (not on disk in a scheduled run). Feed it histograms from `execute-sql`.
 
 Write (user-facing, gated on `notebook:write`):
 
