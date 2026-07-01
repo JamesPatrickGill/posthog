@@ -4828,6 +4828,18 @@ snapshots:
         hash: v1.k794b7964.5b2ff6086ac67613dcbb32338dd670f8df40e2fd5e7c9107f079dd5d86afe6f6.4-in8CMoVhUNDKn354NyugDZ1GcNL3iWxGgQ_ro9mwM
     scenes-app-batchexports--runs-with-data--light:
         hash: v1.k794b7964.144b41b97a76df864203804f6bf0b956998d6f0e6e4d81c4102c52dadce11813.DeXap8kCLxs-8UrwnfoTk5PIbkan4hrzxPCfyN_htME
+    scenes-app-conversations-staff-actions-panel--ambiguous-region--dark:
+        hash: v1.k794b7964.a5e384542d70f4a41e53a0b6b6828b58c054ca56ef88930d85b1a9a020a40589.ggXnjw9QuOHGfOyMTlmrDvLjkilbpQW1nQCCTd1lBi4
+    scenes-app-conversations-staff-actions-panel--ambiguous-region--light:
+        hash: v1.k794b7964.7e797862c640263d882546cef7ed3bab9cc0fa5d582479dcc257e80efdc596bd.YHAjcBhv1uRJWVYr6KAiypQIYtnsryDKbcVoJa2dODc
+    scenes-app-conversations-staff-actions-panel--known-region--dark:
+        hash: v1.k794b7964.02e37de72508e1bb75a77bb8beeb3013024eda38eb75c65ed881249f2c2e6a0e.MWIWsBccBnebFUIJBuD0yEXMu0otr49MjNisJZo1hbo
+    scenes-app-conversations-staff-actions-panel--known-region--light:
+        hash: v1.k794b7964.67a1a22dbd82512af146bf7ca9c4a0418cc097c3be277d95af1e6f9b9431d463.QM_3OJ58HNDPfstzV0th34QdbIpEhPKEIhmOdEnOqMg
+    scenes-app-conversations-staff-actions-panel--no-customer-email--dark:
+        hash: v1.k794b7964.db043f04c3ad5bc772fa686071ad1dba94efeb366ea34678fe0e0849a63cec14.rgFyQBeaowmzDvckwx6w0Ni_-iUSME4me7RShThMQxw
+    scenes-app-conversations-staff-actions-panel--no-customer-email--light:
+        hash: v1.k794b7964.94bada32a10f7a479316b400cc02b2f1f1eb00227d1b49698506ae4dfaae0f3f.dxxnzNs_iMtXdOxpb6mpD41hk8Hy_fRrUlfLDPtF1Bc
     scenes-app-customer-analytics-accounts--default--dark:
         hash: v1.k794b7964.8dee1c5495b4bf2b8946bf107f6fcad200632a9905ade27510486535a737a959.oMs-LHry1y5jQeEQPYtZ9NuBX57GjqdVYQo9MDJnVPo
     scenes-app-customer-analytics-accounts--default--light:
