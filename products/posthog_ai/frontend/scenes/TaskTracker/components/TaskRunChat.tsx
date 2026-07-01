@@ -6,9 +6,11 @@ import { Composer, QueuedMessageList } from 'products/posthog_ai/frontend/api/pr
 // surface is its primary content, so a second `lazy()` would only add a redundant chunk fetch + Suspense
 // flash. The inbox embeds keep the lazy `ReadonlyRunSurface`.
 import { RunSurface } from 'products/posthog_ai/frontend/api/runSurface'
+import { cycleMode } from 'products/posthog_ai/frontend/utils/composerModes'
 
 import { ComposerModelEffortPickers } from '../../../components/composer/ComposerModelEffortPickers'
 import { taskDetailSceneLogic } from '../taskDetailSceneLogic'
+import { ComposerModePicker } from './ComposerModePicker'
 
 export interface TaskRunChatProps {
     taskId: string
@@ -57,9 +59,16 @@ export function TaskRunChat({ taskId, runId, streamKey, onRunStarted }: TaskRunC
 }
 
 function TaskRunChatContent({ logicProps }: { logicProps: RunInteractionLogicProps }): JSX.Element {
-    const { composerForm, isSubmitting, isBusy, queuedMessages, isTerminal, selectedModel, selectedEffort } = useValues(
-        runInteractionLogic(logicProps)
-    )
+    const {
+        composerForm,
+        isSubmitting,
+        isBusy,
+        queuedMessages,
+        isTerminal,
+        selectedModel,
+        selectedEffort,
+        selectedMode,
+    } = useValues(runInteractionLogic(logicProps))
     const {
         setComposerFormValues,
         submitComposerForm,
@@ -68,6 +77,7 @@ function TaskRunChatContent({ logicProps }: { logicProps: RunInteractionLogicPro
         removeQueuedMessage,
         setModel,
         setEffort,
+        setMode,
     } = useActions(runInteractionLogic(logicProps))
 
     return (
@@ -106,12 +116,23 @@ function TaskRunChatContent({ logicProps }: { logicProps: RunInteractionLogicPro
                                 <Composer.Placeholder>
                                     {isTerminal ? 'Send a message to start a new run…' : 'Send a follow-up message…'}
                                 </Composer.Placeholder>
-                                <Composer.Textarea data-attr="sandbox-composer-input" />
+                                <Composer.Textarea
+                                    data-attr="sandbox-composer-input"
+                                    submitShortcut="cmd-enter"
+                                    onKeyDown={(e) => {
+                                        // shift+tab cycles the permission mode, matching `/code`.
+                                        if (e.key === 'Tab' && e.shiftKey) {
+                                            e.preventDefault()
+                                            setMode(cycleMode(selectedMode))
+                                        }
+                                    }}
+                                />
                             </Composer.Field>
                             <Composer.Footer>
-                                {/* Model/effort picker: selection lives in the bound runInteractionLogic and is
-                                applied when the message is sent — synced to the running agent on a follow-up,
+                                {/* Mode + model/effort pickers: selection lives in the bound runInteractionLogic and
+                                is applied when the message is sent — synced to the running agent on a follow-up,
                                 or used to seed the next run once terminal. */}
+                                <ComposerModePicker selectedMode={selectedMode} onModeChange={setMode} />
                                 <ComposerModelEffortPickers
                                     selectedModel={selectedModel}
                                     selectedEffort={selectedEffort}

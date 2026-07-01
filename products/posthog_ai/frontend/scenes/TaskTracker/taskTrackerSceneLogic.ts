@@ -21,6 +21,7 @@ import { tasksLogic } from '../../logics/tasksLogic'
 import type { RepositoryConfig, Task } from '../../types/taskTypes'
 import { OriginProduct, TaskUpsertProps } from '../../types/taskTypes'
 import { DEFAULT_COMPOSER_EFFORT, DEFAULT_COMPOSER_MODEL, resolveEffortForModel } from '../../utils/composerModels'
+import { DEFAULT_COMPOSER_MODE, type PermissionMode } from '../../utils/composerModes'
 import type { taskTrackerSceneLogicType } from './taskTrackerSceneLogicType'
 
 export type { ActiveCreation } from '../../logics/runnerPanelLogic'
@@ -30,6 +31,7 @@ export interface TaskCreateForm {
     repositoryConfig: RepositoryConfig
     model: string
     reasoningEffort: ReasoningEffortEnumApi
+    permissionMode: PermissionMode
 }
 
 // The slice of the repo picker we remember across visits. Branch is deliberately excluded — on restore we
@@ -54,6 +56,7 @@ const EMPTY_TASK_FORM: TaskCreateForm = {
     },
     model: DEFAULT_COMPOSER_MODEL,
     reasoningEffort: DEFAULT_COMPOSER_EFFORT,
+    permissionMode: DEFAULT_COMPOSER_MODE,
 }
 
 export const taskTrackerSceneLogic = kea<taskTrackerSceneLogicType>([
@@ -207,7 +210,7 @@ export const taskTrackerSceneLogic = kea<taskTrackerSceneLogicType>([
             }
         },
         submitNewTask: async () => {
-            const { description, repositoryConfig, model, reasoningEffort } = values.newTaskData
+            const { description, repositoryConfig, model, reasoningEffort, permissionMode } = values.newTaskData
 
             if (!description.trim()) {
                 lemonToast.error('Description is required')
@@ -248,6 +251,7 @@ export const taskTrackerSceneLogic = kea<taskTrackerSceneLogicType>([
                     runtime_adapter: ClaudeRuntimeAdapterEnumApi.Claude,
                     model,
                     reasoning_effort: resolveEffortForModel(reasoningEffort, model),
+                    initial_permission_mode: permissionMode,
                     // Interactive keeps the sandbox agent-server's event stream open across turns, so
                     // follow-up messages stream their reply over the same SSE (background runs seal the
                     // stream after the first turn). Interactive runs boot with the agent-server pulling
