@@ -250,7 +250,7 @@ class TestSSEKillswitch:
         with mock.patch("posthog.api.streaming.posthoganalytics.feature_enabled", return_value=False):
             response = sse_streaming_response(_gen(), endpoint="test_kill_off", killswitch_flag="test-sse-killswitch")
         assert isinstance(response, StreamingHttpResponse)
-        assert b"".join(response.streaming_content) == b"data: hello\n\n"
+        assert b"".join(_sync_content(response)) == b"data: hello\n\n"
 
     def test_flag_evaluation_error_fails_open(self):
         with mock.patch(
@@ -258,4 +258,4 @@ class TestSSEKillswitch:
         ):
             response = sse_streaming_response(_gen(), endpoint="test_kill_err", killswitch_flag="test-sse-killswitch")
         assert isinstance(response, StreamingHttpResponse)
-        assert b"".join(response.streaming_content) == b"data: hello\n\n"
+        assert b"".join(_sync_content(response)) == b"data: hello\n\n"
