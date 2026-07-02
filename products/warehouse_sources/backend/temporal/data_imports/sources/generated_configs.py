@@ -362,7 +362,7 @@ class AviationstackSourceConfig(config.Config):
 
 @config.config
 class AwinSourceConfig(config.Config):
-    pass
+    api_token: str
 
 
 @config.config
@@ -1295,7 +1295,13 @@ class FullStorySourceConfig(config.Config):
 
 @config.config
 class GNewsSourceConfig(config.Config):
-    pass
+    api_key: str
+    query: str
+    category: Literal[
+        "general", "world", "nation", "business", "technology", "entertainment", "sports", "science", "health"
+    ] = config.value(default="general")
+    language: str | None = None
+    country: str | None = None
 
 
 @config.config
@@ -1927,7 +1933,7 @@ class MailjetSourceConfig(config.Config):
 
 @config.config
 class MailosaurSourceConfig(config.Config):
-    pass
+    api_key: str
 
 
 @config.config
@@ -2136,7 +2142,9 @@ class NewYorkTimesSourceConfig(config.Config):
 
 @config.config
 class NewsApiSourceConfig(config.Config):
-    pass
+    api_key: str
+    query: str
+    language: str | None = None
 
 
 @config.config
@@ -2238,7 +2246,7 @@ class OpenAIAdsSourceConfig(config.Config):
 
 @config.config
 class OpenAQSourceConfig(config.Config):
-    pass
+    api_key: str
 
 
 @config.config
@@ -2248,7 +2256,9 @@ class OpenDataDcSourceConfig(config.Config):
 
 @config.config
 class OpenExchangeRatesSourceConfig(config.Config):
-    pass
+    app_id: str
+    base_currency: str | None = None
+    start_date: str | None = None
 
 
 @config.config

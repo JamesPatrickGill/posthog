@@ -62,6 +62,7 @@ the row lists both.
 | attentive               | HTTP (webhook-first)        | requests (webhook management)                                   | ✅                          |
 | attio                   | HTTP                        | requests + `rest_source.RESTClient`                             | ✅                          |
 | aviationstack           | HTTP                        | requests                                                        | ✅                          |
+| awin                    | HTTP                        | requests                                                        | ✅                          |
 | azure_devops            | HTTP                        | requests                                                        | ✅                          |
 | bamboohr                | HTTP                        | requests                                                        | ✅                          |
 | beamer                  | HTTP                        | requests                                                        | ✅                          |
@@ -158,6 +159,7 @@ the row lists both.
 | giphy                   | HTTP                        | requests                                                        | ✅                          |
 | gitlab                  | HTTP                        | requests                                                        | ✅                          |
 | gladly                  | HTTP                        | requests                                                        | ✅                          |
+| gnews                   | HTTP                        | requests                                                        | ✅                          |
 | gocardless              | HTTP                        | requests                                                        | ✅                          |
 | goldcast                | HTTP                        | requests                                                        | ✅                          |
 | gong                    | HTTP                        | requests                                                        | ✅                          |
@@ -199,6 +201,7 @@ the row lists both.
 | mailersend              | HTTP                        | requests                                                        | ✅                          |
 | mailgun                 | HTTP                        | requests                                                        | ✅                          |
 | mailjet                 | HTTP                        | requests                                                        | ✅                          |
+| mailosaur               | HTTP                        | requests                                                        | ✅                          |
 | marketstack             | HTTP                        | requests                                                        | ✅                          |
 | matomo                  | HTTP                        | requests                                                        | ✅                          |
 | meta_ads                | HTTP                        | requests                                                        | ✅                          |
@@ -212,13 +215,16 @@ the row lists both.
 | mux                     | HTTP                        | requests                                                        | ✅                          |
 | mysql                   | DB protocol                 | pymysql                                                         | ➖                          |
 | new_york_times          | HTTP                        | requests                                                        | ✅                          |
+| news_api                | HTTP                        | requests                                                        | ✅                          |
 | okta                    | HTTP                        | requests                                                        | ✅                          |
 | nocrm                   | HTTP                        | requests                                                        | ✅                          |
 | northpass_lms           | HTTP                        | requests                                                        | ✅                          |
 | notion                  | HTTP                        | requests                                                        | ✅                          |
 | omnisend                | HTTP                        | requests                                                        | ✅                          |
 | onfleet                 | HTTP (cursor pagination)    | requests                                                        | ✅                          |
+| open_exchange_rates     | HTTP                        | requests                                                        | ✅                          |
 | orb                     | HTTP                        | requests + `rest_source.RESTClient`                             | ✅                          |
+| openaq                  | HTTP                        | requests                                                        | ✅                          |
 | openweather             | HTTP                        | requests                                                        | ✅                          |
 | ortto                   | HTTP                        | requests                                                        | ✅                          |
 | oura                    | HTTP                        | requests                                                        | ✅                          |
@@ -355,7 +361,6 @@ doesn't conflict with concurrent PRs.
 - appstack
 - apptivo
 - auth0
-- awin
 - aws_cloudtrail
 - azure_blob
 - azure_table_storage
@@ -505,7 +510,6 @@ doesn't conflict with concurrent PRs.
 - looker
 - loops
 - luma
-- mailosaur
 - mailtrap
 - mantle
 - marketo
@@ -545,8 +549,6 @@ doesn't conflict with concurrent PRs.
 - onepagecrm
 - onesignal
 - open_data_dc
-- open_exchange_rates
-- openaq
 - openfda
 - opinion_stage
 - opsgenie
