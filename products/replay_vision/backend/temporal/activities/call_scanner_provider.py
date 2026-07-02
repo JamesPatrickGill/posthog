@@ -24,6 +24,7 @@ from pydantic import BaseModel, ValidationError
 from temporalio import activity
 
 from posthog.models import Team
+from posthog.temporal.common.utils import close_db_connections
 
 from products.replay_vision.backend.models.replay_observation import ReplayObservation
 from products.replay_vision.backend.temporal.constants import replay_vision_distinct_id
@@ -63,6 +64,7 @@ _OutputT = TypeVar("_OutputT", bound=BaseModel)
 
 
 @activity.defn
+@close_db_connections
 @track_activity()
 async def call_scanner_provider_activity(inputs: CallScannerProviderInputs) -> ScannerCallOutput:
     """Run the scanner conversation against the uploaded video + cached events; validate, finalize, return the output."""
