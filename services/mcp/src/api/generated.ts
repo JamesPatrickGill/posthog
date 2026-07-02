@@ -18219,6 +18219,35 @@ export namespace Schemas {
       order?: number | null;
     }
 
+    export interface ElementStats {
+      /** Number of events matching this element chain */
+      count: number;
+      /**
+         * Stable identity of the raw element chain (hash computed before any attribute filtering), for deduplicating rows across pages
+         * @nullable
+         */
+      hash: string | null;
+      /** Event type: $autocapture, $rageclick, or $dead_click */
+      type: string;
+      /** Parsed elements of the chain, clicked element first */
+      elements: Element[];
+    }
+
+    export interface ElementStatsResponse {
+      /** Element chains with event counts, ordered by count */
+      results: ElementStats[];
+      /**
+         * URL for the next page of results, if any
+         * @nullable
+         */
+      next: string | null;
+      /**
+         * URL for the previous page of results, if any
+         * @nullable
+         */
+      previous: string | null;
+    }
+
     export type ElementTypeAttributes = {[key: string]: string};
 
     export interface ElementType {
@@ -18290,6 +18319,23 @@ export namespace Schemas {
       Completed: 'completed',
       Disabled: 'disabled',
     } as const;
+
+    /**
+     * `inventory.emit_eligibility` — whether scout findings can reach the inbox for this team.
+     */
+    export interface EmitEligibility {
+      /** Whether the organization has approved AI data processing (an org-level gate on all scout emits). */
+      ai_processing_approved: boolean;
+      /** Whether the `signals_scout` signal source is enabled for this team. */
+      source_enabled: boolean;
+      /** True only when both team/org-level gates pass, so scout findings (signal and report channels alike) actually reach the inbox. When False, every emit is silently dropped — quick-close instead of doing throwaway investigation. Does not account for a scout's own dry-run `emit` toggle, which is per-config, not team-wide. */
+      can_emit: boolean;
+      /**
+         * One-line next step to unblock emits when `can_emit` is False; null when emits can flow.
+         * @nullable
+         */
+      remediation: string | null;
+    }
 
     /**
      * One citation attached to a finding. Mirrors `SignalsScoutEvidenceEntry`.
@@ -18379,6 +18425,11 @@ export namespace Schemas {
          * @nullable
          */
       skipped_reason: string | null;
+      /**
+         * One-line, actionable next step when `skipped_reason` is set and the block is fixable (e.g. an org admin must approve AI data processing). Null when emitted normally or the skip isn't something the scout can act on.
+         * @nullable
+         */
+      remediation: string | null;
     }
 
     /**
@@ -18470,6 +18521,11 @@ export namespace Schemas {
          * @nullable
          */
       safety_explanation: string | null;
+      /**
+         * One-line, actionable next step when `skipped_reason` is set and the block is fixable (e.g. an org admin must approve AI data processing). Null when the report was authored or the skip isn't something the scout can act on.
+         * @nullable
+         */
+      remediation: string | null;
     }
 
     export interface EnableWarehouseBackfillRequest {
@@ -44263,6 +44319,8 @@ export namespace Schemas {
       external_data_sources: ExternalDataSourceEntry[];
       /** Signal source configs split into enabled / disabled buckets. */
       signal_source_configs: SignalSourceConfigsBuckets;
+      /** Whether scout findings can actually reach the inbox for this team — the org-level AI data-processing consent gate and the `signals_scout` source toggle, plus a one-line remediation pointer. Read at cold start to quick-close before doing throwaway work. */
+      emit_eligibility: EmitEligibility;
       /** Counts of reports already in the inbox, grouped by status. */
       existing_inbox_reports: ExistingInboxReports;
       /** Per-scope counts off the activity log over the recent-activity window — cross-cutting orientation across every entity type (surveys, feature flags, experiments, dashboards, insights, cohorts, notebooks, actions, etc.). Each scope reports `edits` (total log entries), `users` (distinct user count), and `last_edit` (ISO-8601). Use to triage which scope a team has been working in lately before drilling down via the per-entity readers or `activity-log-list`. */
@@ -55986,6 +56044,37 @@ export namespace Schemas {
     offset?: number;
     };
 
+    export type EnvironmentsElementsStatsRetrieveParams = {
+    /**
+     * Comma-separated data attribute names (wildcards allowed, e.g. data-*). When provided, each element's attributes map is filtered to matching attr__* keys, shrinking the response.
+     */
+    data_attributes?: string;
+    /**
+     * Start of the date range (e.g. -7d, 2024-01-01). Defaults to last 7 days.
+     */
+    date_from?: string;
+    /**
+     * End of the date range (e.g. 2024-01-31). Defaults to now.
+     */
+    date_to?: string;
+    /**
+     * Event types to include: $autocapture, $rageclick, $dead_click. Defaults to all three.
+     */
+    include?: string[];
+    /**
+     * Maximum rows per page
+     */
+    limit?: number;
+    /**
+     * Pagination offset
+     */
+    offset?: number;
+    /**
+     * Sampling factor between 0 and 1
+     */
+    sampling_factor?: number;
+    };
+
     export type EnvironmentsEndpointsListParams = {
     created_by?: number;
     is_active?: boolean;
@@ -61950,6 +62039,37 @@ export namespace Schemas {
      * The initial index from which to return the results.
      */
     offset?: number;
+    };
+
+    export type ElementsStatsRetrieveParams = {
+    /**
+     * Comma-separated data attribute names (wildcards allowed, e.g. data-*). When provided, each element's attributes map is filtered to matching attr__* keys, shrinking the response.
+     */
+    data_attributes?: string;
+    /**
+     * Start of the date range (e.g. -7d, 2024-01-01). Defaults to last 7 days.
+     */
+    date_from?: string;
+    /**
+     * End of the date range (e.g. 2024-01-31). Defaults to now.
+     */
+    date_to?: string;
+    /**
+     * Event types to include: $autocapture, $rageclick, $dead_click. Defaults to all three.
+     */
+    include?: string[];
+    /**
+     * Maximum rows per page
+     */
+    limit?: number;
+    /**
+     * Pagination offset
+     */
+    offset?: number;
+    /**
+     * Sampling factor between 0 and 1
+     */
+    sampling_factor?: number;
     };
 
     export type EndpointsListParams = {
