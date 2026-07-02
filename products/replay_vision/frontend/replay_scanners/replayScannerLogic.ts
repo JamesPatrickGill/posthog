@@ -8,6 +8,7 @@ import { dayjs } from 'lib/dayjs'
 import { lemonToast } from 'lib/lemon-ui/LemonToast'
 import { dateStringToDayJs } from 'lib/utils/dateFilters'
 import { objectsEqual } from 'lib/utils/objects'
+import { recordingsQueryToUniversalFilters } from 'scenes/session-recordings/filters/recordingsQueryConversions'
 import { teamLogic } from 'scenes/teamLogic'
 import { urls } from 'scenes/urls'
 
@@ -31,6 +32,7 @@ import type {
 import { OBSERVE_POLL_GRACE_MS, scheduleObservationPoll, shouldPollObservations } from '../logics/observationPolling'
 import { refreshVisionQuota } from '../logics/visionQuotaLogic'
 import { type UrlSorting, parseCsvParam, parseSortParam, serializeSortParam } from '../utils/urlParams'
+import { clampDurationFilter, durationFilterError } from './durationBounds'
 import type { replayScannerLogicType } from './replayScannerLogicType'
 import { findScannerTemplate, newScanner } from './scannerTemplates'
 import {
@@ -266,6 +268,12 @@ export const replayScannerLogic = kea<replayScannerLogicType>([
                         configErrors.scale = 'Scale max must be greater than min'
                     }
                 }
+                // A duration filter that can't overlap Vision's scannable window would scan nothing (e.g.
+                // active time > 1h, which the ceiling always skips) — block it rather than save a dead scanner.
+                const durationFilter = scanner.query
+                    ? recordingsQueryToUniversalFilters(scanner.query).duration?.[0]
+                    : undefined
+
                 return {
                     name: !scanner.name?.trim() ? 'Name is required' : undefined,
                     sampling_rate:
@@ -273,6 +281,9 @@ export const replayScannerLogic = kea<replayScannerLogicType>([
                             ? undefined
                             : 'Sampling rate must be between 0% and 100%',
                     scanner_config: Object.keys(configErrors).length > 0 ? configErrors : undefined,
+                    query: durationFilter
+                        ? (durationFilterError(clampDurationFilter(durationFilter)) ?? undefined)
+                        : undefined,
                 }
             },
             submit: async (scanner: ReplayScanner) => {
