@@ -9,7 +9,8 @@ from urllib.parse import urlencode, urlparse
 from django.conf import settings
 from django.db import transaction
 from django.db.models import Count, Q, QuerySet
-from django.http import HttpResponse, StreamingHttpResponse
+from django.http import HttpResponse
+from django.http.response import HttpResponseBase
 from django.utils import timezone
 
 import structlog
@@ -496,7 +497,7 @@ class MCPServerInstallationViewSet(TeamAndOrgViewSetMixin, viewsets.ModelViewSet
         required_scopes=["project:read"],
         renderer_classes=[MCPProxyRenderer],
     )
-    def proxy(self, request: Request, *args: Any, **kwargs: Any) -> HttpResponse | StreamingHttpResponse:
+    def proxy(self, request: Request, *args: Any, **kwargs: Any) -> HttpResponseBase:
         installation = self.get_object()
 
         ok, error_response = validate_installation_auth(installation)
