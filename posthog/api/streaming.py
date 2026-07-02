@@ -8,6 +8,7 @@ from django.conf import settings
 from django.db import connections
 from django.http import HttpResponse, StreamingHttpResponse
 
+import posthoganalytics
 from prometheus_client import Counter, Gauge, Histogram
 
 # What StreamingHttpResponse actually accepts: sync or async iterables of bytes or
@@ -81,6 +82,34 @@ def _record_stream_close(endpoint: str, outcome: str, started_at: float) -> None
     SSE_OPEN_CONNECTIONS_GAUGE.labels(endpoint=endpoint).dec()
     SSE_STREAM_CLOSED_COUNTER.labels(endpoint=endpoint, outcome=outcome).inc()
     SSE_STREAM_DURATION_HISTOGRAM.labels(endpoint=endpoint).observe(time.monotonic() - started_at)
+
+
+SSE_KILLSWITCH_REJECTED_COUNTER = Counter(
+    "posthog_sse_killswitch_rejected_total",
+    "SSE streams answered with 204 because the endpoint's killswitch flag is on",
+    labelnames=["endpoint"],
+)
+
+
+def _killswitch_enabled(flag: str, distinct_id: str) -> bool:
+    """Evaluate an SSE killswitch flag locally, failing open.
+
+    Local-only evaluation: no per-request decide call on a hot endpoint (flag
+    definitions are served via HyperCache). Killswitches are meant to be
+    all-or-nothing flags, so the distinct_id rarely matters; it is accepted so
+    endpoints can pass their user for partial rollouts of a kill.
+    """
+    try:
+        return bool(
+            posthoganalytics.feature_enabled(
+                flag,
+                distinct_id,
+                only_evaluate_locally=True,
+                send_feature_flag_events=False,
+            )
+        )
+    except Exception:
+        return False
 
 
 def _over_stream_cap() -> bool:
@@ -195,6 +224,8 @@ def sse_streaming_response(
     stream: StreamContent,
     *,
     endpoint: str = "unknown",
+    killswitch_flag: str | None = None,
+    killswitch_distinct_id: str = "sse-killswitch",
     status: int = HTTPStatus.OK,
     headers: dict[str, str] | None = None,
 ) -> StreamingHttpResponse | HttpResponse:
@@ -234,7 +265,19 @@ def sse_streaming_response(
     delayed reconnects instead of pinned processes and starved health probes.
     The check is advisory (concurrent admissions can briefly overshoot the cap);
     its job is stopping unbounded pile-up, not enforcing an exact ceiling.
+
+    Killswitch: when ``killswitch_flag`` names a feature flag that evaluates
+    true, the stream is answered with ``204 No Content`` before any other work.
+    Per the SSE spec, 204 moves ``EventSource`` to ``CLOSED`` and it stops
+    reconnecting — the only server-side signal that reaches clients whose tabs
+    are already open. A client-side flag cannot do this: it is read at render
+    time and open tabs never re-check it. Killswitch flags follow the
+    ``<product>-sse-killswitch`` naming convention and fail open if evaluation
+    errors.
     """
+    if killswitch_flag is not None and _killswitch_enabled(killswitch_flag, killswitch_distinct_id):
+        SSE_KILLSWITCH_REJECTED_COUNTER.labels(endpoint=endpoint).inc()
+        return HttpResponse(status=HTTPStatus.NO_CONTENT)
     if _over_stream_cap():
         return _stream_cap_rejection(endpoint)
     return streaming_response(

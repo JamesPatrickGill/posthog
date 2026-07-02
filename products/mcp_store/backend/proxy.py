@@ -445,7 +445,7 @@ def _stream_upstream(upstream_response: httpx.Response, client: httpx.Client) ->
 def _build_sse_response(upstream_response: httpx.Response, client: httpx.Client) -> HttpResponseBase:
     stream = _stream_upstream(upstream_response, client)
     astream = SyncIterableToAsync(stream) if SERVER_GATEWAY_INTERFACE == "ASGI" else stream
-    response = sse_streaming_response(astream, endpoint="mcp_store_proxy")
+    response = sse_streaming_response(astream, endpoint="mcp_store_proxy", killswitch_flag="mcp-store-sse-killswitch")
 
     upstream_session_id = upstream_response.headers.get("mcp-session-id")
     if upstream_session_id:

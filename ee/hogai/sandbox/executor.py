@@ -192,6 +192,7 @@ def _make_streaming_response(
         if settings.SERVER_GATEWAY_INTERFACE == "ASGI"
         else async_to_sync(async_generator_factory),
         endpoint="sandbox_execute",
+        killswitch_flag="sandbox-sse-killswitch",
     )
 
 
