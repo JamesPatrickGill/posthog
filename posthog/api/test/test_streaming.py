@@ -148,7 +148,6 @@ class TestStreamingResponse:
         assert response.status_code == HTTPStatus.OK
 
 
-<<<<<<< HEAD
 class TestSSEAsyncCancellation:
     async def test_task_cancellation_counts_client_disconnect_not_error(self):
         first_chunk_pulled = asyncio.Event()
@@ -175,7 +174,8 @@ class TestSSEAsyncCancellation:
         assert _open_connections("test_async_cancel") == 0.0
         assert _closed_total("test_async_cancel", "client_disconnect") == 1.0
         assert _closed_total("test_async_cancel", "error") == 0.0
-=======
+
+
 class TestSSEConcurrencyCap:
     # Admission control is the guard against stream pile-up taking a process
     # down; these tests pin the reject/admit boundary and that capacity is
@@ -190,11 +190,15 @@ class TestSSEConcurrencyCap:
             admitted = sse_streaming_response(endless(), endpoint="test_cap")
             assert isinstance(admitted, StreamingHttpResponse)
             next(_sync_content(admitted))  # occupy the only slot
-            rejected = sse_streaming_response(_gen(), endpoint="test_cap")
-            assert rejected.status_code == HTTPStatus.SERVICE_UNAVAILABLE
-            assert not isinstance(rejected, StreamingHttpResponse)
-            assert 15 <= int(rejected.headers["Retry-After"]) < 45
-            admitted.close()
+            try:
+                rejected = sse_streaming_response(_gen(), endpoint="test_cap")
+                assert rejected.status_code == HTTPStatus.SERVICE_UNAVAILABLE
+                assert not isinstance(rejected, StreamingHttpResponse)
+                assert 15 <= int(rejected.headers["Retry-After"]) < 45
+            finally:
+                # Always release the slot: a failed assertion must not leak the
+                # active-stream count into other tests.
+                admitted.close()
 
     def test_capacity_frees_up_when_a_stream_closes(self):
         def endless() -> Iterator[bytes]:
@@ -217,4 +221,3 @@ class TestSSEConcurrencyCap:
             assert (
                 REGISTRY.get_sample_value("posthog_sse_rejected_over_cap_total", {"endpoint": "test_cap_zero"}) >= 1.0
             )
->>>>>>> 853edf79a59 (feat(infra): per-process SSE concurrency cap with 503 and jittered Retry-After)

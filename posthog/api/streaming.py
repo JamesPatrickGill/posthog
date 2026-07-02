@@ -1,9 +1,6 @@
 import time
-<<<<<<< HEAD
-import asyncio
-=======
 import random
->>>>>>> 853edf79a59 (feat(infra): per-process SSE concurrency cap with 503 and jittered Retry-After)
+import asyncio
 from collections.abc import AsyncIterable, AsyncIterator, Iterable, Iterator
 from http import HTTPStatus
 
