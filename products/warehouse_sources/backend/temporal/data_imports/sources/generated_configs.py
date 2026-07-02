@@ -948,7 +948,8 @@ class DeputySourceConfig(config.Config):
 
 @config.config
 class DevinAISourceConfig(config.Config):
-    pass
+    api_key: str
+    org_id: str
 
 
 @config.config
@@ -1478,7 +1479,8 @@ class GreytHrSourceConfig(config.Config):
 
 @config.config
 class GridlySourceConfig(config.Config):
-    pass
+    api_key: str
+    view_id: str
 
 
 @config.config
@@ -1573,7 +1575,8 @@ class HuntrSourceConfig(config.Config):
 
 @config.config
 class IP2WhoisSourceConfig(config.Config):
-    pass
+    api_key: str
+    domains: str
 
 
 @config.config
@@ -1613,7 +1616,8 @@ class InsightfulSourceConfig(config.Config):
 
 @config.config
 class InsightlySourceConfig(config.Config):
-    pass
+    pod: str
+    api_key: str
 
 
 @config.config
@@ -1943,7 +1947,8 @@ class MarketoSourceConfig(config.Config):
 
 @config.config
 class MarketstackSourceConfig(config.Config):
-    pass
+    access_key: str
+    symbols: str | None = None
 
 
 @config.config
@@ -2156,7 +2161,8 @@ class NinjaOneRMMSourceConfig(config.Config):
 
 @config.config
 class NoCRMSourceConfig(config.Config):
-    pass
+    subdomain: str
+    api_key: str
 
 
 @config.config
@@ -2222,7 +2228,7 @@ class OnepagecrmSourceConfig(config.Config):
 
 @config.config
 class OnfleetSourceConfig(config.Config):
-    pass
+    api_key: str
 
 
 @config.config
@@ -2432,7 +2438,8 @@ class PersonioSourceConfig(config.Config):
 
 @config.config
 class PexelsSourceConfig(config.Config):
-    pass
+    api_key: str
+    search_query: str | None = None
 
 
 @config.config
