@@ -271,6 +271,7 @@ rules:
                               |WebAnalyticsFilterPreset
                               |WebAnalyticsInteraction
                               |WebAnalyticsVisit
+                              |WebAnalyticsPathCleaningSuggestion
                               |WizardSession
                           )$
                 - focus-metavariable: $SINK
@@ -540,6 +541,7 @@ rules:
                         |WebAnalyticsFilterPreset
                         |WebAnalyticsInteraction
                         |WebAnalyticsVisit
+                        |WebAnalyticsPathCleaningSuggestion
                         |WizardSession
                     )$
           # Exclude when team filter is present
