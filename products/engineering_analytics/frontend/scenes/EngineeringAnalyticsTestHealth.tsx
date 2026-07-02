@@ -219,8 +219,14 @@ export function EngineeringAnalyticsTestHealth(): JSX.Element {
                             {row.selectorKind}
                         </LemonTag>
                         {row.runner !== 'pytest' && (
-                            <Tooltip title="No enforcement adapter yet — entry is informational.">
-                                <LemonTag type="muted" size="small">
+                            <Tooltip
+                                title={
+                                    row.runner === 'jest'
+                                        ? 'Enforced by the Jest adapter.'
+                                        : 'No enforcement adapter yet — entry is informational.'
+                                }
+                            >
+                                <LemonTag type={row.runner === 'jest' ? 'option' : 'muted'} size="small">
                                     {row.runner}
                                 </LemonTag>
                             </Tooltip>
