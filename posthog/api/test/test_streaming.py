@@ -6,6 +6,7 @@ from typing import cast
 from unittest import mock
 
 from django.http import StreamingHttpResponse
+from django.http.response import HttpResponseBase
 from django.test import override_settings
 
 from prometheus_client import REGISTRY
@@ -53,13 +54,15 @@ class TestSSEStreamingResponse:
         assert response.headers["X-Custom"] == "1"
 
 
-def _sync_content(response: StreamingHttpResponse) -> Iterator[bytes]:
-    # streaming_content is typed as a sync/async union; these tests construct
-    # the response from a sync iterator, so the cast is safe.
+def _sync_content(response: HttpResponseBase) -> Iterator[bytes]:
+    # sse_streaming_response returns a union (it can 503); in these non-capped
+    # tests the response is always a stream, so narrow and cast.
+    assert isinstance(response, StreamingHttpResponse)
     return cast(Iterator[bytes], response.streaming_content)
 
 
-def _async_content(response: StreamingHttpResponse) -> AsyncIterator[bytes]:
+def _async_content(response: HttpResponseBase) -> AsyncIterator[bytes]:
+    assert isinstance(response, StreamingHttpResponse)
     return cast(AsyncIterator[bytes], response.streaming_content)
 
 
@@ -218,6 +221,7 @@ class TestSSEConcurrencyCap:
         with override_settings(SSE_MAX_CONCURRENT_STREAMS_PER_PROCESS=0):
             rejected = sse_streaming_response(_gen(), endpoint="test_cap_zero")
             assert rejected.status_code == HTTPStatus.SERVICE_UNAVAILABLE
-            assert (
-                REGISTRY.get_sample_value("posthog_sse_rejected_over_cap_total", {"endpoint": "test_cap_zero"}) >= 1.0
+            rejected_count = REGISTRY.get_sample_value(
+                "posthog_sse_rejected_over_cap_total", {"endpoint": "test_cap_zero"}
             )
+            assert rejected_count is not None and rejected_count >= 1.0
