@@ -116,6 +116,9 @@ def wrap_clickhouse_query_error(err: Exception) -> Exception:
         )
     elif name == "S3_ERROR":
         return CHQueryErrorS3Error(f"S3 error occurred. ({err.message})", code=err.code)
+    elif name == "TABLE_IS_READ_ONLY":
+        # Transient: a replica dropped its ZooKeeper/Keeper session and went read-only; it self-heals.
+        return CHQueryErrorTableIsReadOnly(err.message, code=err.code, code_name="table_is_read_only")
 
     # user query errors - pass through original message with proper code_name
     elif name == "ILLEGAL_TYPE_OF_ARGUMENT":
@@ -198,6 +201,10 @@ class CHQueryErrorCannotScheduleTask(InternalCHQueryError):
 
 
 class CHQueryErrorS3Error(InternalCHQueryError):
+    pass
+
+
+class CHQueryErrorTableIsReadOnly(InternalCHQueryError):
     pass
 
 
@@ -968,4 +975,9 @@ CLICKHOUSE_ERROR_CODE_LOOKUP: dict[int, ErrorCodeMeta] = {
 
 # Transient ClickHouse infrastructure errors that are safe to retry.
 # This can be used in things like celery `autoretry_for` to increase resiliency.
-CH_TRANSIENT_ERRORS = (CHQueryErrorTooManySimultaneousQueries, CHQueryErrorCannotScheduleTask, CHQueryErrorS3Error)
+CH_TRANSIENT_ERRORS = (
+    CHQueryErrorTooManySimultaneousQueries,
+    CHQueryErrorCannotScheduleTask,
+    CHQueryErrorS3Error,
+    CHQueryErrorTableIsReadOnly,
+)
