@@ -188,7 +188,8 @@ class TestSSEConcurrencyCap:
 
         with override_settings(SSE_MAX_CONCURRENT_STREAMS_PER_PROCESS=1):
             admitted = sse_streaming_response(endless(), endpoint="test_cap")
-            next(iter(admitted.streaming_content))  # occupy the only slot
+            assert isinstance(admitted, StreamingHttpResponse)
+            next(_sync_content(admitted))  # occupy the only slot
             rejected = sse_streaming_response(_gen(), endpoint="test_cap")
             assert rejected.status_code == HTTPStatus.SERVICE_UNAVAILABLE
             assert not isinstance(rejected, StreamingHttpResponse)
@@ -202,11 +203,12 @@ class TestSSEConcurrencyCap:
 
         with override_settings(SSE_MAX_CONCURRENT_STREAMS_PER_PROCESS=1):
             first = sse_streaming_response(endless(), endpoint="test_cap_release")
-            next(iter(first.streaming_content))
+            assert isinstance(first, StreamingHttpResponse)
+            next(_sync_content(first))
             first.close()
             second = sse_streaming_response(_gen(), endpoint="test_cap_release")
             assert isinstance(second, StreamingHttpResponse)
-            assert b"".join(second.streaming_content) == b"data: hello\n\n"
+            assert b"".join(_sync_content(second)) == b"data: hello\n\n"
 
     def test_cap_of_zero_rejects_everything(self):
         with override_settings(SSE_MAX_CONCURRENT_STREAMS_PER_PROCESS=0):
