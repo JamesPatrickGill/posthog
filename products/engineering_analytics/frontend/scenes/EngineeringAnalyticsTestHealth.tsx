@@ -32,6 +32,10 @@ import {
     engineeringAnalyticsLogic,
 } from './engineeringAnalyticsLogic'
 
+// Runners with an enforcement adapter — mirrors ADAPTED_RUNNERS in the quarantine
+// contract (tools/hogli-commands/hogli_commands/quarantine/core.py), which the frontend can't import.
+const ENFORCED_RUNNERS = ['pytest', 'jest']
+
 function relativeExpiry(daysUntilExpiry: number): string {
     if (daysUntilExpiry === 0) {
         return 'today'
@@ -221,12 +225,15 @@ export function EngineeringAnalyticsTestHealth(): JSX.Element {
                         {row.runner !== 'pytest' && (
                             <Tooltip
                                 title={
-                                    row.runner === 'jest'
+                                    ENFORCED_RUNNERS.includes(row.runner)
                                         ? 'Enforced by the Jest adapter.'
                                         : 'No enforcement adapter yet — entry is informational.'
                                 }
                             >
-                                <LemonTag type={row.runner === 'jest' ? 'option' : 'muted'} size="small">
+                                <LemonTag
+                                    type={ENFORCED_RUNNERS.includes(row.runner) ? 'option' : 'muted'}
+                                    size="small"
+                                >
                                     {row.runner}
                                 </LemonTag>
                             </Tooltip>

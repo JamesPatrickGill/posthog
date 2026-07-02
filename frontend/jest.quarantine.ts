@@ -197,25 +197,39 @@ function toDecision(entry: QuarantineEntry, testId: string): Decision {
     }
 }
 
-function decideForTest(name: unknown): Decision | null {
+// testPath is constant for a whole file run, so cache its repo-relative form
+// rather than recomputing path.relative on every test declaration.
+let cachedTestPath: string | undefined
+let cachedRelativePath = ''
+
+function relativeTestPath(): string | null {
     const testPath = currentTestPath()
     if (testPath === undefined) {
         return null
     }
-    const fullName = [...describeStack, stringifyName(name)].join(' ')
-    const testId = `${repoRelativePath(testPath)}::${fullName}`
+    if (testPath !== cachedTestPath) {
+        cachedTestPath = testPath
+        cachedRelativePath = repoRelativePath(testPath)
+    }
+    return cachedRelativePath
+}
+
+function decideFor(testId: string): Decision | null {
     const entry = findMatch(activeEntries, testId)
     return entry ? toDecision(entry, testId) : null
 }
 
-function decideForFile(): Decision | null {
-    const testPath = currentTestPath()
-    if (testPath === undefined) {
+function decideForTest(name: unknown): Decision | null {
+    const relativePath = relativeTestPath()
+    if (relativePath === null) {
         return null
     }
-    const relativePath = repoRelativePath(testPath)
-    const entry = findMatch(activeEntries, relativePath)
-    return entry ? toDecision(entry, relativePath) : null
+    return decideFor(`${relativePath}::${[...describeStack, stringifyName(name)].join(' ')}`)
+}
+
+function decideForFile(): Decision | null {
+    const relativePath = relativeTestPath()
+    return relativePath === null ? null : decideFor(relativePath)
 }
 
 function errorText(error: unknown): string {
@@ -239,7 +253,26 @@ function isThenable(value: unknown): value is PromiseLike<unknown> {
     return isRecord(value) && typeof (value as { then?: unknown }).then === 'function'
 }
 
-/** Wrap a test body so a thrown error or rejected promise is swallowed (jest's non-strict xfail analog). */
+/** Run a test body swallowing any thrown error or rejected promise (jest's non-strict xfail analog). */
+function tolerate(fn: (...args: unknown[]) => unknown, decision: Decision): (...args: unknown[]) => unknown {
+    return function (this: unknown, ...args: unknown[]): unknown {
+        try {
+            const result = fn.apply(this, args)
+            if (isThenable(result)) {
+                return result.then(undefined, (error: unknown) => {
+                    warnTolerated(decision, error)
+                    return undefined
+                })
+            }
+            return result
+        } catch (error) {
+            warnTolerated(decision, error)
+            return undefined
+        }
+    }
+}
+
+/** Tolerate an `it`/`test` body, handling the done-callback style that `tolerate` can't (it swallows via the promise/throw path). */
 function tolerateProvides(
     fn: jest.ProvidesCallback | undefined,
     decision: Decision
@@ -265,41 +298,7 @@ function tolerateProvides(
             }
         }
     }
-    const noArgs = fn as () => unknown
-    return function (this: unknown): unknown {
-        try {
-            const result = noArgs.call(this)
-            if (isThenable(result)) {
-                return result.then(undefined, (error: unknown) => {
-                    warnTolerated(decision, error)
-                    return undefined
-                })
-            }
-            return result
-        } catch (error) {
-            warnTolerated(decision, error)
-            return undefined
-        }
-    }
-}
-
-/** Sync/promise-tolerant wrapper for `.each` row callbacks (variadic row args). */
-function tolerateEach(fn: (...args: unknown[]) => unknown, decision: Decision): (...args: unknown[]) => unknown {
-    return function (this: unknown, ...args: unknown[]): unknown {
-        try {
-            const result = fn.apply(this, args)
-            if (isThenable(result)) {
-                return result.then(undefined, (error: unknown) => {
-                    warnTolerated(decision, error)
-                    return undefined
-                })
-            }
-            return result
-        } catch (error) {
-            warnTolerated(decision, error)
-            return undefined
-        }
-    }
+    return tolerate(fn as () => unknown, decision) as jest.ProvidesCallback
 }
 
 /** Copy every own member (skip/only/todo/each/…) from a jest global onto its wrapper. */
@@ -330,7 +329,7 @@ function wrapEach(base: jest.It): jest.Each {
             return (base.skip.each as unknown as EachEntry)(...eachArgs)
         }
         return (name: string, fn: (...args: unknown[]) => unknown, timeout?: number): void => {
-            factory(name, tolerateEach(fn, decision), timeout)
+            factory(name, tolerate(fn, decision), timeout)
         }
     }
     return wrapped as unknown as jest.Each
