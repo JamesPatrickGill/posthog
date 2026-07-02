@@ -1018,3 +1018,11 @@ WEB_STATS_PATHS_PREAGG_MIRROR_PATHKEY_TEAM_IDS: list[int] = [
         get_from_env("WEB_STATS_PATHS_PREAGG_MIRROR_PATHKEY_TEAM_IDS", _LAZY_PRECOMPUTE_DEFAULT_TEAM_IDS)
     )
 ]
+
+# Admission control for long-lived SSE streams: the maximum number of streams
+# one worker process serves concurrently. Above the cap, sse_streaming_response()
+# returns 503 with a jittered Retry-After instead of opening the stream —
+# EventSource treats that as retryable, so overload degrades into delayed
+# reconnects rather than pinned processes and starved health probes. 0 rejects
+# every stream (emergency lever).
+SSE_MAX_CONCURRENT_STREAMS_PER_PROCESS = get_from_env("SSE_MAX_CONCURRENT_STREAMS_PER_PROCESS", 500, type_cast=int)

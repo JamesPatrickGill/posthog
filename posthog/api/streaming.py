@@ -1,10 +1,15 @@
 import time
+<<<<<<< HEAD
 import asyncio
+=======
+import random
+>>>>>>> 853edf79a59 (feat(infra): per-process SSE concurrency cap with 503 and jittered Retry-After)
 from collections.abc import AsyncIterable, AsyncIterator, Iterable, Iterator
 from http import HTTPStatus
 
+from django.conf import settings
 from django.db import connections
-from django.http import StreamingHttpResponse
+from django.http import HttpResponse, StreamingHttpResponse
 
 from prometheus_client import Counter, Gauge, Histogram
 
@@ -48,10 +53,51 @@ SSE_STREAM_DURATION_HISTOGRAM = Histogram(
 )
 
 
+SSE_REJECTED_OVER_CAP_COUNTER = Counter(
+    "posthog_sse_rejected_over_cap_total",
+    "SSE streams rejected with 503 because the per-process concurrency cap was reached",
+    labelnames=["endpoint"],
+)
+
+# Per-process count of streams currently being consumed, kept in step with the
+# open-connections gauge (incremented at first pull, decremented on close).
+# Plain int mutation is safe here: both servers we run mutate it from a single
+# event loop per process, and the GIL covers the WSGI fallback.
+_active_stream_count = 0
+
+# Rejected clients get "come back in base + [0, jitter) seconds" so a burst that
+# hits the cap spreads its retries out instead of reconnecting in lockstep.
+_RETRY_AFTER_BASE_SECONDS = 15
+_RETRY_AFTER_JITTER_SECONDS = 30
+
+
+def _record_stream_open(endpoint: str) -> None:
+    global _active_stream_count
+    _active_stream_count += 1
+    SSE_STREAM_OPENED_COUNTER.labels(endpoint=endpoint).inc()
+    SSE_OPEN_CONNECTIONS_GAUGE.labels(endpoint=endpoint).inc()
+
+
 def _record_stream_close(endpoint: str, outcome: str, started_at: float) -> None:
+    global _active_stream_count
+    _active_stream_count -= 1
     SSE_OPEN_CONNECTIONS_GAUGE.labels(endpoint=endpoint).dec()
     SSE_STREAM_CLOSED_COUNTER.labels(endpoint=endpoint, outcome=outcome).inc()
     SSE_STREAM_DURATION_HISTOGRAM.labels(endpoint=endpoint).observe(time.monotonic() - started_at)
+
+
+def _over_stream_cap() -> bool:
+    cap = settings.SSE_MAX_CONCURRENT_STREAMS_PER_PROCESS
+    return cap is not None and _active_stream_count >= cap
+
+
+def _stream_cap_rejection(endpoint: str) -> HttpResponse:
+    SSE_REJECTED_OVER_CAP_COUNTER.labels(endpoint=endpoint).inc()
+    retry_after = _RETRY_AFTER_BASE_SECONDS + random.randrange(_RETRY_AFTER_JITTER_SECONDS)
+    return HttpResponse(
+        status=HTTPStatus.SERVICE_UNAVAILABLE,
+        headers={"Retry-After": str(retry_after), **_SSE_DEFAULT_HEADERS},
+    )
 
 
 async def _instrumented_aiter(stream: AsyncIterable[bytes | str], endpoint: str) -> AsyncIterator[bytes | str]:
@@ -63,8 +109,7 @@ async def _instrumented_aiter(stream: AsyncIterable[bytes | str], endpoint: str)
     ASGI handler cancels the streaming task), which is why both get their own
     outcome rather than folding into ``error``.
     """
-    SSE_STREAM_OPENED_COUNTER.labels(endpoint=endpoint).inc()
-    SSE_OPEN_CONNECTIONS_GAUGE.labels(endpoint=endpoint).inc()
+    _record_stream_open(endpoint)
     started_at = time.monotonic()
     outcome = "completed"
     try:
@@ -81,8 +126,7 @@ async def _instrumented_aiter(stream: AsyncIterable[bytes | str], endpoint: str)
 
 
 def _instrumented_iter(stream: Iterable[bytes | str], endpoint: str) -> Iterator[bytes | str]:
-    SSE_STREAM_OPENED_COUNTER.labels(endpoint=endpoint).inc()
-    SSE_OPEN_CONNECTIONS_GAUGE.labels(endpoint=endpoint).inc()
+    _record_stream_open(endpoint)
     started_at = time.monotonic()
     outcome = "completed"
     try:
@@ -156,7 +200,7 @@ def sse_streaming_response(
     endpoint: str = "unknown",
     status: int = HTTPStatus.OK,
     headers: dict[str, str] | None = None,
-) -> StreamingHttpResponse:
+) -> StreamingHttpResponse | HttpResponse:
     """Build a ``text/event-stream`` response for a long-lived SSE endpoint.
 
     Use this instead of constructing ``StreamingHttpResponse`` directly. It
@@ -185,7 +229,17 @@ def sse_streaming_response(
 
     ``endpoint`` is a static, low-cardinality name for the stream (e.g.
     ``"wizard_session"``) used as the label on the SSE connection metrics.
+
+    Admission control: when this process is already serving
+    ``SSE_MAX_CONCURRENT_STREAMS_PER_PROCESS`` streams, the stream is not opened
+    and the client gets ``503`` with a jittered ``Retry-After``. ``EventSource``
+    treats that as transient and reconnects later, so overload degrades into
+    delayed reconnects instead of pinned processes and starved health probes.
+    The check is advisory (concurrent admissions can briefly overshoot the cap);
+    its job is stopping unbounded pile-up, not enforcing an exact ceiling.
     """
+    if _over_stream_cap():
+        return _stream_cap_rejection(endpoint)
     return streaming_response(
         _instrument_stream(stream, endpoint),
         content_type="text/event-stream",

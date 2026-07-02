@@ -6,6 +6,7 @@ from typing import cast
 from unittest import mock
 
 from django.http import StreamingHttpResponse
+from django.test import override_settings
 
 from prometheus_client import REGISTRY
 
@@ -147,6 +148,7 @@ class TestStreamingResponse:
         assert response.status_code == HTTPStatus.OK
 
 
+<<<<<<< HEAD
 class TestSSEAsyncCancellation:
     async def test_task_cancellation_counts_client_disconnect_not_error(self):
         first_chunk_pulled = asyncio.Event()
@@ -173,3 +175,44 @@ class TestSSEAsyncCancellation:
         assert _open_connections("test_async_cancel") == 0.0
         assert _closed_total("test_async_cancel", "client_disconnect") == 1.0
         assert _closed_total("test_async_cancel", "error") == 0.0
+=======
+class TestSSEConcurrencyCap:
+    # Admission control is the guard against stream pile-up taking a process
+    # down; these tests pin the reject/admit boundary and that capacity is
+    # released when streams end.
+
+    def test_over_cap_rejects_with_503_and_jittered_retry_after(self):
+        def endless() -> Iterator[bytes]:
+            while True:
+                yield b": ping\n\n"
+
+        with override_settings(SSE_MAX_CONCURRENT_STREAMS_PER_PROCESS=1):
+            admitted = sse_streaming_response(endless(), endpoint="test_cap")
+            next(iter(admitted.streaming_content))  # occupy the only slot
+            rejected = sse_streaming_response(_gen(), endpoint="test_cap")
+            assert rejected.status_code == HTTPStatus.SERVICE_UNAVAILABLE
+            assert not isinstance(rejected, StreamingHttpResponse)
+            assert 15 <= int(rejected.headers["Retry-After"]) < 45
+            admitted.close()
+
+    def test_capacity_frees_up_when_a_stream_closes(self):
+        def endless() -> Iterator[bytes]:
+            while True:
+                yield b": ping\n\n"
+
+        with override_settings(SSE_MAX_CONCURRENT_STREAMS_PER_PROCESS=1):
+            first = sse_streaming_response(endless(), endpoint="test_cap_release")
+            next(iter(first.streaming_content))
+            first.close()
+            second = sse_streaming_response(_gen(), endpoint="test_cap_release")
+            assert isinstance(second, StreamingHttpResponse)
+            assert b"".join(second.streaming_content) == b"data: hello\n\n"
+
+    def test_cap_of_zero_rejects_everything(self):
+        with override_settings(SSE_MAX_CONCURRENT_STREAMS_PER_PROCESS=0):
+            rejected = sse_streaming_response(_gen(), endpoint="test_cap_zero")
+            assert rejected.status_code == HTTPStatus.SERVICE_UNAVAILABLE
+            assert (
+                REGISTRY.get_sample_value("posthog_sse_rejected_over_cap_total", {"endpoint": "test_cap_zero"}) >= 1.0
+            )
+>>>>>>> 853edf79a59 (feat(infra): per-process SSE concurrency cap with 503 and jittered Retry-After)
