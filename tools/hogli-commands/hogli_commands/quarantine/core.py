@@ -1,7 +1,8 @@
 """Schema and rules for ``.test_quarantine.json`` — THE quarantine contract.
 
 This module is stdlib-only and runner-agnostic: it knows nothing about pytest
-markers or CI. Runner adapters (``pytest_support``, a future jest adapter,
+markers or CI. Runner adapters (``pytest_support``, the Playwright adapter in
+``playwright/playwright.quarantine.ts``, a future jest adapter,
 ``.github/scripts/turbo-discover.js``) consume the contract below and
 interpret selectors for their runner; they must not reimplement parsing,
 date handling, or matching beyond what is documented here.
@@ -37,9 +38,21 @@ Selector grammar (``id``, pytest):
 - prefix: a directory (``posthog/api/test``), file (``.../test_foo.py``),
   class (``...::TestFoo``), or test function (``...::test_bar``) — matches
   everything underneath it, where "underneath" means the next character in
-  the nodeid is a ``/``, ``::``, or ``[`` boundary (so a function selector
-  covers its parameterized variants, and partial names never match)
+  the nodeid is a ``/``, ``::``, ``[``, or `` `` (space) boundary (so a
+  function selector covers its parameterized variants, and partial names
+  never match)
 - ``product:<dashed-name>``: everything under ``products/<name_with_underscores>/``
+
+Selector grammar (``id``, playwright — ``runner: "playwright"``):
+
+- ``<repo-relative-spec>::<full test name>``, where the name is the
+  space-joined ancestor ``describe`` titles plus the ``test``/``it`` title.
+  The path before ``::`` is constrained like a pytest path (repo-relative,
+  no whitespace); the name after it may contain spaces, so a
+  ``::``-qualified selector covers a ``describe`` block via the space
+  boundary above.
+- a bare spec/directory prefix or ``product:<dashed-name>`` works the same as
+  for pytest.
 
 When several entries match the same test, the most specific (longest)
 selector wins — so a narrow ``mode: skip`` entry overrides a broad
@@ -73,6 +86,9 @@ MAX_QUARANTINE_DAYS = 30
 DEFAULT_GRACE_DAYS = 7
 DEFAULT_RUNNER = "pytest"
 MODES = ("run", "skip")
+# Runners with an in-repo enforcement adapter — their selectors are validated
+# and ``check`` stops warning "no enforcement adapter yet" for them.
+ADAPTED_RUNNERS = (DEFAULT_RUNNER, "playwright")
 
 REPO_ROOT = Path(__file__).resolve().parents[4]
 QUARANTINE_PATH = REPO_ROOT / ".test_quarantine.json"
@@ -206,7 +222,9 @@ def selector_matches(selector: str, test_id: str) -> bool:
     if selector.startswith(_PRODUCT_SELECTOR_PREFIX):
         return test_id.startswith(product_path_prefix(selector))
     selector = selector.rstrip("/")
-    return test_id == selector or test_id.startswith((f"{selector}/", f"{selector}::", f"{selector}["))
+    # The trailing-space boundary lets a ``::``-qualified selector (whose name
+    # carries spaces, e.g. playwright/jest) cover a nested describe/test.
+    return test_id == selector or test_id.startswith((f"{selector}/", f"{selector}::", f"{selector}[", f"{selector} "))
 
 
 def product_path_prefix(selector: str) -> str:
@@ -251,27 +269,36 @@ def _entry_to_dict(entry: Entry) -> dict[str, Any]:
 
 
 def validate_selector(selector: str, runner: str) -> str | None:
-    """Selector validity for known runners; returns a violation message or None.
+    """Selector validity for runners with an enforcement adapter; returns a
+    violation message or None.
 
-    Only pytest selectors have rules today; other runners' grammars belong to
-    their future adapters and are not validated here.
+    Only adapted runners (``ADAPTED_RUNNERS``) are validated; others' grammars
+    belong to their future adapters. ``product:`` and path rules are shared.
+    Playwright ids carry a space-joined test name after ``::``, so only the
+    path before ``::`` is checked for those; pytest nodeids never have spaces,
+    so the whole selector is checked.
     """
-    if runner != DEFAULT_RUNNER:
+    if runner not in ADAPTED_RUNNERS:
         return None
     if selector.startswith(_PRODUCT_SELECTOR_PREFIX):
-        name = selector[len(_PRODUCT_SELECTOR_PREFIX) :]
-        if "_" in name:
-            # turbo-discover compares dashed product names; the underscored
-            # directory form would silently skip nothing there.
-            return "use the dashed product name (e.g. 'batch-exports'), not the directory form"
-        product_dir = REPO_ROOT / product_path_prefix(selector)
-        if not product_dir.is_dir():
-            return f"no directory {product_dir.relative_to(REPO_ROOT)} — is the product name right?"
-        return None
+        return _validate_product_selector(selector)
     if selector.startswith("/") or selector.startswith("\\"):
         return "must be repo-root-relative, not absolute"
-    if any(c.isspace() for c in selector):
+    path_part = selector.split("::", 1)[0] if runner != DEFAULT_RUNNER else selector
+    if any(c.isspace() for c in path_part):
         return "must not contain whitespace"
+    return None
+
+
+def _validate_product_selector(selector: str) -> str | None:
+    name = selector[len(_PRODUCT_SELECTOR_PREFIX) :]
+    if "_" in name:
+        # turbo-discover compares dashed product names; the underscored
+        # directory form would silently skip nothing there.
+        return "use the dashed product name (e.g. 'batch-exports'), not the directory form"
+    product_dir = REPO_ROOT / product_path_prefix(selector)
+    if not product_dir.is_dir():
+        return f"no directory {product_dir.relative_to(REPO_ROOT)} — is the product name right?"
     return None
 
 
@@ -307,7 +334,7 @@ def check(result: LoadResult, today: date, grace_days: int = DEFAULT_GRACE_DAYS)
             deadline = f"within {days_left} days" if days_left else "today — grace period ends"
             warnings.append(f"{label}: expired {expired_for} days ago — remove {deadline}")
 
-        if entry.runner != DEFAULT_RUNNER:
+        if entry.runner not in ADAPTED_RUNNERS:
             warnings.append(f"{label}: runner '{entry.runner}' has no enforcement adapter yet")
         selector_problem = validate_selector(entry.id, entry.runner)
         if selector_problem is not None:

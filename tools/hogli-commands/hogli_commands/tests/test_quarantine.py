@@ -75,10 +75,39 @@ def raw_entry(**overrides: Any) -> dict[str, Any]:
         ("product:batch-exports", "posthog/api/test/test_foo.py::test_x", False),
         # unrelated paths
         ("posthog/api/test/test_foo.py", "posthog/api/test/test_food.py::test_x", False),
+        # space boundary: a ::-qualified selector (playwright/jest names carry spaces) covers a nested describe
+        ("playwright/e2e/login.spec.ts::Login", "playwright/e2e/login.spec.ts::Login redirects home", True),
+        ("playwright/e2e/login.spec.ts::Login", "playwright/e2e/login.spec.ts::Login", True),
+        # partial name before the space boundary never matches
+        ("playwright/e2e/login.spec.ts::Log", "playwright/e2e/login.spec.ts::Login redirects home", False),
     ],
 )
 def test_selector_matches(selector: str, test_id: str, expected: bool) -> None:
     assert core.selector_matches(selector, test_id) is expected
+
+
+@pytest.mark.parametrize(
+    "selector, runner, expected_ok",
+    [
+        # playwright names carry spaces after ::, so only the path before it is constrained
+        ("playwright/e2e/login.spec.ts::Login redirects to home", "playwright", True),
+        ("playwright/e2e/login.spec.ts", "playwright", True),
+        # a space in the path portion (before ::) is still rejected
+        ("playwright/e2e/login file.spec.ts::Login", "playwright", False),
+        # absolute path rejected for adapted runners
+        ("/abs/login.spec.ts::Login", "playwright", False),
+        # product rule is shared across adapted runners
+        ("product:batch-exports", "playwright", True),
+        ("product:batch_exports", "playwright", False),
+        # pytest keeps whole-selector whitespace rejection (nodeids never have spaces)
+        ("posthog/api/test/test_foo.py::TestFoo::test_bar", "pytest", True),
+        ("posthog/api/test/test foo.py", "pytest", False),
+        # unadapted runners are not validated at all — anything passes
+        ("literally anything ::goes", "jest", True),
+    ],
+)
+def test_validate_selector_by_runner(selector: str, runner: str, expected_ok: bool) -> None:
+    assert (core.validate_selector(selector, runner) is None) is expected_ok
 
 
 @pytest.mark.parametrize(
@@ -261,6 +290,16 @@ def test_add_creates_canonical_file(runner: CliRunner, tmp_path: Path) -> None:
     assert date.fromisoformat(entry["expires"]) - date.fromisoformat(entry["added"]) == timedelta(days=14)
 
 
+def test_add_playwright_runner_writes_runner_and_validates_spaced_name(runner: CliRunner, tmp_path: Path) -> None:
+    path = tmp_path / "q.json"
+    selector = "playwright/e2e/login.spec.ts::Login redirects home"
+    result = cli(runner, path, "add", selector, "--reason", "flaky", "--owner", "@web", "--runner", "playwright")
+    assert result.exit_code == 0, result.output
+    entry = json.loads(path.read_text())["entries"][0]
+    assert entry["runner"] == "playwright"
+    assert entry["id"] == selector
+
+
 def test_add_replaces_existing_entry_with_same_id(runner: CliRunner, tmp_path: Path) -> None:
     path = write_file(tmp_path / "q.json", [raw_entry(reason="old")])
     result = cli(runner, path, "add", raw_entry()["id"], "--reason", "new", "--owner", "@x", "--mode", "skip")
@@ -372,6 +411,8 @@ def test_list_shows_status(runner: CliRunner, tmp_path: Path) -> None:
         ),
         # forward compat: unknown runner and unknown field warn but pass
         ([raw_entry(runner="jest", future_field="x")], 0, "no enforcement adapter"),
+        # playwright is an adapted runner: no "no adapter" warning, and a spaced name passes selector validation
+        ([raw_entry(runner="playwright", id="playwright/e2e/login.spec.ts::Login redirects home")], 0, "OK"),
         # known-product selector passes; unknown product fails
         ([raw_entry(id="product:batch-exports")], 0, "OK"),
         ([raw_entry(id="product:batch_exports")], 1, "dashed product name"),
