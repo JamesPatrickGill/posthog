@@ -3,7 +3,8 @@ from collections.abc import Iterator
 from typing import Any
 from urllib.parse import urljoin, urlparse
 
-from django.http import HttpResponse, StreamingHttpResponse
+from django.http import HttpResponse
+from django.http.response import HttpResponseBase
 
 import httpx
 import structlog
@@ -317,7 +318,7 @@ def enforce_tool_approval(
     return HttpResponse(json.dumps(blocked), content_type="application/json", status=200)
 
 
-def proxy_mcp_request(request: Any, installation: MCPServerInstallation) -> HttpResponse | StreamingHttpResponse:
+def proxy_mcp_request(request: Any, installation: MCPServerInstallation) -> HttpResponseBase:
     allowed, error = is_url_allowed(installation.url)
     if not allowed:
         logger.warning("SSRF: blocked proxy request", url=installation.url, reason=error)
@@ -441,7 +442,7 @@ def _stream_upstream(upstream_response: httpx.Response, client: httpx.Client) ->
         client.close()
 
 
-def _build_sse_response(upstream_response: httpx.Response, client: httpx.Client) -> StreamingHttpResponse:
+def _build_sse_response(upstream_response: httpx.Response, client: httpx.Client) -> HttpResponseBase:
     stream = _stream_upstream(upstream_response, client)
     astream = SyncIterableToAsync(stream) if SERVER_GATEWAY_INTERFACE == "ASGI" else stream
     response = sse_streaming_response(astream, endpoint="mcp_store_proxy")
