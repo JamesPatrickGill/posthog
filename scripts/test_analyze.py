@@ -12,6 +12,15 @@ Two independent analyses live here:
    the tail, so ``detect_placeholders`` isolates them into an "untrusted timing" segment
    kept out of the distribution stats.
 
+   The file also accumulates *stale* entries: it is merge-updated (never rebuilt) and CI
+   does not pass ``--filter-existing``, so timings for moved or deleted test files linger —
+   a code move from ``posthog/`` to ``products/`` leaves the old path behind, often re-added
+   under the new path, double-counting. ``partition_existing`` drops entries whose test file
+   is gone from disk (cheap, catches whole-file moves); ``--collect`` cross-checks against
+   ``pytest --collect-only`` to also catch case-level staleness (renamed cases, dropped
+   parametrizations) at the cost of needing a working test env. Pass ``--keep-stale`` to
+   score every recorded timing (the old behavior).
+
 2. Coverage / redundancy analysis (opt-in) reads pytest-testmon runtime coverage — which
    test touched which production files — and finds isomorphic tests (identical coverage
    sets → safe drop candidates), trivial-coverage tests (touch no production file), and
@@ -24,6 +33,7 @@ Two independent analyses live here:
 
 Usage:
     python3 scripts/test_analyze.py [--durations .test_durations] [--out report.md]
+    python3 scripts/test_analyze.py --collect --out report.md   # accurate staleness, needs pytest
     python3 scripts/test_analyze.py --testmon .testmondata --out report.md
 """
 
@@ -88,6 +98,61 @@ def load_durations(path: Path) -> dict[str, float]:
     return {str(k): float(v) for k, v in data.items()}
 
 
+def partition_existing(durations: dict[str, float]) -> tuple[dict[str, float], dict[str, float]]:
+    """Split entries into (live, stale) by whether the test's file exists on disk.
+
+    ``.test_durations`` accumulates: pytest-split merges new timings into the existing
+    file and CI never passes ``--filter-existing``, so entries for moved or deleted test
+    files linger indefinitely (a code move from ``posthog/`` to ``products/`` leaves the
+    old path behind, often re-added under the new path — double-counting the same test).
+    These "stale" entries carry a duration that no longer corresponds to anything runnable,
+    inflating the recorded total and poisoning the slow-outlier list. Segregate them so the
+    distribution reflects only tests that still exist.
+
+    This is a cheap, deterministic file-existence check keyed on the path portion of the id.
+    It catches the bulk case (whole files moved/deleted) but not a test whose *file* still
+    exists while a specific case was renamed or a parametrization was dropped — for that
+    exactness, ``--collect`` cross-checks against ``pytest --collect-only``.
+    """
+    exists: dict[str, bool] = {}
+    live: dict[str, float] = {}
+    stale: dict[str, float] = {}
+    for test_id, dur in durations.items():
+        file_part = test_id.split("::", 1)[0]
+        present = exists.get(file_part)
+        if present is None:
+            present = (REPO_ROOT / file_part).exists()
+            exists[file_part] = present
+        (live if present else stale)[test_id] = dur
+    return live, stale
+
+
+def collect_live_ids(paths: tuple[str, ...] = ()) -> set[str] | None:
+    """Exact set of currently-collectable test ids via ``pytest --collect-only``.
+
+    Returns None if collection fails (no test env, import error) — callers then fall back
+    to the file-existence heuristic. This is accurate but slow and needs a working Django
+    test environment, so it is opt-in behind ``--collect``.
+    """
+    import subprocess  # noqa: PLC0415 — only needed when --collect is passed
+
+    cmd = ["python3", "-m", "pytest", "--collect-only", "-q", "--no-header", *paths]
+    try:
+        proc = subprocess.run(cmd, cwd=REPO_ROOT, capture_output=True, text=True, timeout=1800)
+    except (OSError, subprocess.TimeoutExpired) as exc:
+        sys.stderr.write(f"--collect failed ({exc}); falling back to file-existence check\n")
+        return None
+    ids: set[str] = set()
+    for line in proc.stdout.splitlines():
+        line = line.strip()
+        if "::" in line and not line.startswith(("=", "<", "warning")):
+            ids.add(line)
+    if not ids:
+        sys.stderr.write("--collect produced no ids; falling back to file-existence check\n")
+        return None
+    return ids
+
+
 def detect_placeholders(durations: dict[str, float]) -> set[float]:
     """Identify high placeholder timings that are not real measurements.
 
@@ -127,6 +192,11 @@ class DurationStats:
     max_time: float
     pareto_50: int
     pareto_80: int
+    recorded_tests: int = 0
+    recorded_time: float = 0.0
+    stale_count: int = 0
+    stale_time: float = 0.0
+    stale_mode: str = "file-existence"
 
 
 def _percentile(sorted_vals: list[float], pct: float) -> float:
@@ -136,7 +206,13 @@ def _percentile(sorted_vals: list[float], pct: float) -> float:
     return sorted_vals[idx]
 
 
-def compute_duration_stats(durations: dict[str, float]) -> DurationStats:
+def compute_duration_stats(
+    durations: dict[str, float],
+    stale: dict[str, float] | None = None,
+    stale_mode: str = "file-existence",
+) -> DurationStats:
+    """Compute the distribution over *live* ``durations``; ``stale`` is reported, not scored."""
+    stale = stale or {}
     placeholders = detect_placeholders(durations)
     # Trusted = everything except the unbounded placeholders. Floored tests (0.01s) stay
     # in — they are cheap but real, and belong in the distribution.
@@ -173,6 +249,11 @@ def compute_duration_stats(durations: dict[str, float]) -> DurationStats:
         max_time=max(durations.values()) if durations else 0.0,
         pareto_50=pareto_50,
         pareto_80=pareto_80,
+        recorded_tests=len(durations) + len(stale),
+        recorded_time=total_time + sum(stale.values()),
+        stale_count=len(stale),
+        stale_time=sum(stale.values()),
+        stale_mode=stale_mode,
     )
 
 
@@ -453,21 +534,34 @@ def render_report(
     packages: list[tuple[str, int, float, float, float]],
     coverage_segments: list[Segment] | None,
     redundancy: RedundancyReport | None,
+    stale: dict[str, float] | None = None,
 ) -> str:
     out: list[str] = ["# Test suite analysis", ""]
+    denom = stats.total_tests or 1
     out += [
-        f"- Tests: **{stats.total_tests:,}**",
-        f"- Total test-time: **{fmt_duration(stats.total_time)}** ({stats.total_time:,.0f}s, single-threaded wall)",
+        f"- Live tests: **{stats.total_tests:,}** (file on disk) — "
+        f"total **{fmt_duration(stats.total_time)}** ({stats.total_time:,.0f}s, single-threaded wall)",
         f"- Distribution (trusted timings): median {stats.median * 1000:.0f}ms · "
         f"p95 {stats.p95:.2f}s · p99 {stats.p99:.2f}s · max {stats.max_time:.1f}s",
         f"- Pareto: 50% of time in **{stats.pareto_50:,}** tests "
-        f"({stats.pareto_50 / stats.total_tests * 100:.1f}%); "
-        f"80% in **{stats.pareto_80:,}** ({stats.pareto_80 / stats.total_tests * 100:.1f}%)",
+        f"({stats.pareto_50 / denom * 100:.1f}%); "
+        f"80% in **{stats.pareto_80:,}** ({stats.pareto_80 / denom * 100:.1f}%)",
         f"- Never-timed placeholders excluded from stats: **{stats.suspect_count:,}** tests "
         f"at {sorted(stats.placeholders)}; **{stats.floored_count:,}** more floored to "
         f"{MIN_DURATION_FLOOR}s (kept as fast)",
         "",
     ]
+    if stats.stale_count:
+        recorded_denom = stats.recorded_time or 1
+        out += [
+            f"> ⚠ **Stale entries excluded** ({stats.stale_mode}): the `.test_durations` file records "
+            f"**{stats.recorded_tests:,}** entries totalling {fmt_duration(stats.recorded_time)}, but "
+            f"**{stats.stale_count:,}** ({stats.stale_count / stats.recorded_tests * 100:.0f}%) point at test "
+            f"files that no longer exist — **{fmt_duration(stats.stale_time)} of phantom time "
+            f"({stats.stale_time / recorded_denom * 100:.0f}% of the recorded total)**, dropped from every "
+            f"stat above. These accumulate because `.test_durations` is merge-updated and CI never prunes it.",
+            "",
+        ]
 
     if redundancy is not None:
         out += [
@@ -499,6 +593,21 @@ def render_report(
     for seg in sorted(segments, key=lambda s: s.total, reverse=True):
         out += render_top(seg)
 
+    if stale:
+        out += ["## Stale entries (file no longer on disk)", ""]
+        by_dir: dict[str, list[float]] = defaultdict(list)
+        for test_id, dur in stale.items():
+            by_dir[package_of(test_id)].append(dur)
+        rows = sorted(((pkg, len(v), sum(v)) for pkg, v in by_dir.items()), key=lambda r: r[2], reverse=True)[:10]
+        out += ["| package | stale entries | phantom time |", "|---|---:|---:|"]
+        for pkg, count, total in rows:
+            out.append(f"| {pkg} | {count:,} | {fmt_duration(total)} |")
+        out.append("")
+        out += ["### stale — top 10 by (phantom) duration", ""]
+        for test_id, dur in sorted(stale.items(), key=lambda t: t[1], reverse=True)[:10]:
+            out.append(f"- `{dur:6.2f}s` {test_id}")
+        out.append("")
+
     out += ["## Hottest packages (first 2 path segments)", ""]
     out += ["| package | tests | total time | mean | median |", "|---|---:|---:|---:|---:|"]
     for pkg, count, total, mean, median in packages:
@@ -526,6 +635,16 @@ def main(argv: list[str] | None = None) -> int:
     )
     parser.add_argument("--pickle", type=Path, help="pre-merged coverage pickle {'test_files':..., 'high_fanout':...}")
     parser.add_argument("--high-fanout", type=Path, default=DEFAULT_HIGH_FANOUT, help="high-fanout file list")
+    parser.add_argument(
+        "--collect",
+        action="store_true",
+        help="cross-check staleness against `pytest --collect-only` (accurate but slow; needs a test env)",
+    )
+    parser.add_argument(
+        "--keep-stale",
+        action="store_true",
+        help="do not segregate stale entries — score every recorded timing (legacy behavior)",
+    )
     parser.add_argument("--out", type=Path, help="write the markdown report here (else stdout)")
     args = parser.parse_args(argv)
 
@@ -533,7 +652,20 @@ def main(argv: list[str] | None = None) -> int:
         parser.error(f"durations file not found: {args.durations}")
 
     durations = load_durations(args.durations)
-    stats = compute_duration_stats(durations)
+
+    stale: dict[str, float] = {}
+    stale_mode = "file-existence"
+    if not args.keep_stale:
+        live_ids = collect_live_ids() if args.collect else None
+        if live_ids is not None:
+            stale_mode = "pytest --collect-only"
+            live = {t: d for t, d in durations.items() if t in live_ids}
+            stale = {t: d for t, d in durations.items() if t not in live_ids}
+        else:
+            live, stale = partition_existing(durations)
+        durations = live
+
+    stats = compute_duration_stats(durations, stale, stale_mode)
     duration_segments = segment_by_duration(durations, stats)
     packages = hottest_packages(durations)
 
@@ -552,7 +684,7 @@ def main(argv: list[str] | None = None) -> int:
         redundancy = analyze_redundancy(test_files, durations)
         coverage_segments = segment_by_coverage(test_files, durations, high_fanout, stats)
 
-    report = render_report(stats, duration_segments, packages, coverage_segments, redundancy)
+    report = render_report(stats, duration_segments, packages, coverage_segments, redundancy, stale)
 
     if args.out:
         args.out.parent.mkdir(parents=True, exist_ok=True)
