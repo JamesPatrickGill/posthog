@@ -8,6 +8,13 @@
  * overrides the final run status to `passed` so they don't block CI. A single
  * non-quarantined failure keeps the run red.
  *
+ * The override is deliberately conservative — it fires ONLY when every failure
+ * is a per-test `unexpected` outcome that a `mode: "run"` entry covers. A
+ * run-level error (`onError`: worker crash, global setup/teardown throw,
+ * uncaught error) or a global-timeout run (`status: "timedout"`) is not a
+ * per-test failure, so it always keeps the run red — masking one of those
+ * would be far worse than a flaky test blocking a merge.
+ *
  * `mode: "skip"` is handled earlier by the auto fixture in
  * `utils/playwright-test-core.ts`; skipped tests never reach here as failures.
  *
@@ -33,6 +40,7 @@ function nameParts(test: TestCase): string[] {
 export default class QuarantineReporter implements Reporter {
     private readonly entries: QuarantineEntry[]
     private rootSuite: Suite | undefined
+    private sawRunError = false
 
     constructor() {
         this.entries = loadActiveEntries()
@@ -47,12 +55,19 @@ export default class QuarantineReporter implements Reporter {
         this.rootSuite = suite
     }
 
+    // Errors outside test execution (worker crash, global setup/teardown, uncaught) land here,
+    // not as an `unexpected` test — record them so the override below never masks one.
+    onError(): void {
+        this.sawRunError = true
+    }
+
     async onEnd(result: FullResult): Promise<{ status?: FullResult['status'] } | void> {
         if (this.entries.length === 0 || !this.rootSuite) {
             return
         }
-        // Only 'failed'/'timedout' runs are candidates; leave interrupted runs alone.
-        if (result.status !== 'failed' && result.status !== 'timedout') {
+        // Only a plain 'failed' run is a candidate. 'timedout' (global timeout), 'interrupted',
+        // and any run-level error are not per-test failures — never override them.
+        if (result.status !== 'failed' || this.sawRunError) {
             return
         }
 
