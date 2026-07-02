@@ -34,6 +34,9 @@ Two independent analyses live here:
 Usage:
     python3 scripts/test_analyze.py [--durations .test_durations] [--out report.md]
     python3 scripts/test_analyze.py --collect --out report.md   # accurate staleness, needs pytest
+    # or decouple the heavy collection from analysis:
+    uv run pytest --collect-only -q > /tmp/collected.txt
+    python3 scripts/test_analyze.py --collect-from /tmp/collected.txt --out report.md
     python3 scripts/test_analyze.py --testmon .testmondata --out report.md
 """
 
@@ -127,26 +130,41 @@ def partition_existing(durations: dict[str, float]) -> tuple[dict[str, float], d
     return live, stale
 
 
+def parse_collect_output(text: str) -> set[str]:
+    """Extract test ids from ``pytest --collect-only -q`` output.
+
+    The quiet reporter prints one node id per line, then a trailing summary
+    (``N tests collected in ...``) and any collection-error blocks — skip those.
+    """
+    ids: set[str] = set()
+    for raw in text.splitlines():
+        line = raw.strip()
+        if "::" in line and not line.startswith(("=", "<", "warning", "ERROR", "_ ")):
+            ids.add(line)
+    return ids
+
+
 def collect_live_ids(paths: tuple[str, ...] = ()) -> set[str] | None:
     """Exact set of currently-collectable test ids via ``pytest --collect-only``.
 
     Returns None if collection fails (no test env, import error) — callers then fall back
     to the file-existence heuristic. This is accurate but slow and needs a working Django
-    test environment, so it is opt-in behind ``--collect``.
+    test environment, so it is opt-in behind ``--collect``. When ``uv`` is on PATH the repo
+    is almost always run through it, so prefer ``uv run`` and fall back to the bare module.
+    ``--continue-on-collection-errors`` keeps one un-importable file from voiding the whole
+    run (the offending ids simply stay classified stale by the file-existence backstop).
     """
+    import shutil  # noqa: PLC0415 — only needed when --collect is passed
     import subprocess  # noqa: PLC0415 — only needed when --collect is passed
 
-    cmd = ["python3", "-m", "pytest", "--collect-only", "-q", "--no-header", *paths]
+    base = ["uv", "run", "--no-sync", "pytest"] if shutil.which("uv") else [sys.executable, "-m", "pytest"]
+    cmd = [*base, "--collect-only", "-q", "--no-header", "--continue-on-collection-errors", *paths]
     try:
         proc = subprocess.run(cmd, cwd=REPO_ROOT, capture_output=True, text=True, timeout=1800)
     except (OSError, subprocess.TimeoutExpired) as exc:
         sys.stderr.write(f"--collect failed ({exc}); falling back to file-existence check\n")
         return None
-    ids: set[str] = set()
-    for line in proc.stdout.splitlines():
-        line = line.strip()
-        if "::" in line and not line.startswith(("=", "<", "warning")):
-            ids.add(line)
+    ids = parse_collect_output(proc.stdout)
     if not ids:
         sys.stderr.write("--collect produced no ids; falling back to file-existence check\n")
         return None
@@ -538,8 +556,14 @@ def render_report(
 ) -> str:
     out: list[str] = ["# Test suite analysis", ""]
     denom = stats.total_tests or 1
+    live_qualifier = "collectable" if stats.stale_mode.startswith("pytest") else "file on disk"
+    stale_reason = (
+        "are no longer collectable (moved/deleted files, renamed cases, dropped parametrizations)"
+        if stats.stale_mode.startswith("pytest")
+        else "point at test files that no longer exist"
+    )
     out += [
-        f"- Live tests: **{stats.total_tests:,}** (file on disk) — "
+        f"- Live tests: **{stats.total_tests:,}** ({live_qualifier}) — "
         f"total **{fmt_duration(stats.total_time)}** ({stats.total_time:,.0f}s, single-threaded wall)",
         f"- Distribution (trusted timings): median {stats.median * 1000:.0f}ms · "
         f"p95 {stats.p95:.2f}s · p99 {stats.p99:.2f}s · max {stats.max_time:.1f}s",
@@ -556,8 +580,8 @@ def render_report(
         out += [
             f"> ⚠ **Stale entries excluded** ({stats.stale_mode}): the `.test_durations` file records "
             f"**{stats.recorded_tests:,}** entries totalling {fmt_duration(stats.recorded_time)}, but "
-            f"**{stats.stale_count:,}** ({stats.stale_count / stats.recorded_tests * 100:.0f}%) point at test "
-            f"files that no longer exist — **{fmt_duration(stats.stale_time)} of phantom time "
+            f"**{stats.stale_count:,}** ({stats.stale_count / stats.recorded_tests * 100:.0f}%) {stale_reason} "
+            f"— **{fmt_duration(stats.stale_time)} of phantom time "
             f"({stats.stale_time / recorded_denom * 100:.0f}% of the recorded total)**, dropped from every "
             f"stat above. These accumulate because `.test_durations` is merge-updated and CI never prunes it.",
             "",
@@ -641,6 +665,13 @@ def main(argv: list[str] | None = None) -> int:
         help="cross-check staleness against `pytest --collect-only` (accurate but slow; needs a test env)",
     )
     parser.add_argument(
+        "--collect-from",
+        type=Path,
+        metavar="FILE",
+        help="read a saved `pytest --collect-only -q` output instead of running pytest (decouples "
+        "the heavy collection from analysis); an entry is stale unless its id was collected",
+    )
+    parser.add_argument(
         "--keep-stale",
         action="store_true",
         help="do not segregate stale entries — score every recorded timing (legacy behavior)",
@@ -665,7 +696,14 @@ def main(argv: list[str] | None = None) -> int:
     stale: dict[str, float] = {}
     stale_mode = "file-existence"
     if not args.keep_stale:
-        live_ids = collect_live_ids() if args.collect else None
+        live_ids: set[str] | None = None
+        if args.collect_from:
+            live_ids = parse_collect_output(args.collect_from.read_text())
+            if not live_ids:
+                sys.stderr.write(f"--collect-from {args.collect_from} had no ids; using file-existence\n")
+                live_ids = None
+        elif args.collect:
+            live_ids = collect_live_ids()
         if live_ids is not None:
             stale_mode = "pytest --collect-only"
             live = {t: d for t, d in durations.items() if t in live_ids}
