@@ -63,7 +63,7 @@ export function ScannerEditorSceneComponent(): JSX.Element {
         ? {
               template: false,
               configure: !!(scannerValidationErrors?.name || scannerValidationErrors?.scanner_config),
-              triggers: scannerValidationErrors?.sampling_rate != null,
+              triggers: scannerValidationErrors?.sampling_rate != null || scannerValidationErrors?.query != null,
           }
         : { template: false, configure: false, triggers: false }
 
@@ -297,7 +297,11 @@ function EditorFooter({
     onAdvance: () => void
     onSave: () => void
 }): JSX.Element {
-    const { scanner } = useValues(replayScannerLogic({ id: scannerId }))
+    const { scanner, scannerValidationErrors } = useValues(replayScannerLogic({ id: scannerId }))
+    // A broken duration filter (scans nothing) blocks the save — surface it as a disabled reason so the
+    // button explains itself instead of silently doing nothing.
+    const queryError = scannerValidationErrors?.query
+    const saveDisabledReason = typeof queryError === 'string' ? queryError : undefined
     return (
         <div className="flex items-center justify-between">
             {step === 'configure' ? (
@@ -329,6 +333,7 @@ function EditorFooter({
                     <LemonButton
                         type="primary"
                         loading={isSubmitting}
+                        disabledReason={saveDisabledReason}
                         onClick={onSave}
                         data-attr="vision-editor-save"
                         data-ph-capture-attribute-scanner-type={scanner?.scanner_type}
