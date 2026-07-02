@@ -285,6 +285,21 @@ jobs:
                   # pin file_pattern as a belt-and-braces guard.
                   rm -rf timing_artifacts junit_artifacts runs /tmp/core_* /tmp/temporal_* /tmp/products_durations /tmp/dagster_durations
 
+            - name: Prune stale entries from merged durations
+              # .test_durations is merge-updated (pytest-split --store-durations) and never
+              # rebuilt, so timings for moved/deleted test files linger — a large share of the
+              # file points at paths that no longer exist (mostly the posthog/ -> products/
+              # migration, which leaves the old path behind and re-adds the test under the new
+              # one, double-counting). This filesystem-only prune drops entries whose test file
+              # is gone from the checkout; it is stdlib-only and needs no test env. It runs
+              # right after the optimize merge above, whose writer it matches exactly, so the
+              # diff is deletions-only. Non-fatal: on any failure the unpruned file is kept via
+              # the temp-file + mv guard, and the run proceeds.
+              run: |
+                  python3 scripts/test_analyze.py --durations .test_durations --prune-stale /tmp/.test_durations.pruned \
+                      && mv /tmp/.test_durations.pruned .test_durations \
+                      || echo "::warning::stale-entry prune failed — keeping unpruned .test_durations"
+
             - name: Compute cache key and monthly-commit flag
               id: durations-meta
               env:

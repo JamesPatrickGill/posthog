@@ -645,11 +645,20 @@ def main(argv: list[str] | None = None) -> int:
         action="store_true",
         help="do not segregate stale entries — score every recorded timing (legacy behavior)",
     )
+    parser.add_argument(
+        "--prune-stale",
+        type=Path,
+        metavar="OUT",
+        help="rewrite the durations file at OUT with stale entries removed (use the same path as "
+        "--durations to prune in place), then exit — does not produce a report",
+    )
     parser.add_argument("--out", type=Path, help="write the markdown report here (else stdout)")
     args = parser.parse_args(argv)
 
     if not args.durations.exists():
         parser.error(f"durations file not found: {args.durations}")
+    if args.prune_stale and args.keep_stale:
+        parser.error("--prune-stale and --keep-stale are mutually exclusive")
 
     durations = load_durations(args.durations)
 
@@ -664,6 +673,17 @@ def main(argv: list[str] | None = None) -> int:
         else:
             live, stale = partition_existing(durations)
         durations = live
+
+    if args.prune_stale:
+        # Match optimize_test_durations.py's writer exactly (indent=4, sort_keys=True, no
+        # trailing newline) so that when this runs right after it in CI, the diff is
+        # deletions-only rather than a full reformat.
+        args.prune_stale.write_text(json.dumps(durations, indent=4, sort_keys=True))
+        sys.stderr.write(
+            f"pruned {len(stale):,} stale entries ({fmt_duration(sum(stale.values()))}) via {stale_mode}; "
+            f"kept {len(durations):,} live entries -> {args.prune_stale}\n"
+        )
+        return 0
 
     stats = compute_duration_stats(durations, stale, stale_mode)
     duration_segments = segment_by_duration(durations, stats)
