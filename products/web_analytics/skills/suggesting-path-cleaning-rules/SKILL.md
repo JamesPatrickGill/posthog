@@ -1,6 +1,6 @@
 ---
 name: suggesting-path-cleaning-rules
-description: 'Runs and reasons about the automated AI job that suggests path-cleaning rules for web-analytics teams. Use when asked to generate path-cleaning suggestions for a team or cohort, to run the weekly suggestion job, to review/apply AI-suggested rules, to inspect WebAnalyticsPathCleaningSuggestion rows, or to extend the suggestion pipeline. Covers the suggest_path_cleaning_rules management command, the wa-path-cleaning-suggestions Temporal workflow, the cohort gating (precompute teams), and how suggestions are validated against real paths before storage. For hand-authoring or applying rules directly, use managing-path-cleaning-rules instead.'
+description: 'Runs and reasons about the automated AI health check that suggests path-cleaning rules for web-analytics teams. Use when asked to generate path-cleaning suggestions for a team or cohort, to run the suggestion check, to review/apply AI-suggested rules, to inspect path_cleaning_suggestions health issues, or to extend the suggestion pipeline. Covers the suggest_path_cleaning_rules management command, the path_cleaning_suggestions health check, the cohort gating (precompute teams), and how suggestions are validated against real paths before storage. For hand-authoring or applying rules directly, use managing-path-cleaning-rules instead.'
 ---
 
 # Suggesting path-cleaning rules
@@ -25,15 +25,19 @@ review). To hand-author or directly apply rules, use the `managing-path-cleaning
     `replaceRegexpAll` uses) and test-applies it to the sampled paths. Rules that don't compile or
     match nothing are dropped; survivors get a dense `order`, a `match_count`, and before/after
     `examples`. This is the skill's "test before saving" step, automated.
-  - `generate_suggestions_for_team` — orchestrates the above with gating (see below) and stores a
-    `WebAnalyticsPathCleaningSuggestion` row.
+  - `generate_suggestions_for_team` — orchestrates the above with gating (see below); pure
+    generation, no storage.
   - `apply_suggestions_to_team` — **merges** rules into `path_cleaning_filters`, never overwrites
     (dedupes by regex, continues `order`).
-- **Storage**: `WebAnalyticsPathCleaningSuggestion` (team-scoped, fail-closed). One row per run per
-  team: `suggested_rules`, `status` (suggested/applied/dismissed), `sampled_path_count`,
-  `distinct_path_count`, `existing_rule_count`, `model`, `error`.
-- **Schedule**: `wa-path-cleaning-suggestions` Temporal workflow, weekly (Tue 6 AM PT), fans out per
-  team. Registered on `MESSAGING_TASK_QUEUE` alongside the WA digest workflows.
+- **Storage**: a `path_cleaning_suggestions` **health issue** (`HealthIssue`, severity `info`) — no
+  dedicated model. One active issue per team (`hash_keys=[]`); `payload` carries `rules`, `model`,
+  `sampled_path_count`, `distinct_path_count`. Applying (or hand-configuring rules) resolves the
+  issue on the next check run; dismissal is the health-issue `dismissed` flag.
+- **Schedule**: `PathCleaningSuggestionsCheck`
+  (`products/web_analytics/backend/temporal/health_checks/path_cleaning_suggestions.py`), a health
+  check on the shared health-check framework, weekly (Mon 06:23 UTC), small sequential batches
+  because each eligible team costs an LLM call. Teams with an existing active suggestion are
+  re-emitted without a fresh LLM round trip.
 - **Cohort**: `WEB_ANALYTICS_PATH_CLEANING_SUGGESTIONS_TEAM_IDS`, defaulting to the precompute
   enrollment list `WEB_ANALYTICS_LAZY_PRECOMPUTE_TEAM_IDS`.
 
@@ -47,7 +51,8 @@ review). To hand-author or directly apply rules, use the `managing-path-cleaning
 - `skipped_low_cardinality` — fewer distinct paths than `min_distinct_paths` (default 50); cleaning
   adds no value, so we don't spend tokens.
 - `skipped_no_paths` — no pageviews in the window.
-- `generated` — rules produced (may be an empty list if paths are already clean).
+- `generated` — rules produced (may be an empty list if paths are already clean; empty generations
+  are never stored, so they can't shadow an actionable suggestion).
 - `error` — sampling/LLM failed; captured per-team, never aborts the cohort sweep.
 
 ## How users see and apply suggestions
@@ -58,22 +63,25 @@ review). To hand-author or directly apply rules, use the `managing-path-cleaning
 - **Onboarding step**: `OnboardingWebAnalyticsPathCleaningStep` (stepKey `path_cleaning`) surfaces the
   same banner during Web analytics onboarding.
 - **API** (`products/web_analytics/backend/api/web_analytics_path_cleaning_suggestions.py`):
-  `GET /api/projects/:id/web_analytics_path_cleaning_suggestions/` lists `suggested` rows;
-  `POST .../generate/` produces fresh suggestions on demand; `POST .../{id}/apply/` merges + marks
-  applied; `POST .../{id}/dismiss/` marks dismissed. Frontend uses the generated functions
-  (`webAnalyticsPathCleaningSuggestions*`).
-- **PostHog AI (Max)**: the same operations are exposed as MCP tools in
-  `products/web_analytics/mcp/tools.yaml` (`web-analytics-path-cleaning-suggestions-{list,generate,apply,dismiss}`),
+  `POST /api/projects/:id/web_analytics_path_cleaning_suggestions/generate/` produces and stores a
+  fresh suggestion on demand; `POST .../{issue_id}/apply/` merges the rules and resolves the issue.
+  Listing and dismissing go through the generic health-issues API
+  (`GET /api/projects/:id/health_issues/?kind=path_cleaning_suggestions&status=active&dismissed=false`,
+  `PATCH .../health_issues/{id}/` with `{"dismissed": true}`).
+- **Health page**: the check renders on `/web/health` alongside the other web-analytics checks, with
+  remediation guidance for humans and agents.
+- **PostHog AI (Max)**: generate/apply are exposed as MCP tools in
+  `products/web_analytics/mcp/tools.yaml` (`web-analytics-path-cleaning-suggestions-{generate,apply}`),
   so a user can ask Max to suggest path-cleaning rules and apply them conversationally. Apply is
-  flagged as changing historical chart numbers, so Max confirms before applying.
+  `destructive` (it changes historical chart numbers), so the MCP confirmation gate applies.
 
 ## Running it
 
 ```sh
-# Default cohort, print suggestions, store rows:
+# Default cohort, print suggestions, store health issues:
 python manage.py suggest_path_cleaning_rules
 
-# Specific teams, dry run (no rows stored):
+# Specific teams, dry run (nothing stored):
 python manage.py suggest_path_cleaning_rules --teams 2,19279 --no-store
 
 # Generate AND apply for one reviewed team (merges, never overwrites):
@@ -83,27 +91,25 @@ python manage.py suggest_path_cleaning_rules --teams 2 --apply
 Useful flags: `--days` (lookback), `--limit` (top-N paths sampled), `--min-distinct-paths`,
 `--include-configured`, `--no-store`, `--apply`.
 
-To run the whole workflow once manually:
-
-```sh
-python manage.py start_temporal_workflow wa-path-cleaning-suggestions '{"dry_run": true}'
-```
+The health check can also be triggered per team from the health-issues `refresh` endpoint or the
+admin UI, like any other health check.
 
 ## Reviewing suggestions
 
-Read the latest run per team (fail-closed manager — always scope by team):
+Read a team's active suggestion:
 
 ```python
-WebAnalyticsPathCleaningSuggestion.objects.for_team(team_id).order_by("-created_at").first()
+HealthIssue.objects.filter(team_id=team_id, kind="path_cleaning_suggestions", status="active").first()
 ```
 
-Each rule in `suggested_rules` carries `match_count` and `examples` (before/after on the team's real
+Each rule in `payload["rules"]` carries `match_count` and `examples` (before/after on the team's real
 paths) — that's what to show a human deciding whether to apply.
 
 ## Extending
 
-- Adding a surfacing channel (in-app notification, settings banner, onboarding wizard step): read a
-  team's latest `suggested` row and render its `suggested_rules`. Keep apply manual.
+- Adding a surfacing channel (in-app notification, settings banner, onboarding wizard step): read the
+  team's active `path_cleaning_suggestions` health issue and render its `payload["rules"]`. Keep
+  apply manual.
 - Changing the model: it must be allowlisted for the `web_analytics` product in
   `services/llm-gateway/src/llm_gateway/products/config.py`.
 - The agentic alternative — a `signals-scout-web-analytics-path-cleaning` scout — is sketched in the

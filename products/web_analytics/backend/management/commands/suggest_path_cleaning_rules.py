@@ -4,10 +4,10 @@ Suggests only — applying rewrites historical numbers in every cleaned chart, s
 decision. `--apply` merges the generated rules into a team's existing `path_cleaning_filters`
 (never overwriting) and is opt-in; review the printed suggestions first.
 
-    # Default cohort (WEB_ANALYTICS_PATH_CLEANING_SUGGESTIONS_TEAM_IDS), print only, store rows:
+    # Default cohort (WEB_ANALYTICS_PATH_CLEANING_SUGGESTIONS_TEAM_IDS), print + store health issues:
     python manage.py suggest_path_cleaning_rules
 
-    # Specific teams, don't write suggestion rows (pure dry run):
+    # Specific teams, don't write health-issue rows (pure dry run):
     python manage.py suggest_path_cleaning_rules --teams 2,19279 --no-store
 
     # Generate and apply for one reviewed team:
@@ -20,16 +20,19 @@ from django.conf import settings
 from django.core.management.base import BaseCommand, CommandError
 
 from posthog.models import Team
+from posthog.models.health_issue import HealthIssue
 
-from products.web_analytics.backend.models import WebAnalyticsPathCleaningSuggestion
 from products.web_analytics.backend.path_cleaning_suggestions.service import (
     DEFAULT_MIN_DISTINCT_PATHS,
     DEFAULT_SAMPLE_DAYS,
     DEFAULT_SAMPLE_LIMIT,
     DEFAULT_VISITED_WITHIN_DAYS,
     apply_suggestions_to_team,
+    build_suggestion_payload,
     generate_suggestions_for_team,
 )
+
+SUGGESTIONS_KIND = "path_cleaning_suggestions"
 
 
 class Command(BaseCommand):
@@ -52,7 +55,9 @@ class Command(BaseCommand):
             action="store_true",
             help="Also process teams that already have path cleaning rules (default: skip them).",
         )
-        parser.add_argument("--no-store", action="store_true", help="Don't persist suggestion rows.")
+        parser.add_argument(
+            "--no-store", action="store_true", help="Don't persist suggestions as health issues (print only)."
+        )
         parser.add_argument(
             "--visited-within-days",
             type=int,
@@ -93,18 +98,25 @@ class Command(BaseCommand):
                 min_distinct_paths=options["min_distinct_paths"],
                 include_configured=options["include_configured"],
                 visited_within_days=None if options["ignore_visit_gate"] else options["visited_within_days"],
-                store=store,
             )
             counts[result.status] = counts.get(result.status, 0) + 1
             self._print_team_result(team_id, result)
 
+            issue = None
+            if store and result.status == "generated" and result.rules:
+                issue, _ = HealthIssue.upsert_issue(
+                    team_id=team.id,
+                    kind=SUGGESTIONS_KIND,
+                    severity=HealthIssue.Severity.INFO,
+                    payload=build_suggestion_payload(result),
+                    hash_keys=[],
+                )
+
             if options["apply"] and result.status == "generated" and result.rules:
                 added = apply_suggestions_to_team(team, result.rules)
                 applied_total += added
-                if store and result.suggestion_id:
-                    WebAnalyticsPathCleaningSuggestion.objects.for_team(team.id).filter(id=result.suggestion_id).update(
-                        status=WebAnalyticsPathCleaningSuggestion.Status.APPLIED
-                    )
+                if issue is not None and issue.status == HealthIssue.Status.ACTIVE:
+                    issue.resolve()
                 self.stdout.write(f"  applied {added} new rule(s) to team {team_id}")
 
         summary = "  ".join(f"{status}={n}" for status, n in sorted(counts.items()))

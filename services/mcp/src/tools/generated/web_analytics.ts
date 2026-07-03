@@ -12,8 +12,6 @@ import {
     SavedRegenerateCreateParams,
     SavedRetrieveParams,
     WebAnalyticsPathCleaningSuggestionsApplyParams,
-    WebAnalyticsPathCleaningSuggestionsDismissParams,
-    WebAnalyticsPathCleaningSuggestionsListQueryParams,
     WebAnalyticsWeeklyDigestQueryParams,
 } from '@/generated/web_analytics/api'
 import { withPostHogUrl, type WithPostHogUrl } from '@/tools/tool-utils'
@@ -235,26 +233,6 @@ const webAnalyticsPathCleaningSuggestionsApply = (): ToolBase<
     },
 })
 
-const WebAnalyticsPathCleaningSuggestionsDismissSchema = WebAnalyticsPathCleaningSuggestionsDismissParams.omit({
-    project_id: true,
-})
-
-const webAnalyticsPathCleaningSuggestionsDismiss = (): ToolBase<
-    typeof WebAnalyticsPathCleaningSuggestionsDismissSchema,
-    Schemas.WebAnalyticsPathCleaningSuggestion
-> => ({
-    name: 'web-analytics-path-cleaning-suggestions-dismiss',
-    schema: WebAnalyticsPathCleaningSuggestionsDismissSchema,
-    handler: async (context: Context, params: z.infer<typeof WebAnalyticsPathCleaningSuggestionsDismissSchema>) => {
-        const projectId = await context.stateManager.getProjectId()
-        const result = await context.api.request<Schemas.WebAnalyticsPathCleaningSuggestion>({
-            method: 'POST',
-            path: `/api/projects/${encodeURIComponent(String(projectId))}/web_analytics_path_cleaning_suggestions/${encodeURIComponent(String(params.id))}/dismiss/`,
-        })
-        return result
-    },
-})
-
 const WebAnalyticsPathCleaningSuggestionsGenerateSchema = z.object({})
 
 const webAnalyticsPathCleaningSuggestionsGenerate = (): ToolBase<
@@ -271,28 +249,6 @@ const webAnalyticsPathCleaningSuggestionsGenerate = (): ToolBase<
             path: `/api/projects/${encodeURIComponent(String(projectId))}/web_analytics_path_cleaning_suggestions/generate/`,
         })
         return result
-    },
-})
-
-const WebAnalyticsPathCleaningSuggestionsListSchema = WebAnalyticsPathCleaningSuggestionsListQueryParams
-
-const webAnalyticsPathCleaningSuggestionsList = (): ToolBase<
-    typeof WebAnalyticsPathCleaningSuggestionsListSchema,
-    WithPostHogUrl<Schemas.PaginatedWebAnalyticsPathCleaningSuggestionList>
-> => ({
-    name: 'web-analytics-path-cleaning-suggestions-list',
-    schema: WebAnalyticsPathCleaningSuggestionsListSchema,
-    handler: async (context: Context, params: z.infer<typeof WebAnalyticsPathCleaningSuggestionsListSchema>) => {
-        const projectId = await context.stateManager.getProjectId()
-        const result = await context.api.request<Schemas.PaginatedWebAnalyticsPathCleaningSuggestionList>({
-            method: 'GET',
-            path: `/api/projects/${encodeURIComponent(String(projectId))}/web_analytics_path_cleaning_suggestions/`,
-            query: {
-                limit: params.limit,
-                offset: params.offset,
-            },
-        })
-        return await withPostHogUrl(context, result, '/web')
     },
 })
 
@@ -324,8 +280,6 @@ export const GENERATED_TOOLS: Record<string, () => ToolBase<ZodObjectAny>> = {
     'heatmaps-saved-regenerate': heatmapsSavedRegenerate,
     'heatmaps-saved-update': heatmapsSavedUpdate,
     'web-analytics-path-cleaning-suggestions-apply': webAnalyticsPathCleaningSuggestionsApply,
-    'web-analytics-path-cleaning-suggestions-dismiss': webAnalyticsPathCleaningSuggestionsDismiss,
     'web-analytics-path-cleaning-suggestions-generate': webAnalyticsPathCleaningSuggestionsGenerate,
-    'web-analytics-path-cleaning-suggestions-list': webAnalyticsPathCleaningSuggestionsList,
     'web-analytics-weekly-digest': webAnalyticsWeeklyDigest,
 }

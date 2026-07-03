@@ -65,6 +65,7 @@ describe('onboardingLogic — flow composition', () => {
                 [
                     'install:web_analytics',
                     'authorized_domains:web_analytics',
+                    'path_cleaning:web_analytics',
                     'configure:web_analytics',
                     'invite_teammates:web_analytics',
                 ],

@@ -92,7 +92,6 @@ from products.signals.backend.emission.conversations_schedule import create_conv
 from products.signals.backend.temporal.agentic.schedule import create_signals_scout_coordinator_schedule
 from products.tasks.backend.facade.temporal import create_evaluate_code_workstreams_schedule
 from products.web_analytics.backend.temporal.digest_notification.types import WADigestNotificationInput
-from products.web_analytics.backend.temporal.path_cleaning_suggestions.types import PathCleaningSuggestionsInput
 from products.web_analytics.backend.temporal.weekly_digest.types import WAWeeklyDigestInput
 
 from ee.billing.salesforce_enrichment.constants import DEFAULT_CHUNK_SIZE
@@ -465,39 +464,6 @@ async def create_wa_digest_notification_schedule(client: Client):
         )
 
 
-async def create_wa_path_cleaning_suggestions_schedule(client: Client):
-    """Create or update the schedule for the weekly path-cleaning-suggestions workflow."""
-    schedule = Schedule(
-        action=ScheduleActionStartWorkflow(
-            "wa-path-cleaning-suggestions",
-            PathCleaningSuggestionsInput(),
-            id="wa-path-cleaning-suggestions-schedule",
-            task_queue=settings.MESSAGING_TASK_QUEUE,
-            retry_policy=common.RetryPolicy(maximum_attempts=1),
-        ),
-        spec=ScheduleSpec(
-            calendars=[
-                ScheduleCalendarSpec(
-                    comment="Weekly at Tuesday 6 AM PT",
-                    hour=[ScheduleRange(start=6, end=6)],
-                    day_of_week=[ScheduleRange(start=2, end=2)],
-                )
-            ],
-            time_zone_name="America/Los_Angeles",
-        ),
-    )
-
-    if await a_schedule_exists(client, "wa-path-cleaning-suggestions-schedule"):
-        await a_update_schedule(client, "wa-path-cleaning-suggestions-schedule", schedule)
-    else:
-        await a_create_schedule(
-            client,
-            "wa-path-cleaning-suggestions-schedule",
-            schedule,
-            trigger_immediately=False,
-        )
-
-
 async def create_ducklake_compaction_schedule(client: Client):
     """Create or update the schedule for the DuckLake compaction workflow.
 
@@ -808,7 +774,6 @@ schedules = [
     create_error_tracking_spike_event_cleanup_schedule,
     create_wa_weekly_digest_schedule,
     create_wa_digest_notification_schedule,
-    create_wa_path_cleaning_suggestions_schedule,
     create_logs_alert_check_schedule,
     create_schedule_due_alert_checks_schedule,
     create_run_investigation_safety_net_schedule,

@@ -1,1 +1,1 @@
-0007_webanalyticspathcleaningsuggestion
+0006_webanalyticsuserconfig

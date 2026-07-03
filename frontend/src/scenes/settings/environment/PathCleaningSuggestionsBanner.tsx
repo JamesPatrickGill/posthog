@@ -9,11 +9,11 @@ export function PathCleaningSuggestionsBanner(): JSX.Element | null {
     const { latestSuggestion, suggestionsLoading } = useValues(pathCleaningSuggestionsLogic)
     const { applySuggestion, dismissSuggestion } = useActions(pathCleaningSuggestionsLogic)
 
-    if (suggestionsLoading || !latestSuggestion || latestSuggestion.suggested_rules.length === 0) {
+    if (suggestionsLoading || !latestSuggestion || latestSuggestion.rules.length === 0) {
         return null
     }
 
-    const ruleCount = latestSuggestion.suggested_rules.length
+    const ruleCount = latestSuggestion.rules.length
 
     return (
         <LemonBanner
@@ -31,7 +31,7 @@ export function PathCleaningSuggestionsBanner(): JSX.Element | null {
                     {ruleCount === 1 ? 'rule' : 'rules'} to group similar pages. Review and apply them:
                 </span>
                 <div className="flex flex-col gap-1">
-                    {latestSuggestion.suggested_rules.map((rule) => (
+                    {latestSuggestion.rules.map((rule) => (
                         <div key={rule.order} className="flex flex-wrap items-center gap-2 font-mono text-xs">
                             <code>{rule.regex}</code>
                             <IconArrowRight />

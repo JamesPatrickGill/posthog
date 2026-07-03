@@ -21,7 +21,6 @@ import type {
     HeatmapsListParams,
     HeatmapsResponseApi,
     PaginatedWebAnalyticsFilterPresetListApi,
-    PaginatedWebAnalyticsPathCleaningSuggestionListApi,
     PatchedSavedHeatmapRequestApi,
     PatchedWebAnalyticsFilterPresetApi,
     RecordInteractionRequestApi,
@@ -32,8 +31,6 @@ import type {
     SavedListParams,
     WebAnalyticsFilterPresetApi,
     WebAnalyticsFilterPresetsListParams,
-    WebAnalyticsPathCleaningSuggestionApi,
-    WebAnalyticsPathCleaningSuggestionsListParams,
     WebAnalyticsRecapParams,
     WebAnalyticsRecapResponseApi,
     WebAnalyticsUserPreferencesApi,
@@ -578,45 +575,12 @@ export const webAnalyticsFilterPresetsDestroy = async (
     })
 }
 
-export const getWebAnalyticsPathCleaningSuggestionsListUrl = (
-    projectId: string,
-    params?: WebAnalyticsPathCleaningSuggestionsListParams
-) => {
-    const normalizedParams = new URLSearchParams()
-
-    Object.entries(params || {}).forEach(([key, value]) => {
-        if (value !== undefined) {
-            normalizedParams.append(key, value === null ? 'null' : String(value))
-        }
-    })
-
-    const stringifiedParams = normalizedParams.toString()
-
-    return stringifiedParams.length > 0
-        ? `/api/projects/${projectId}/web_analytics_path_cleaning_suggestions/?${stringifiedParams}`
-        : `/api/projects/${projectId}/web_analytics_path_cleaning_suggestions/`
-}
-
-export const webAnalyticsPathCleaningSuggestionsList = async (
-    projectId: string,
-    params?: WebAnalyticsPathCleaningSuggestionsListParams,
-    options?: RequestInit
-): Promise<PaginatedWebAnalyticsPathCleaningSuggestionListApi> => {
-    return apiMutator<PaginatedWebAnalyticsPathCleaningSuggestionListApi>(
-        getWebAnalyticsPathCleaningSuggestionsListUrl(projectId, params),
-        {
-            ...options,
-            method: 'GET',
-        }
-    )
-}
-
 export const getWebAnalyticsPathCleaningSuggestionsApplyUrl = (projectId: string, id: string) => {
     return `/api/projects/${projectId}/web_analytics_path_cleaning_suggestions/${id}/apply/`
 }
 
 /**
- * Merges the suggestion's rules into the team's path_cleaning_filters (never overwrites existing rules) and marks the suggestion applied.
+ * Merges the suggestion's rules into the team's path_cleaning_filters (never overwrites existing rules) and resolves the underlying health issue.
  * @summary Apply a path-cleaning suggestion
  */
 export const webAnalyticsPathCleaningSuggestionsApply = async (
@@ -633,34 +597,12 @@ export const webAnalyticsPathCleaningSuggestionsApply = async (
     )
 }
 
-export const getWebAnalyticsPathCleaningSuggestionsDismissUrl = (projectId: string, id: string) => {
-    return `/api/projects/${projectId}/web_analytics_path_cleaning_suggestions/${id}/dismiss/`
-}
-
-/**
- * Marks the suggestion dismissed so it no longer surfaces.
- * @summary Dismiss a path-cleaning suggestion
- */
-export const webAnalyticsPathCleaningSuggestionsDismiss = async (
-    projectId: string,
-    id: string,
-    options?: RequestInit
-): Promise<WebAnalyticsPathCleaningSuggestionApi> => {
-    return apiMutator<WebAnalyticsPathCleaningSuggestionApi>(
-        getWebAnalyticsPathCleaningSuggestionsDismissUrl(projectId, id),
-        {
-            ...options,
-            method: 'POST',
-        }
-    )
-}
-
 export const getWebAnalyticsPathCleaningSuggestionsGenerateUrl = (projectId: string) => {
     return `/api/projects/${projectId}/web_analytics_path_cleaning_suggestions/generate/`
 }
 
 /**
- * Samples the team's recent paths, asks the LLM for cleaning rules, validates them against the real paths, and stores a suggestion. Runs even if the team already has rules. Returns the suggestion (or a skip status when there aren't enough paths to suggest from).
+ * Samples the team's recent paths, asks the LLM for cleaning rules, validates them against the real paths, and stores the result as a `path_cleaning_suggestions` health issue (replacing any previous active one). Runs even if the team already has rules. Returns the suggestion (or a skip status when there aren't enough paths to suggest from).
  * @summary Generate path-cleaning suggestions on demand
  */
 export const webAnalyticsPathCleaningSuggestionsGenerate = async (

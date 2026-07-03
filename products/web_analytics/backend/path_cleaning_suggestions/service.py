@@ -12,7 +12,6 @@ from posthog.hogql.query import execute_hogql_query
 from posthog.llm.gateway_client import get_llm_client
 from posthog.models import Team
 
-from products.web_analytics.backend.models import WebAnalyticsPathCleaningSuggestion
 from products.web_analytics.backend.path_cleaning_suggestions.prompts import (
     SYSTEM_PROMPT,
     SuggestedRule,
@@ -53,7 +52,6 @@ class TeamSuggestionResult:
     existing_rule_count: int
     model: str = ""
     error: str | None = None
-    suggestion_id: str | None = None
 
 
 DEFAULT_VISITED_WITHIN_DAYS = 30
@@ -197,7 +195,6 @@ def generate_suggestions_for_team(
     min_distinct_paths: int = DEFAULT_MIN_DISTINCT_PATHS,
     include_configured: bool = False,
     visited_within_days: int | None = DEFAULT_VISITED_WITHIN_DAYS,
-    store: bool = True,
 ) -> TeamSuggestionResult:
     existing_rules = team.path_cleaning_filters or []
     existing_rule_count = len(existing_rules)
@@ -216,13 +213,16 @@ def generate_suggestions_for_team(
             error=error,
         )
 
-    if visited_within_days is not None and not has_recent_pageviews(team, days=visited_within_days):
-        return _result("skipped_inactive", [], 0, 0)
-
     if existing_rule_count > 0 and not include_configured:
         return _result("skipped_configured", [], 0, 0)
 
     try:
+        # The activity gate runs a ClickHouse query, so it lives inside the guard with the
+        # rest — a transient query failure must surface as this team's error result, not
+        # propagate out of a cohort sweep.
+        if visited_within_days is not None and not has_recent_pageviews(team, days=visited_within_days):
+            return _result("skipped_inactive", [], 0, 0)
+
         distinct = count_distinct_pathnames(team, days=days)
         if distinct < min_distinct_paths:
             return _result("skipped_low_cardinality", [], distinct, 0)
@@ -233,23 +233,21 @@ def generate_suggestions_for_team(
 
         response = call_llm_for_rules(team, paths, model=_resolve_model())
         annotated = validate_and_annotate_rules(response.rules, paths)
-        result = _result("generated", annotated, distinct, len(paths))
+        return _result("generated", annotated, distinct, len(paths))
     except Exception as exc:  # noqa: BLE001 — one bad team must not abort the cohort sweep
         logger.exception("path_cleaning_suggestion_failed", team_id=team.id)
         return _result("error", [], 0, 0, error=f"{type(exc).__name__}: {exc}")
 
-    if store:
-        suggestion = WebAnalyticsPathCleaningSuggestion.objects.for_team(team.id).create(
-            team=team,
-            status=WebAnalyticsPathCleaningSuggestion.Status.SUGGESTED,
-            model=result.model,
-            suggested_rules=[r.to_dict() for r in annotated],
-            sampled_path_count=result.sampled_path_count,
-            distinct_path_count=result.distinct_path_count,
-            existing_rule_count=existing_rule_count,
-        )
-        result.suggestion_id = str(suggestion.id)
-    return result
+
+def build_suggestion_payload(result: TeamSuggestionResult) -> dict[str, Any]:
+    """The `HealthIssue.payload` shape for a generated suggestion. One place, so the health
+    check, the on-demand API, and the frontend banner all agree on the field names."""
+    return {
+        "rules": [rule.to_dict() for rule in result.rules],
+        "model": result.model,
+        "sampled_path_count": result.sampled_path_count,
+        "distinct_path_count": result.distinct_path_count,
+    }
 
 
 def apply_suggestions_to_team(team: Team, rules: list[AnnotatedRule]) -> int:

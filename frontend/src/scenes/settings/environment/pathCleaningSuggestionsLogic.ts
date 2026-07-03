@@ -3,16 +3,30 @@ import { loaders } from 'kea-loaders'
 
 import { lemonToast } from '@posthog/lemon-ui'
 
+import api from 'lib/api'
 import { teamLogic } from 'scenes/teamLogic'
 
-import {
-    webAnalyticsPathCleaningSuggestionsApply,
-    webAnalyticsPathCleaningSuggestionsDismiss,
-    webAnalyticsPathCleaningSuggestionsList,
-} from 'products/web_analytics/frontend/generated/api'
-import type { WebAnalyticsPathCleaningSuggestionApi } from 'products/web_analytics/frontend/generated/api.schemas'
+import { webAnalyticsPathCleaningSuggestionsApply } from 'products/web_analytics/frontend/generated/api'
+import type { PathCleaningSuggestionIssueApi } from 'products/web_analytics/frontend/generated/api.schemas'
 
 import type { pathCleaningSuggestionsLogicType } from './pathCleaningSuggestionsLogicType'
+
+export const PATH_CLEANING_SUGGESTIONS_KIND = 'path_cleaning_suggestions'
+
+interface HealthIssueRecord {
+    id: string
+    created_at: string
+    payload: Record<string, any>
+}
+
+const toSuggestion = (issue: HealthIssueRecord): PathCleaningSuggestionIssueApi => ({
+    id: issue.id,
+    created_at: issue.created_at,
+    rules: issue.payload?.rules ?? [],
+    model: issue.payload?.model ?? '',
+    sampled_path_count: issue.payload?.sampled_path_count ?? 0,
+    distinct_path_count: issue.payload?.distinct_path_count ?? 0,
+})
 
 export const pathCleaningSuggestionsLogic = kea<pathCleaningSuggestionsLogicType>([
     path(['scenes', 'settings', 'environment', 'pathCleaningSuggestionsLogic']),
@@ -27,14 +41,18 @@ export const pathCleaningSuggestionsLogic = kea<pathCleaningSuggestionsLogicType
     }),
     loaders(({ values }) => ({
         suggestions: [
-            [] as WebAnalyticsPathCleaningSuggestionApi[],
+            [] as PathCleaningSuggestionIssueApi[],
             {
                 loadSuggestions: async () => {
                     if (!values.currentTeamId) {
                         return []
                     }
-                    const response = await webAnalyticsPathCleaningSuggestionsList(String(values.currentTeamId))
-                    return response.results
+                    // Suggestions are stored as health issues; the newest active, non-dismissed one is
+                    // the actionable suggestion.
+                    const response = await api.get<{ results: HealthIssueRecord[] }>(
+                        `api/projects/${values.currentTeamId}/health_issues/?kind=${PATH_CLEANING_SUGGESTIONS_KIND}&status=active&dismissed=false`
+                    )
+                    return response.results.map(toSuggestion)
                 },
             },
         ],
@@ -53,7 +71,7 @@ export const pathCleaningSuggestionsLogic = kea<pathCleaningSuggestionsLogicType
     selectors({
         latestSuggestion: [
             (s) => [s.suggestions, s.handledIds],
-            (suggestions, handledIds): WebAnalyticsPathCleaningSuggestionApi | null =>
+            (suggestions, handledIds): PathCleaningSuggestionIssueApi | null =>
                 suggestions.find((suggestion) => !handledIds.includes(suggestion.id)) ?? null,
         ],
     }),
@@ -78,7 +96,7 @@ export const pathCleaningSuggestionsLogic = kea<pathCleaningSuggestionsLogicType
                 return
             }
             try {
-                await webAnalyticsPathCleaningSuggestionsDismiss(String(values.currentTeamId), id)
+                await api.update(`api/projects/${values.currentTeamId}/health_issues/${id}/`, { dismissed: true })
             } catch {
                 actions.unhandleSuggestion(id)
                 lemonToast.error('Could not dismiss the suggestion. Please try again.')

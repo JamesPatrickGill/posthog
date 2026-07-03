@@ -3,12 +3,12 @@ from unittest.mock import patch
 
 from parameterized import parameterized
 
-from products.web_analytics.backend.models import WebAnalyticsPathCleaningSuggestion
 from products.web_analytics.backend.path_cleaning_suggestions import service
 from products.web_analytics.backend.path_cleaning_suggestions.prompts import SuggestedRule, SuggestedRulesResponse
 from products.web_analytics.backend.path_cleaning_suggestions.service import (
     AnnotatedRule,
     apply_suggestions_to_team,
+    build_suggestion_payload,
     generate_suggestions_for_team,
     validate_and_annotate_rules,
 )
@@ -138,7 +138,6 @@ class TestGenerateSuggestionsForTeam(BaseTest):
         self.assertEqual(result.status, "skipped_configured")
         mock_count.assert_not_called()
         mock_llm.assert_not_called()
-        self.assertEqual(WebAnalyticsPathCleaningSuggestion.objects.for_team(self.team.id).count(), 0)
 
     def test_skips_low_cardinality(self) -> None:
         self.team.path_cleaning_filters = []
@@ -153,7 +152,7 @@ class TestGenerateSuggestionsForTeam(BaseTest):
         self.assertEqual(result.distinct_path_count, 3)
         mock_llm.assert_not_called()
 
-    def test_generates_validates_and_stores(self) -> None:
+    def test_generates_and_validates(self) -> None:
         self.team.path_cleaning_filters = []
         self.team.save()
         llm_response = SuggestedRulesResponse(
@@ -168,22 +167,141 @@ class TestGenerateSuggestionsForTeam(BaseTest):
             patch.object(service, "sample_pathnames", return_value=SAMPLE_PATHS),
             patch.object(service, "call_llm_for_rules", return_value=llm_response),
         ):
-            result = generate_suggestions_for_team(self.team, store=True, visited_within_days=30)
+            result = generate_suggestions_for_team(self.team, visited_within_days=30)
 
         self.assertEqual(result.status, "generated")
         self.assertEqual(len(result.rules), 1)  # invalid/no-match rule dropped by validation
-        assert result.suggestion_id is not None
-        row = WebAnalyticsPathCleaningSuggestion.objects.for_team(self.team.id).get(id=result.suggestion_id)
-        self.assertEqual(len(row.suggested_rules), 1)
-        self.assertEqual(row.distinct_path_count, 500)
-        self.assertEqual(row.status, WebAnalyticsPathCleaningSuggestion.Status.SUGGESTED)
+        payload = build_suggestion_payload(result)
+        self.assertEqual(len(payload["rules"]), 1)
+        self.assertEqual(payload["distinct_path_count"], 500)
 
     def test_error_is_captured_not_raised(self) -> None:
         self.team.path_cleaning_filters = []
         self.team.save()
         with patch.object(service, "count_distinct_pathnames", side_effect=RuntimeError("clickhouse down")):
-            result = generate_suggestions_for_team(self.team, store=True, visited_within_days=None)
+            result = generate_suggestions_for_team(self.team, visited_within_days=None)
 
         self.assertEqual(result.status, "error")
         self.assertIn("clickhouse down", result.error or "")
-        self.assertEqual(WebAnalyticsPathCleaningSuggestion.objects.for_team(self.team.id).count(), 0)
+
+    def test_visit_gate_failure_is_captured_not_raised(self) -> None:
+        # The gate query runs inside the per-team guard: a ClickHouse failure there must
+        # produce an error result, not propagate out of a cohort sweep.
+        self.team.path_cleaning_filters = []
+        self.team.save()
+        with patch.object(service, "has_recent_pageviews", side_effect=RuntimeError("clickhouse down")):
+            result = generate_suggestions_for_team(self.team, visited_within_days=30)
+
+        self.assertEqual(result.status, "error")
+        self.assertIn("clickhouse down", result.error or "")
+
+
+class TestPathCleaningSuggestionsCheck(BaseTest):
+    def _check(self):
+        from products.web_analytics.backend.temporal.health_checks.path_cleaning_suggestions import (
+            PathCleaningSuggestionsCheck,
+        )
+
+        return PathCleaningSuggestionsCheck()
+
+    def _generated_result(self) -> "service.TeamSuggestionResult":
+        return service.TeamSuggestionResult(
+            team_id=self.team.id,
+            status="generated",
+            rules=[AnnotatedRule(regex=r"/u/\d+", alias="/u/<id>", order=0, reason="", match_count=2, examples=[])],
+            sampled_path_count=4,
+            distinct_path_count=500,
+            existing_rule_count=0,
+            model="claude-haiku-4-5",
+        )
+
+    def test_existing_active_issue_is_reemitted_without_llm(self) -> None:
+        # If this breaks, every scheduled run re-bills the LLM for every enrolled team and
+        # silently replaces suggestions users are mid-review on.
+        from posthog.models.health_issue import HealthIssue
+
+        from products.web_analytics.backend.temporal.health_checks import path_cleaning_suggestions as check_module
+
+        self.team.path_cleaning_filters = []
+        self.team.save()
+        issue, _ = HealthIssue.upsert_issue(
+            team_id=self.team.id,
+            kind="path_cleaning_suggestions",
+            severity=HealthIssue.Severity.INFO,
+            payload={
+                "rules": [{"regex": "/a", "alias": "/b"}],
+                "model": "m",
+                "sampled_path_count": 1,
+                "distinct_path_count": 100,
+            },
+            hash_keys=[],
+        )
+        with (
+            self.settings(WEB_ANALYTICS_PATH_CLEANING_SUGGESTIONS_TEAM_IDS=[self.team.id]),
+            patch.object(check_module, "generate_suggestions_for_team") as mock_generate,
+        ):
+            results = self._check().detect([self.team.id])
+
+        mock_generate.assert_not_called()
+        self.assertEqual(results[self.team.id][0].payload, issue.payload)
+
+    def test_configured_team_is_reported_healthy(self) -> None:
+        # A team that configured rules (via apply or by hand) must come back healthy so the
+        # framework auto-resolves its suggestion — otherwise applied suggestions linger forever.
+        from products.web_analytics.backend.temporal.health_checks import path_cleaning_suggestions as check_module
+
+        self.team.path_cleaning_filters = [{"regex": "/a", "alias": "/b", "order": 0}]
+        self.team.save()
+        with (
+            self.settings(WEB_ANALYTICS_PATH_CLEANING_SUGGESTIONS_TEAM_IDS=[self.team.id]),
+            patch.object(check_module, "generate_suggestions_for_team") as mock_generate,
+        ):
+            results = self._check().detect([self.team.id])
+
+        mock_generate.assert_not_called()
+        self.assertEqual(results, {})
+
+    def test_empty_generation_stores_nothing(self) -> None:
+        # An empty suggestion must not create an issue — it would shadow nothing useful and
+        # surface a rule-less banner.
+        from products.web_analytics.backend.temporal.health_checks import path_cleaning_suggestions as check_module
+
+        self.team.path_cleaning_filters = []
+        self.team.save()
+        empty = self._generated_result()
+        empty.rules = []
+        with (
+            self.settings(WEB_ANALYTICS_PATH_CLEANING_SUGGESTIONS_TEAM_IDS=[self.team.id]),
+            patch.object(check_module, "generate_suggestions_for_team", return_value=empty),
+        ):
+            results = self._check().detect([self.team.id])
+
+        self.assertEqual(results, {})
+
+    def test_generated_rules_become_an_info_issue(self) -> None:
+        from posthog.models.health_issue import HealthIssue
+
+        from products.web_analytics.backend.temporal.health_checks import path_cleaning_suggestions as check_module
+
+        self.team.path_cleaning_filters = []
+        self.team.save()
+        with (
+            self.settings(WEB_ANALYTICS_PATH_CLEANING_SUGGESTIONS_TEAM_IDS=[self.team.id]),
+            patch.object(check_module, "generate_suggestions_for_team", return_value=self._generated_result()),
+        ):
+            results = self._check().detect([self.team.id])
+
+        self.assertEqual(results[self.team.id][0].severity, HealthIssue.Severity.INFO)
+        self.assertEqual(len(results[self.team.id][0].payload["rules"]), 1)
+
+    def test_team_outside_cohort_is_ignored(self) -> None:
+        from products.web_analytics.backend.temporal.health_checks import path_cleaning_suggestions as check_module
+
+        with (
+            self.settings(WEB_ANALYTICS_PATH_CLEANING_SUGGESTIONS_TEAM_IDS=[]),
+            patch.object(check_module, "generate_suggestions_for_team") as mock_generate,
+        ):
+            results = self._check().detect([self.team.id])
+
+        mock_generate.assert_not_called()
+        self.assertEqual(results, {})

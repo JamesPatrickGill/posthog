@@ -606,6 +606,11 @@ export interface PatchedWebAnalyticsFilterPresetApi {
     readonly last_modified_by?: UserBasicApi
 }
 
+export interface ApplyPathCleaningSuggestionResponseApi {
+    /** Number of rules merged into the team's path_cleaning_filters. */
+    applied: number
+}
+
 export interface PathCleaningExampleApi {
     /** A real sampled path before this rule is applied. */
     before: string
@@ -628,40 +633,29 @@ export interface SuggestedRuleApi {
     examples: PathCleaningExampleApi[]
 }
 
-export interface WebAnalyticsPathCleaningSuggestionApi {
-    readonly id: string
-    readonly created_at: string
-    /** suggested, applied, or dismissed. */
-    readonly status: string
-    readonly model: string
-    /** Validated path-cleaning rules proposed for this team. */
-    readonly suggested_rules: readonly SuggestedRuleApi[]
-    readonly sampled_path_count: number
-    readonly distinct_path_count: number
-    readonly existing_rule_count: number
-}
-
-export interface PaginatedWebAnalyticsPathCleaningSuggestionListApi {
-    count: number
-    /** @nullable */
-    next?: string | null
-    /** @nullable */
-    previous?: string | null
-    results: WebAnalyticsPathCleaningSuggestionApi[]
-}
-
-export interface ApplyPathCleaningSuggestionResponseApi {
-    /** Number of rules merged into the team's path_cleaning_filters. */
-    applied: number
-    /** The suggestion, now marked applied. */
-    suggestion: WebAnalyticsPathCleaningSuggestionApi
+/**
+ * A path-cleaning suggestion, stored as a `path_cleaning_suggestions` health issue.
+ */
+export interface PathCleaningSuggestionIssueApi {
+    /** Health-issue id; pass it to the apply endpoint or the health-issues API. */
+    id: string
+    /** When the suggestion was generated (ISO 8601). */
+    created_at: string
+    /** Validated path-cleaning rules proposed for this team, most specific first. */
+    rules: SuggestedRuleApi[]
+    /** LLM that generated the rules. */
+    model: string
+    /** How many real paths were sampled for generation. */
+    sampled_path_count: number
+    /** Distinct pathnames seen in the sampling window. */
+    distinct_path_count: number
 }
 
 export interface GeneratePathCleaningSuggestionResponseApi {
     /** generated, skipped_low_cardinality, skipped_no_paths, skipped_configured, or error. */
     status: string
-    /** The created suggestion when status is generated, else null. */
-    suggestion?: WebAnalyticsPathCleaningSuggestionApi | null
+    /** The stored suggestion when status is generated, else null. */
+    suggestion?: PathCleaningSuggestionIssueApi | null
 }
 
 export type HeatmapScreenshotsContentRetrieveParams = {
@@ -898,15 +892,4 @@ export type WebAnalyticsFilterPresetsListParams = {
      */
     offset?: number
     short_id?: string
-}
-
-export type WebAnalyticsPathCleaningSuggestionsListParams = {
-    /**
-     * Number of results to return per page.
-     */
-    limit?: number
-    /**
-     * The initial index from which to return the results.
-     */
-    offset?: number
 }
