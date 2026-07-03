@@ -21,8 +21,8 @@
             "type": "number"
         },
         "status": {
-            "description": "* `draft` - Draft\n* `active` - Active\n* `archived` - Archived",
-            "enum": ["active", "archived", "draft"],
+            "description": "* `draft` - Draft\n* `active` - Active\n* `archived` - Archived\n* `paused` - Paused",
+            "enum": ["active", "archived", "draft", "paused"],
             "type": "string"
         },
         "updated_at": {
