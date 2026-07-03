@@ -2325,7 +2325,7 @@ class TestLoginAsFromTicket(APIBaseTest):
         )
 
     def _as_internal_team(self):
-        return patch("ee.admin.loginas_views.POSTHOG_INTERNAL_TEAM_ID", self.team.pk)
+        return override_settings(POSTHOG_INTERNAL_TEAM_ID=self.team.pk)
 
     def test_logs_in_as_customer_from_ticket(self):
         ticket = self._create_ticket({"email": "customer@posthog.com"})

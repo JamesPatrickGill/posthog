@@ -11,7 +11,6 @@ import posthoganalytics
 from loginas.utils import is_impersonated_session
 from loginas.views import user_login as loginas_user_login
 
-from posthog.constants import POSTHOG_INTERNAL_TEAM_ID
 from posthog.helpers.impersonation import get_original_user_from_session
 from posthog.middleware import (
     IMPERSONATION_READ_ONLY_SESSION_KEY,
@@ -26,11 +25,19 @@ REGION_DOMAINS: dict[str, str] = {
 }
 
 
-def _get_ticket(ticket_id: str):
-    """Fetch a support ticket by ID, restricting to the internal team. Returns None if not found."""
+def _get_ticket(ticket_id: str, user) -> "object | None":
+    """Fetch a support ticket by ID, restricted to PostHog's internal support team.
+
+    In local dev (DEBUG — asserted off in production) the lookup falls back to the
+    staff user's current project, so the flow is testable without recreating the
+    internal project id or setting POSTHOG_INTERNAL_TEAM_ID.
+    """
     Ticket = apps.get_model("conversations", "Ticket")
+    team_id = settings.POSTHOG_INTERNAL_TEAM_ID
+    if settings.DEBUG and user.current_team_id:
+        team_id = user.current_team_id
     try:
-        return Ticket.objects.get(id=ticket_id, team_id=POSTHOG_INTERNAL_TEAM_ID)
+        return Ticket.objects.get(id=ticket_id, team_id=team_id)
     except Ticket.DoesNotExist:
         return None
 
@@ -152,14 +159,16 @@ def loginas_user_from_ticket(request):
     except ValueError:
         return JsonResponse({"error": "ticket_id must be a valid UUID"}, status=400)
 
-    ticket = _get_ticket(ticket_id)
+    ticket = _get_ticket(ticket_id, request.user)
     if not ticket:
-        return JsonResponse(
-            {
-                "error": f"Ticket not found. Note that ticket impersonation is only possible from project {POSTHOG_INTERNAL_TEAM_ID} in the US region."
-            },
-            status=404,
-        )
+        if settings.DEBUG:
+            error = "Ticket not found in your current project (in local dev, tickets are looked up in the project you're currently in)."
+        else:
+            error = (
+                f"Ticket not found. Ticket impersonation is only possible for tickets in "
+                f"project {settings.POSTHOG_INTERNAL_TEAM_ID} (PostHog's internal support project, US region)."
+            )
+        return JsonResponse({"error": error}, status=404)
 
     # Block when the claimed identity was assessed but not attested (False). A null
     # value means the signal was never assessed (e.g. pre-dates it), which the UI

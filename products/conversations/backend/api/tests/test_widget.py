@@ -1,6 +1,6 @@
 import uuid
 
-from posthog.test.base import BaseTest
+from posthog.test.base import BaseTest, override_settings
 from unittest.mock import patch
 
 from parameterized import parameterized
@@ -552,7 +552,7 @@ class TestWidgetAPI(BaseTest):
         ]
     )
     def test_infers_region_for_internal_team(self, _name, current_url, expected_region):
-        with patch("products.conversations.backend.api.widget.POSTHOG_INTERNAL_TEAM_ID", self.team.pk):
+        with override_settings(POSTHOG_INTERNAL_TEAM_ID=self.team.pk):
             response = self.client.post(
                 "/api/conversations/v1/widget/message",
                 {

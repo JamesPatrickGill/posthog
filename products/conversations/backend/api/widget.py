@@ -15,6 +15,7 @@ import uuid
 import logging
 from urllib.parse import urlparse
 
+from django.conf import settings
 from django.db.models import F, Q
 
 from rest_framework import serializers, status
@@ -25,7 +26,6 @@ from rest_framework.response import Response
 from rest_framework.views import APIView
 
 from posthog.auth import WidgetAuthentication
-from posthog.constants import POSTHOG_INTERNAL_TEAM_ID
 from posthog.event_usage import report_team_action
 from posthog.exceptions_capture import capture_exception
 from posthog.models import Team
@@ -151,7 +151,7 @@ class WidgetMessageView(APIView):
 
         # For PostHog's internal support project, infer the region from the app URL
         # so ticket-based "login as customer" can route staff to the right region.
-        if team.pk == POSTHOG_INTERNAL_TEAM_ID and (current_url := session_context.get("current_url")):
+        if team.pk == settings.POSTHOG_INTERNAL_TEAM_ID and (current_url := session_context.get("current_url")):
             if region := _infer_posthog_region(current_url):
                 traits["region"] = region
 

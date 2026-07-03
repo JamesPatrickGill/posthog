@@ -67,6 +67,11 @@ GITHUB_SECRET_ALERT_RELAY_URL: str | None = get_from_env("GITHUB_SECRET_ALERT_RE
 # Override in tests via @override_settings to point at a per-test team.
 LLM_ANALYTICS_INTERNAL_TEAM_ID: int = 2
 
+# PostHog's own internal support project (US cloud). Support tickets and ticket-based
+# "login as customer" impersonation are scoped to this team. Set the env var in local
+# dev to point at your dev project; override in tests via @override_settings.
+POSTHOG_INTERNAL_TEAM_ID: int = get_from_env("POSTHOG_INTERNAL_TEAM_ID", 2, type_cast=int)
+
 # Duckgres - URL, internal secret, and PG endpoint for the managed warehouse service
 DUCKGRES_API_URL: str | None = get_from_env("DUCKGRES_API_URL", optional=True)
 DUCKGRES_INTERNAL_SECRET: str | None = get_from_env("DUCKGRES_INTERNAL_SECRET", optional=True)
