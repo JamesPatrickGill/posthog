@@ -1,5 +1,6 @@
 import json
 import uuid
+from typing import TYPE_CHECKING, cast
 from urllib.parse import urlencode
 
 from django.apps import apps
@@ -20,26 +21,29 @@ from posthog.middleware import (
 )
 from posthog.models import User
 
+if TYPE_CHECKING:
+    from products.conversations.backend.models import Ticket
+
 REGION_DOMAINS: dict[str, str] = {
     "US": "us.posthog.com",
     "EU": "eu.posthog.com",
 }
 
 
-def _get_ticket(ticket_id: str, user) -> "object | None":
+def _get_ticket(ticket_id: str, user: User) -> "Ticket | None":
     """Fetch a support ticket by ID, restricted to PostHog's internal support team.
 
     In local dev (DEBUG — asserted off in production) the lookup falls back to the
     staff user's current project, so the flow is testable without recreating the
     internal project id or setting POSTHOG_INTERNAL_TEAM_ID.
     """
-    Ticket = apps.get_model("conversations", "Ticket")
+    ticket_model = apps.get_model("conversations", "Ticket")
     team_id = settings.POSTHOG_INTERNAL_TEAM_ID
     if settings.DEBUG and user.current_team_id:
         team_id = user.current_team_id
     try:
-        return Ticket.objects.get(id=ticket_id, team_id=team_id)
-    except Ticket.DoesNotExist:
+        return cast("Ticket", ticket_model.objects.get(id=ticket_id, team_id=team_id))
+    except ticket_model.DoesNotExist:
         return None
 
 
