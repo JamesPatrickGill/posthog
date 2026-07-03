@@ -4,6 +4,7 @@ from urllib.parse import urlencode
 
 from django.apps import apps
 from django.conf import settings
+from django.db.models import Q
 from django.http import Http404, JsonResponse
 from django.views.decorators.http import require_http_methods
 
@@ -193,13 +194,25 @@ def loginas_user_from_ticket(request):
             redirect_url += f"?{urlencode({'q': email})}"
         return JsonResponse({"redirect_region": ticket_region, "redirect_url": redirect_url})
 
-    email = ticket.anonymous_traits.get("email") if ticket.anonymous_traits else None
-    if not email:
-        return JsonResponse({"error": "Ticket has no associated email"}, status=400)
+    if ticket.identity_verified and ticket.channel_source == "widget":
+        # On HMAC-verified widget tickets the attested identity is distinct_id; the email
+        # trait stays customer-mutable on every widget message, so resolving by it would
+        # let a verified ticket point login-as at an unrelated account. Match users
+        # identified by distinct_id or by email — both compared against the attested value,
+        # with no fallback to the mutable trait.
+        target_user = User.objects.filter(
+            Q(distinct_id=ticket.distinct_id) | Q(email__iexact=ticket.distinct_id)
+        ).first()
+        if not target_user:
+            return JsonResponse({"error": "No user found for this ticket's verified identity"}, status=404)
+    else:
+        email = ticket.anonymous_traits.get("email") if ticket.anonymous_traits else None
+        if not email:
+            return JsonResponse({"error": "Ticket has no associated email"}, status=400)
 
-    target_user = User.objects.filter(email__iexact=email).first()
-    if not target_user:
-        return JsonResponse({"error": "No user found for this email"}, status=404)
+        target_user = User.objects.filter(email__iexact=email).first()
+        if not target_user:
+            return JsonResponse({"error": "No user found for this email"}, status=404)
 
     reason = f"Support ticket #{ticket.ticket_number}"
 

@@ -2402,7 +2402,9 @@ class TestLoginAsFromTicket(APIBaseTest):
     def test_identity_verified_gates_login(self, _name, identity_verified, expected_status, expected_email):
         ticket = self._create_ticket({"email": "customer@posthog.com"})
         ticket.identity_verified = identity_verified
-        ticket.save(update_fields=["identity_verified"])
+        # Verified widget tickets resolve from the attested distinct_id, not the email trait.
+        ticket.distinct_id = "customer@posthog.com"
+        ticket.save(update_fields=["identity_verified", "distinct_id"])
         with self._as_internal_team():
             res = self._post({"ticket_id": str(ticket.id)})
         assert res.status_code == expected_status
@@ -2412,6 +2414,29 @@ class TestLoginAsFromTicket(APIBaseTest):
             assert impersonated_email == self.user.email
         else:
             assert impersonated_email == expected_email
+
+    def test_verified_ticket_resolves_from_attested_identity_not_email_trait(self):
+        # A customer can mutate the email trait on any widget message, so a verified
+        # ticket claiming someone else's email must impersonate the attested identity.
+        attacker = User.objects.create_and_join(self.organization, email="attacker@posthog.com", password="123456")
+        ticket = self._create_ticket({"email": "customer@posthog.com"})
+        ticket.identity_verified = True
+        ticket.distinct_id = str(attacker.distinct_id)
+        ticket.save(update_fields=["identity_verified", "distinct_id"])
+        with self._as_internal_team():
+            res = self._post({"ticket_id": str(ticket.id)})
+        assert res.status_code == 200
+        assert self.client.get("/api/users/@me").json()["email"] == "attacker@posthog.com"
+
+    def test_verified_ticket_with_unresolvable_identity_does_not_fall_back_to_email(self):
+        ticket = self._create_ticket({"email": "customer@posthog.com"})
+        ticket.identity_verified = True
+        ticket.distinct_id = "no-such-distinct-id"
+        ticket.save(update_fields=["identity_verified", "distinct_id"])
+        with self._as_internal_team():
+            res = self._post({"ticket_id": str(ticket.id)})
+        assert res.status_code == 404
+        assert self.client.get("/api/users/@me").json()["email"] == self.user.email
 
     @parameterized.expand(
         [
