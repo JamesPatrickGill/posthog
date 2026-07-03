@@ -2,6 +2,8 @@ import { useActions, useValues } from 'kea'
 import { router } from 'kea-router'
 import { useRef } from 'react'
 
+import { AIConsentPopoverWrapper } from 'scenes/settings/organization/AIConsentPopoverWrapper'
+
 import {
     Composer,
     DEFAULT_SUGGESTIONS_DATA,
@@ -16,9 +18,9 @@ import { taskTrackerSceneLogic } from '../taskTrackerSceneLogic'
 import { RepositorySelector } from './RepositorySelector'
 
 export function TaskComposer(): JSX.Element {
-    const { submitNewTask, setNewTaskData, setActiveSuggestionGroup, applySuggestion } =
+    const { submitNewTask, setNewTaskData, setActiveSuggestionGroup, applySuggestion, clearConsentBlock } =
         useActions(taskTrackerSceneLogic)
-    const { newTaskData, isSubmittingTask, activeSuggestionGroup, headline, sendDisabledReason } =
+    const { newTaskData, isSubmittingTask, activeSuggestionGroup, headline, sendDisabledReason, consentBlocked } =
         useValues(taskTrackerSceneLogic)
 
     const textAreaRef = useRef<HTMLTextAreaElement>(null)
@@ -82,7 +84,16 @@ export function TaskComposer(): JSX.Element {
                                 </Composer.Footer>
                             </Composer.Frame>
                             <Suggestions.Dropdown />
-                            <Composer.Submit data-attr="task-composer-send" />
+                            <AIConsentPopoverWrapper
+                                placement="bottom-end"
+                                showArrow
+                                ignoreDismissal
+                                hidden={!consentBlocked}
+                                onApprove={() => submitNewTask()}
+                                onDismiss={() => clearConsentBlock()}
+                            >
+                                <Composer.Submit data-attr="task-composer-send" />
+                            </AIConsentPopoverWrapper>
                         </Composer.Root>
                     </div>
 

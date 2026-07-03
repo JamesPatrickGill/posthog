@@ -3,6 +3,7 @@ import { forms } from 'kea-forms'
 
 import { lemonToast } from 'lib/lemon-ui/LemonToast'
 import { projectLogic } from 'scenes/projectLogic'
+import { aiConsentLogic } from 'scenes/settings/organization/aiConsentLogic'
 
 import {
     DEFAULT_COMPOSER_EFFORT,
@@ -76,6 +77,8 @@ export const runInteractionLogic = kea<runInteractionLogicType>([
             ['currentProjectId'],
             runStreamLogic({ streamKey: props.streamKey ?? props.runId }),
             ['currentRunStatus', 'pendingPermissionRequest', 'respondingToPermission', 'isThinking'],
+            aiConsentLogic,
+            ['dataProcessingAccepted'],
         ],
         actions: [
             runStreamLogic({ streamKey: props.streamKey ?? props.runId }),
@@ -85,6 +88,8 @@ export const runInteractionLogic = kea<runInteractionLogicType>([
 
     actions({
         setSending: (sending: boolean) => ({ sending }),
+        blockOnConsent: true,
+        clearConsentBlock: true,
         // Start a fresh run on the task, seeded with this message and chained from the finished run.
         startNewRun: (content: string) => ({ content }),
         setStartingRun: (starting: boolean) => ({ starting }),
@@ -117,6 +122,14 @@ export const runInteractionLogic = kea<runInteractionLogicType>([
             false,
             {
                 setSending: (_, { sending }) => sending,
+            },
+        ],
+        consentBlocked: [
+            false,
+            {
+                blockOnConsent: () => true,
+                clearConsentBlock: () => false,
+                submitComposerForm: () => false,
             },
         ],
         startingRun: [
@@ -189,6 +202,10 @@ export const runInteractionLogic = kea<runInteractionLogicType>([
             submit: ({ draft }) => {
                 const content = draft.trim()
                 if (!content) {
+                    return
+                }
+                if (!values.dataProcessingAccepted) {
+                    actions.blockOnConsent()
                     return
                 }
                 // A finished run can't take a follow-up signal — send starts a fresh run instead, seeded with

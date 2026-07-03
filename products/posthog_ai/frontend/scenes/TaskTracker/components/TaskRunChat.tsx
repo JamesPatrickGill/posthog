@@ -1,5 +1,7 @@
 import { BindLogic, useActions, useValues } from 'kea'
 
+import { AIConsentPopoverWrapper } from 'scenes/settings/organization/AIConsentPopoverWrapper'
+
 import { runInteractionLogic, type RunInteractionLogicProps } from 'products/posthog_ai/frontend/api/logics'
 import { Composer, QueuedMessageList } from 'products/posthog_ai/frontend/api/primitives'
 // Eager, NOT the lazy `api/readableRun` facade: the runner scene is already a route-split chunk and the run
@@ -57,9 +59,16 @@ export function TaskRunChat({ taskId, runId, streamKey, onRunStarted }: TaskRunC
 }
 
 function TaskRunChatContent({ logicProps }: { logicProps: RunInteractionLogicProps }): JSX.Element {
-    const { composerForm, isSubmitting, isBusy, queuedMessages, isTerminal, selectedModel, selectedEffort } = useValues(
-        runInteractionLogic(logicProps)
-    )
+    const {
+        composerForm,
+        isSubmitting,
+        isBusy,
+        queuedMessages,
+        isTerminal,
+        selectedModel,
+        selectedEffort,
+        consentBlocked,
+    } = useValues(runInteractionLogic(logicProps))
     const {
         setComposerFormValues,
         submitComposerForm,
@@ -68,6 +77,7 @@ function TaskRunChatContent({ logicProps }: { logicProps: RunInteractionLogicPro
         removeQueuedMessage,
         setModel,
         setEffort,
+        clearConsentBlock,
     } = useActions(runInteractionLogic(logicProps))
 
     return (
@@ -120,7 +130,16 @@ function TaskRunChatContent({ logicProps }: { logicProps: RunInteractionLogicPro
                                 />
                             </Composer.Footer>
                         </Composer.Frame>
-                        <Composer.Submit data-attr="sandbox-composer-send" />
+                        <AIConsentPopoverWrapper
+                            placement="top-end"
+                            showArrow
+                            ignoreDismissal
+                            hidden={!consentBlocked}
+                            onApprove={() => submitComposerForm()}
+                            onDismiss={() => clearConsentBlock()}
+                        >
+                            <Composer.Submit data-attr="sandbox-composer-send" />
+                        </AIConsentPopoverWrapper>
                     </Composer.Root>
                 </RunSurface.Composer>
             </div>
