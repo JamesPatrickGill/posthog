@@ -182,10 +182,11 @@ def loginas_user_from_ticket(request):
         )
 
     # When the ticket originated in another region, point staff at that region's
-    # admin rather than trying (and failing) to resolve the user locally.
+    # admin rather than trying (and failing) to resolve the user locally. The region
+    # trait is customer-suppliable, so unknown values fall through to a local lookup.
     ticket_region = ((ticket.anonymous_traits or {}).get("region") or "").upper()
     current_region = (settings.CLOUD_DEPLOYMENT or "").upper()
-    if ticket_region and current_region in REGION_DOMAINS and ticket_region != current_region:
+    if ticket_region in REGION_DOMAINS and current_region in REGION_DOMAINS and ticket_region != current_region:
         email = (ticket.anonymous_traits or {}).get("email", "")
         redirect_url = f"https://{REGION_DOMAINS[ticket_region]}/admin/posthog/user/"
         if email:

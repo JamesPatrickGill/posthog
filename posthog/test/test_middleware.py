@@ -2371,6 +2371,15 @@ class TestLoginAsFromTicket(APIBaseTest):
             res = self._post({"ticket_id": str(ticket.id)})
         assert res.status_code == 404
 
+    def test_unknown_region_falls_back_to_local_login(self):
+        # The region trait is customer-suppliable — an unknown value must not 500.
+        ticket = self._create_ticket({"email": "customer@posthog.com", "region": "APAC"})
+        with self._as_internal_team():
+            res = self._post({"ticket_id": str(ticket.id)})
+        assert res.status_code == 200
+        assert res.json()["success"] is True
+        assert self.client.get("/api/users/@me").json()["email"] == "customer@posthog.com"
+
     def test_cross_region_ticket_returns_redirect_without_impersonating(self):
         ticket = self._create_ticket({"email": "customer@posthog.com", "region": "EU"})
         with self._as_internal_team():
