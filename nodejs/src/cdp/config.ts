@@ -1,6 +1,5 @@
 import {
     KAFKA_APP_METRICS_2,
-    KAFKA_CDP_BATCH_HOGFLOW_REQUESTS,
     KAFKA_CDP_CLICKHOUSE_PRECALCULATED_PERSON_PROPERTIES,
     KAFKA_CDP_CLICKHOUSE_PREFILTERED_EVENTS,
     KAFKA_EVENTS_JSON,
@@ -91,12 +90,6 @@ export type CdpConfig = ClickhouseConfig & {
     CDP_SES_RATE_LIMIT_CAPACITY: number
     CDP_SES_RATE_LIMIT_THROTTLED_POLL_DELAY_MS: number
 
-    // When true, the email worker dequeues ordered by `dequeue_seq` (per-team
-    // round-robin) instead of FIFO. `dequeue_seq` is always assigned at insert
-    // (cheap), so flipping this on/off is purely a worker-side decision —
-    // rollback is a single env-var change with no SQL revert needed.
-    CDP_CYCLOTRON_EMAIL_FAIR_DEQUEUE: boolean
-
     CDP_EVENT_PROCESSOR_EXECUTE_FIRST_STEP: boolean
     CDP_GOOGLE_ADWORDS_DEVELOPER_TOKEN: string
     CDP_FETCH_RETRIES: number
@@ -119,8 +112,6 @@ export type CdpConfig = ClickhouseConfig & {
     CDP_PREFILTERED_EVENTS_PRODUCER: CdpProducerName
     CDP_PRECALCULATED_PERSON_PROPERTIES_TOPIC: string
     CDP_PRECALCULATED_PERSON_PROPERTIES_PRODUCER: CdpProducerName
-    CDP_BATCH_HOGFLOW_REQUESTS_TOPIC: string
-    CDP_BATCH_HOGFLOW_REQUESTS_PRODUCER: CdpProducerName
     CDP_WAREHOUSE_SOURCE_WEBHOOKS_TOPIC: string
     CDP_WAREHOUSE_SOURCE_WEBHOOKS_PRODUCER: CdpProducerName
 
@@ -139,7 +130,6 @@ export type CdpConfig = ClickhouseConfig & {
     // Destination migration diffing
     DESTINATION_MIGRATION_DIFFING_ENABLED: boolean
 
-    CDP_BATCH_WORKFLOW_PRODUCER_BATCH_SIZE: number
     CDP_BATCH_WORKFLOW_MAX_AUDIENCE_SIZE: number
 
     // Cyclotron Node (node postgres job queue)
@@ -215,8 +205,6 @@ export function getDefaultCdpConfig(): CdpConfig {
         CDP_SES_RATE_LIMIT_CAPACITY: 50,
         CDP_SES_RATE_LIMIT_THROTTLED_POLL_DELAY_MS: 250,
 
-        CDP_CYCLOTRON_EMAIL_FAIR_DEQUEUE: false,
-
         CDP_EVENT_PROCESSOR_EXECUTE_FIRST_STEP: true,
         CDP_GOOGLE_ADWORDS_DEVELOPER_TOKEN: '',
         CDP_FETCH_RETRIES: 3,
@@ -249,8 +237,6 @@ export function getDefaultCdpConfig(): CdpConfig {
         CDP_PREFILTERED_EVENTS_PRODUCER: WARPSTREAM_CALCULATED_EVENTS_PRODUCER,
         CDP_PRECALCULATED_PERSON_PROPERTIES_TOPIC: KAFKA_CDP_CLICKHOUSE_PRECALCULATED_PERSON_PROPERTIES,
         CDP_PRECALCULATED_PERSON_PROPERTIES_PRODUCER: WARPSTREAM_CALCULATED_EVENTS_PRODUCER,
-        CDP_BATCH_HOGFLOW_REQUESTS_TOPIC: KAFKA_CDP_BATCH_HOGFLOW_REQUESTS,
-        CDP_BATCH_HOGFLOW_REQUESTS_PRODUCER: WARPSTREAM_CYCLOTRON_PRODUCER,
         CDP_WAREHOUSE_SOURCE_WEBHOOKS_TOPIC: KAFKA_WAREHOUSE_SOURCE_WEBHOOKS,
         CDP_WAREHOUSE_SOURCE_WEBHOOKS_PRODUCER: WAREHOUSE_PRODUCER,
 
@@ -276,7 +262,6 @@ export function getDefaultCdpConfig(): CdpConfig {
         // Destination migration diffing
         DESTINATION_MIGRATION_DIFFING_ENABLED: false,
 
-        CDP_BATCH_WORKFLOW_PRODUCER_BATCH_SIZE: 1,
         CDP_BATCH_WORKFLOW_MAX_AUDIENCE_SIZE: 5000,
 
         // Cyclotron Node

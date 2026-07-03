@@ -3,18 +3,11 @@ import { combineUrl } from 'kea-router'
 import { Fragment, ReactNode } from 'react'
 
 import { IconExternal } from '@posthog/icons'
-import {
-    LemonButton,
-    LemonInput,
-    LemonSkeleton,
-    LemonTableColumns,
-    LemonTag,
-    LemonTagType,
-    Link,
-} from '@posthog/lemon-ui'
+import { LemonButton, LemonInput, LemonSkeleton, LemonTableColumns, LemonTag, Link } from '@posthog/lemon-ui'
 
 import { TZLabel } from 'lib/components/TZLabel'
 import { dayjs } from 'lib/dayjs'
+import { LemonCard } from 'lib/lemon-ui/LemonCard'
 import { cn } from 'lib/utils/css-classes'
 import { humanFriendlyDuration } from 'lib/utils/durations'
 import { pluralize } from 'lib/utils/strings'
@@ -24,7 +17,9 @@ import { urls } from 'scenes/urls'
 import { SceneContent } from '~/layout/scenes/components/SceneContent'
 import { SceneTitleSection } from '~/layout/scenes/components/SceneTitleSection'
 
+import { PullRequestStateTag } from '../components/PullRequestStateTag'
 import { RunJobsTable, RunsTable, formatCost } from '../components/runTables'
+import { StatTile } from '../components/StatTile'
 import { WorkflowHealthTable } from '../components/WorkflowHealthTable'
 import type { PRCostSummaryApi, PullRequestApi } from '../generated/api.schemas'
 import { githubCommitUrl, githubPrUrl } from '../lib/github'
@@ -46,12 +41,6 @@ export const scene: SceneExport<PullRequestDetailLogicProps> = {
         number: parseInt(number, 10),
         sourceId: source ?? null,
     }),
-}
-
-const STATE_TAG: Record<string, { label: string; type: LemonTagType }> = {
-    open: { label: 'Open', type: 'primary' },
-    merged: { label: 'Merged', type: 'success' },
-    closed: { label: 'Closed', type: 'danger' },
 }
 
 function gapBetween(from: string, to: string): string {
@@ -87,21 +76,19 @@ function roundStart(group: PrCommitRuns): string | null {
     return starts.length ? starts.reduce((min, at) => (at < min ? at : min)) : group.latestStart
 }
 
-// Fixed row heights so the dots and connectors line up across columns regardless of label/pill
-// height — the previous free-flow layout drifted out of alignment and read as glitchy.
+// Fixed row heights so dots and connectors line up across columns regardless of label/pill height.
 const ROW_LABEL = 'flex h-5 items-center'
 const ROW_DOT = 'flex h-3 items-center'
 const ROW_SUB = 'flex h-4 items-center'
 
-// Cap how many push nodes the strip draws so it always fits on one line (no horizontal scroll, ever).
-// Older pushes collapse into a single "+N earlier" node; every round stays reachable in the list below.
+// Cap push nodes so the strip fits on one line; older pushes collapse into a "+N earlier" node, and
+// every round stays reachable in the list below.
 const MAX_PUSH_NODES = 4
 
 /**
- * Horizontal lifecycle timeline: dots are milestones, the pill above each connector is the gap
- * between them — where the hours actually went. Chronological — a PR's head-SHA runs can start (and
- * finish) after the merge. Each push (CI round) is its own node, red when that round had a failure;
- * clicking it jumps to that round's run table below.
+ * Horizontal lifecycle timeline: dots are milestones, the pill above each connector is the gap between
+ * them. Chronological — a PR's head-SHA runs can start (and finish) after the merge. Each push is its own
+ * node, red when that round had a failure; clicking it jumps to that round's run table below.
  */
 function LifecycleStrip({ summary, openedAt, commitGroups }: LifecycleStripProps): JSX.Element {
     const nodes: TimelineNode[] = [
@@ -113,9 +100,8 @@ function LifecycleStrip({ summary, openedAt, commitGroups }: LifecycleStripProps
             sublabel: <TZLabel time={openedAt} />,
         },
     ]
-    // Only the most recent pushes get their own node; the rest collapse into one summary node so the
-    // strip never needs to scroll. commitGroups is newest-first. Don't collapse a single straggler —
-    // a "+1 earlier" node saves nothing, so only summarize when at least two would be hidden.
+    // Only recent pushes get their own node; the rest collapse into one summary node so the strip never
+    // scrolls. commitGroups is newest-first. Don't collapse a single straggler — "+1 earlier" saves nothing.
     const collapseOlder = commitGroups.length > MAX_PUSH_NODES + 1
     const shownRounds = collapseOlder ? commitGroups.slice(0, MAX_PUSH_NODES) : commitGroups
     const hiddenRounds = collapseOlder ? commitGroups.slice(MAX_PUSH_NODES) : []
@@ -191,14 +177,13 @@ function LifecycleStrip({ summary, openedAt, commitGroups }: LifecycleStripProps
     const connector = (dashed: boolean | undefined): string =>
         dashed ? 'w-full border-t border-dashed border-border-bold' : 'h-px w-full bg-border-bold'
 
-    // Connector widths are proportional to real elapsed time, so the strip reads as a timeline —
-    // a long review wait visibly dominates a quick queue. Floor each segment so a near-instant gap
-    // still draws a visible connector instead of collapsing to nothing.
+    // Connector widths are proportional to elapsed time, so the strip reads as a timeline. Floor each
+    // segment so a near-instant gap still draws a visible connector instead of collapsing to nothing.
     const totalSeconds = Math.max(1, dayjs(nodes[nodes.length - 1].at).diff(dayjs(nodes[0].at), 'second'))
     const minGrow = totalSeconds * 0.04
 
     return (
-        <div className="rounded-lg border bg-surface-primary px-5 py-4">
+        <LemonCard hoverEffect={false} className="px-5 py-4">
             <div className="mb-3 flex items-baseline gap-2">
                 <span className="text-xs font-semibold tracking-wide text-secondary uppercase">Lifecycle</span>
                 <span className="text-xs text-tertiary">{subtitle}</span>
@@ -266,16 +251,14 @@ function LifecycleStrip({ summary, openedAt, commitGroups }: LifecycleStripProps
                     </span>
                 </div>
             </div>
-        </div>
+        </LemonCard>
     )
 }
 
 function MetaRow({ pullRequest, sourceId }: { pullRequest: PullRequestApi; sourceId: string | null }): JSX.Element {
-    const stateTag = STATE_TAG[pullRequest.state] ?? { label: pullRequest.state, type: 'muted' as LemonTagType }
     return (
         <div className="flex flex-wrap items-center gap-x-3 gap-y-1 text-sm">
-            <LemonTag type={stateTag.type}>{stateTag.label}</LemonTag>
-            {pullRequest.is_draft && <LemonTag type="muted">draft</LemonTag>}
+            <PullRequestStateTag state={pullRequest.state} isDraft={pullRequest.is_draft} />
             <span className="flex items-center gap-1.5">
                 {pullRequest.author.avatar_url && (
                     <img src={pullRequest.author.avatar_url} alt="" className="h-5 w-5 shrink-0 rounded-full" />
@@ -299,8 +282,8 @@ function MetaRow({ pullRequest, sourceId }: { pullRequest: PullRequestApi; sourc
     )
 }
 
-// Stable per-row key — re-runs share a runId, so the start time disambiguates attempt rows. Used for
-// both LemonTable's rowKey and the expand-state set, so expanding one attempt doesn't open the others.
+// Stable per-row key — re-runs share a runId, so start time disambiguates attempts. Used for rowKey and
+// the expand-state set, so expanding one attempt doesn't open the others.
 function runRowKey(run: WorkflowRun): string {
     return `${run.workflow}@${run.startedAt ?? run.finishedAt ?? run.runId ?? ''}`
 }
@@ -309,25 +292,14 @@ function formatMinutes(minutes: number): string {
     return `${Math.round(minutes).toLocaleString()} min`
 }
 
-/** One headline stat: small label, big number, a muted subline for the caveat/breakdown. */
-function StatCard({ label, value, sub }: { label: string; value: string; sub: ReactNode }): JSX.Element {
-    return (
-        <div className="flex min-w-44 flex-1 flex-col gap-1 rounded-lg border bg-surface-primary px-5 py-4">
-            <span className="text-xs text-secondary">{label}</span>
-            <span className="text-2xl font-semibold leading-7 tabular-nums">{value}</span>
-            <span className="text-xs text-tertiary">{sub}</span>
-        </div>
-    )
-}
-
 const VERDICT_LEGEND: { key: 'passed' | 'failed' | 'running'; dot: string; label: string }[] = [
     { key: 'passed', dot: 'bg-success', label: 'passed' },
     { key: 'failed', dot: 'bg-danger', label: 'failed' },
     { key: 'running', dot: 'bg-warning', label: 'running' },
 ]
 
-// Stroke straight from the same CSS vars the verdict dots / LemonTags use (bg-success = var(--success)),
-// so the donut arc matches the legend dots beside it and the StatusDots in the run tables exactly.
+// Stroke from the same CSS vars the verdict dots / LemonTags use, so the donut matches the legend dots
+// and the run-table StatusDots exactly.
 const DONUT_STROKE: Record<'passed' | 'failed' | 'running', string> = {
     passed: 'var(--success)',
     failed: 'var(--danger)',
@@ -398,16 +370,15 @@ interface PrSummaryCardsProps {
     commits: number
     summary: LifecycleSummary | null
     openedAt: string
-    // First load: the cards are fed by three loaders (lifecycle / runs / cost) that resolve at
-    // different times, so without this they'd pop in one at a time. Show a full skeleton row instead.
+    // First load: three loaders (lifecycle / runs / cost) resolve at different times; without this the
+    // cards pop in one at a time. Show a full skeleton row instead.
     loading: boolean
 }
 
 /**
- * Headline stats for a PR's CI: a verdict donut over all commits, billable runner minutes + estimated
- * cost (when the job-level source is synced), CI triggers, and how long the PR has been open. Cost is
- * provider-neutral and explicitly an estimate — the chip spells out the model (wall-clock × reference
- * rate) and unsettled jobs are called out as excluded.
+ * Headline stats for a PR's CI: verdict donut over all commits, billable runner minutes + estimated cost
+ * (when the job-level source is synced), CI triggers, and time open. Cost is an estimate — the chip spells
+ * out the model (wall-clock × reference rate) and excludes unsettled jobs.
  */
 function PrSummaryCards({
     cost,
@@ -447,7 +418,7 @@ function PrSummaryCards({
             )}
             <div className="flex flex-wrap items-stretch gap-3">
                 {runsTotal > 0 && (
-                    <div className="flex min-w-72 flex-1 flex-col gap-2 rounded-lg border bg-surface-primary px-5 py-4">
+                    <LemonCard hoverEffect={false} className="flex min-w-72 flex-1 flex-col gap-2 px-5 py-4">
                         <span className="text-xs text-secondary">Run verdicts · all commits &amp; re-runs</span>
                         <div className="flex items-center gap-4">
                             <VerdictDonut counts={counts} />
@@ -464,24 +435,24 @@ function PrSummaryCards({
                         <span className="text-xs text-tertiary">
                             {pluralize(runsTotal, 'run')} · {pluralize(commits, 'commit')}
                         </span>
-                    </div>
+                    </LemonCard>
                 )}
                 {costLoading && !cost ? (
                     <LemonSkeleton className="h-24 w-44" />
                 ) : showCost ? (
-                    <StatCard
+                    <StatTile
                         label="Billable CI minutes"
                         value={formatMinutes(cost.billable_minutes)}
                         sub={<>≈ {formatCost(cost.estimated_cost_usd)} estimated</>}
                     />
                 ) : null}
-                <StatCard
+                <StatTile
                     label="Pushes (CI triggers)"
                     value={pushes.toLocaleString()}
                     sub={rerunCycles > 0 ? pluralize(rerunCycles, 're-run cycle') : 'no re-runs'}
                 />
                 {openedAt && (
-                    <StatCard
+                    <StatTile
                         label={openLabel}
                         value={gapBetween(openedAt, openTo)}
                         sub={
@@ -638,9 +609,9 @@ export function PullRequestDetailScene(): JSX.Element {
                     commits={commitGroups.length}
                     summary={summary}
                     openedAt={summary?.openedAt ?? pullRequest?.created_at ?? ''}
-                    // Skeleton the whole row until the structural data (lifecycle + runs) is in — covers the
-                    // initial frame before afterMount fires too. The cost card then fills on its own once
-                    // prCost resolves. The loadFailed branch returns earlier, so !lifecycle can't hang here.
+                    // Skeleton the whole row until lifecycle + runs are in (covers the frame before
+                    // afterMount fires). The cost card fills on its own once prCost resolves. loadFailed
+                    // returns earlier, so !lifecycle can't hang here.
                     loading={!lifecycle || (prRunsLoading && runs.length === 0)}
                 />
             </div>
@@ -724,6 +695,7 @@ export function PullRequestDetailScene(): JSX.Element {
                                             }
                                             loading={runJobsLoading}
                                             embedded
+                                            aligned
                                         />
                                     )
                                 }
@@ -740,6 +712,7 @@ export function PullRequestDetailScene(): JSX.Element {
                                         setExpanded={setRunExpanded}
                                         runCostByKey={runCostByKey}
                                         showCost={prCost?.jobs_available ?? false}
+                                        aligned
                                         // Oldest push first so rows read in the same order as the sparkline.
                                         defaultSorting={{ columnKey: 'started', order: 1 }}
                                         dataAttr="engineering-analytics-pr-runs-table"

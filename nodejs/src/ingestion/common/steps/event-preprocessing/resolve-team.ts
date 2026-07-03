@@ -3,7 +3,7 @@ import { Counter } from 'prom-client'
 
 import { eventDroppedCounter } from '~/common/metrics'
 import { TeamManager } from '~/common/utils/team-manager'
-import { tokenOrTeamPresentCounter } from '~/ingestion/common/event-pipeline/metrics'
+import { tokenOrTeamPresentCounter } from '~/ingestion/common/metrics'
 import { drop, ok } from '~/ingestion/framework/results'
 import { ProcessingStep } from '~/ingestion/framework/steps'
 import { PluginEvent } from '~/plugin-scaffold'

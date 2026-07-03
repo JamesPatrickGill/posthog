@@ -11,7 +11,6 @@ import structlog
 import posthoganalytics
 from asgiref.sync import async_to_sync
 from drf_spectacular.utils import extend_schema_field
-from loginas.utils import is_impersonated_session
 from rest_framework import exceptions, filters, request, response, serializers, status, viewsets
 from rest_framework.decorators import action
 from rest_framework.pagination import PageNumberPagination
@@ -31,6 +30,7 @@ from posthog.api.routing import TeamAndOrgViewSetMixin
 from posthog.api.scoped_related_fields import TeamScopedPrimaryKeyRelatedField
 from posthog.api.shared import UserBasicSerializer
 from posthog.exceptions_capture import capture_exception
+from posthog.helpers.impersonation import is_impersonated
 from posthog.models import Team, User
 from posthog.models.activity_logging.activity_log import (
     ActivityLog,
@@ -46,29 +46,34 @@ from posthog.rbac.access_control_api_mixin import AccessControlViewSetMixin
 from posthog.rbac.user_access_control import UserAccessControlSerializerMixin
 from posthog.temporal.common.client import sync_connect
 
-from products.data_modeling.backend.models.data_modeling_job import DataModelingJob
-from products.data_modeling.backend.models.datawarehouse_saved_query import DataWarehouseSavedQuery
-from products.data_modeling.backend.models.modeling import DataWarehouseModelPath
-from products.data_tools.backend.models.datawarehouse_saved_query_folder import DataWarehouseSavedQueryFolder
-from products.data_tools.backend.models.join import DataWarehouseJoin
-from products.data_warehouse.backend.logic.data_load.saved_query_service import (
+from products.data_modeling.backend.facade.modeling import DataWarehouseModelPath
+from products.data_modeling.backend.facade.models import DataModelingJob, DataWarehouseSavedQuery
+from products.data_tools.backend.facade.models import DataWarehouseJoin, DataWarehouseSavedQueryFolder
+from products.data_warehouse.backend.facade.api import (
     pause_saved_query_schedule,
     saved_query_workflow_exists,
     sync_saved_query_workflow,
     trigger_saved_query_schedule,
     unpause_saved_query_schedule,
 )
-from products.warehouse_sources.backend.models.external_data_schema import (
-    sync_frequency_interval_to_sync_frequency,
-    sync_frequency_to_sync_frequency_interval,
-)
-from products.warehouse_sources.backend.models.util import (
+from products.warehouse_sources.backend.facade.hogql import (
     CLICKHOUSE_HOGQL_MAPPING,
     clean_type,
     get_view_or_table_by_name,
 )
+from products.warehouse_sources.backend.facade.models import (
+    sync_frequency_interval_to_sync_frequency,
+    sync_frequency_to_sync_frequency_interval,
+)
 
 logger = structlog.get_logger(__name__)
+
+# A DataWarehouseSavedQuery's activity log also records materialization syncs and status
+# transitions (activity="sync_triggered", status changes) that advance the log without the query
+# being edited. Optimistic-concurrency ("modified by someone else") must key off the latest activity
+# that actually changed the query — otherwise every background sync of a materialized view looks
+# like a foreign edit and blocks the next save. This filter scopes activity lookups to query edits.
+QUERY_CHANGE_ACTIVITY_FILTER = {"detail__changes__contains": [{"field": "query"}]}
 
 # Cadences offered for view materialization. 15min is the fastest — sub-15min intervals
 # (1min, 5min) are source-only and not meaningful for materialized views, matching the
@@ -117,7 +122,7 @@ class SyncFrequencyField(serializers.ChoiceField):
 
 
 def delete_saved_query(saved_query: DataWarehouseSavedQuery) -> None:
-    from products.data_modeling.backend.services.saved_query_dag_sync import HasDependentsError, delete_node_from_dag
+    from products.data_modeling.backend.facade.api import HasDependentsError, delete_node_from_dag
 
     if saved_query.managed_viewset is not None:
         raise serializers.ValidationError(
@@ -410,7 +415,7 @@ class DataWarehouseSavedQuerySerializer(
                 organization_id=team.organization_id,
                 team_id=team.id,
                 user=view.created_by,
-                was_impersonated=is_impersonated_session(self.context["request"]),
+                was_impersonated=is_impersonated(self.context["request"]),
                 item_id=view.id,
                 scope="DataWarehouseSavedQuery",
                 activity="created",
@@ -433,8 +438,8 @@ class DataWarehouseSavedQuerySerializer(
                 self.context["activity_log"] = activity_log
         # best effort sync to new data modeling DAG representation
         try:
-            from products.data_modeling.backend.models.dag import DAG
-            from products.data_modeling.backend.services.saved_query_dag_sync import sync_saved_query_to_dag
+            from products.data_modeling.backend.facade.api import sync_saved_query_to_dag
+            from products.data_modeling.backend.facade.models import DAG
 
             dag_obj = None
             if dag_id:
@@ -481,7 +486,11 @@ class DataWarehouseSavedQuerySerializer(
             if validated_data.get("query", None) and not soft_update:
                 edited_history_id = self.context["request"].data.get("edited_history_id", None)
                 latest_activity_id = (
-                    ActivityLog.objects.filter(item_id=locked_instance.id, scope="DataWarehouseSavedQuery")
+                    ActivityLog.objects.filter(
+                        item_id=locked_instance.id,
+                        scope="DataWarehouseSavedQuery",
+                        **QUERY_CHANGE_ACTIVITY_FILTER,
+                    )
                     .order_by("-created_at")
                     .values_list("id", flat=True)
                     .first()
@@ -550,7 +559,7 @@ class DataWarehouseSavedQuerySerializer(
                 organization_id=team.organization_id,
                 team_id=team.id,
                 user=self.context["request"].user,
-                was_impersonated=is_impersonated_session(self.context["request"]),
+                was_impersonated=is_impersonated(self.context["request"]),
                 item_id=view.id,
                 scope="DataWarehouseSavedQuery",
                 activity="updated",
@@ -561,9 +570,13 @@ class DataWarehouseSavedQuerySerializer(
             if activity_log:
                 self.context["activity_log"] = activity_log
             else:
-                # get latest activity log for this model
+                # get latest query-changing activity log for this model (see QUERY_CHANGE_ACTIVITY_FILTER)
                 latest_activity_log = (
-                    ActivityLog.objects.filter(item_id=locked_instance.id, scope="DataWarehouseSavedQuery")
+                    ActivityLog.objects.filter(
+                        item_id=locked_instance.id,
+                        scope="DataWarehouseSavedQuery",
+                        **QUERY_CHANGE_ACTIVITY_FILTER,
+                    )
                     .order_by("-created_at")
                     .first()
                 )
@@ -586,8 +599,8 @@ class DataWarehouseSavedQuerySerializer(
         # best effort sync to new data modeling DAG representation
         if "query" in validated_data:
             try:
-                from products.data_modeling.backend.models.dag import DAG
-                from products.data_modeling.backend.services.saved_query_dag_sync import sync_saved_query_to_dag
+                from products.data_modeling.backend.facade.api import sync_saved_query_to_dag
+                from products.data_modeling.backend.facade.models import DAG
 
                 dag_obj = None
                 if dag_id:
@@ -616,10 +629,13 @@ class DataWarehouseSavedQuerySerializer(
         user = self.context["request"].user
 
         context = HogQLContext(team_id=team_id, user=user, enable_select_queries=True)
-        select_ast = parse_select(query["query"])
+        try:
+            select_ast = parse_select(query["query"])
 
-        find_placeholders = FindPlaceholders()
-        find_placeholders.visit(select_ast)
+            find_placeholders = FindPlaceholders()
+            find_placeholders.visit(select_ast)
+        except ExposedHogQLError as err:
+            raise exceptions.ValidationError(detail=f"Invalid query: {err}")
         if len(find_placeholders.placeholder_fields) > 0:
             placeholder = find_placeholders.placeholder_fields.pop()
             placeholder_string = ".".join(str(field) for field in placeholder if field is not None)
@@ -726,7 +742,7 @@ class DataWarehouseSavedQueryFolderViewSet(TeamAndOrgViewSetMixin, AccessControl
         serializer.save(team_id=self.team_id, created_by=self.request.user)
 
     def destroy(self, request: request.Request, *args: Any, **kwargs: Any) -> response.Response:
-        from products.data_modeling.backend.services.saved_query_dag_sync import HasDependentsError
+        from products.data_modeling.backend.facade.api import HasDependentsError
 
         folder: DataWarehouseSavedQueryFolder = self.get_object()
         remaining_queries = {
@@ -830,12 +846,14 @@ class DataWarehouseSavedQueryViewSet(TeamAndOrgViewSetMixin, AccessControlViewSe
         # This avoids the annotation when we're getting a single object for update/create/etc.
         action = self.action if hasattr(self, "action") else None
         if action == "list" or action == "retrieve":
-            # Add latest activity id annotation to avoid N+1 queries
+            # Add latest query-changing activity id annotation to avoid N+1 queries. Scoped to query
+            # edits (see QUERY_CHANGE_ACTIVITY_FILTER) so materialization syncs don't advance the head.
             latest_activity = (
                 ActivityLog.objects.filter(
                     scope="DataWarehouseSavedQuery",
                     item_id=Cast(OuterRef("id"), output_field=TextField()),
                     team_id=self.team_id,
+                    **QUERY_CHANGE_ACTIVITY_FILTER,
                 )
                 .order_by("-created_at")
                 .values("id")[:1]
@@ -866,7 +884,7 @@ class DataWarehouseSavedQueryViewSet(TeamAndOrgViewSetMixin, AccessControlViewSe
             return Response(serializer.data, status=status.HTTP_201_CREATED)
 
     def destroy(self, request: request.Request, *args: Any, **kwargs: Any) -> response.Response:
-        from products.data_modeling.backend.services.saved_query_dag_sync import HasDependentsError
+        from products.data_modeling.backend.facade.api import HasDependentsError
 
         instance: DataWarehouseSavedQuery = self.get_object()
         name = instance.name
@@ -881,7 +899,7 @@ class DataWarehouseSavedQueryViewSet(TeamAndOrgViewSetMixin, AccessControlViewSe
             organization_id=self.team.organization_id,
             team_id=self.team_id,
             user=cast(User, request.user),
-            was_impersonated=is_impersonated_session(request),
+            was_impersonated=is_impersonated(request),
             item_id=instance.id,
             scope="DataWarehouseSavedQuery",
             activity="deleted",
@@ -898,15 +916,20 @@ class DataWarehouseSavedQueryViewSet(TeamAndOrgViewSetMixin, AccessControlViewSe
     )
     def run(self, request: request.Request, *args, **kwargs) -> response.Response:
         """Run this saved query."""
+        from products.data_modeling.backend.facade.api import is_saved_query_on_v2_schedule, materialize_saved_query
+
         saved_query = self.get_object()
 
-        trigger_saved_query_schedule(saved_query)
+        if is_saved_query_on_v2_schedule(saved_query):
+            materialize_saved_query(saved_query)
+        else:
+            trigger_saved_query_schedule(saved_query)
 
         log_activity(
             organization_id=self.team.organization_id,
             team_id=self.team_id,
             user=cast(User, request.user),
-            was_impersonated=is_impersonated_session(request),
+            was_impersonated=is_impersonated(request),
             item_id=saved_query.id,
             scope="DataWarehouseSavedQuery",
             activity="sync_triggered",
@@ -935,8 +958,8 @@ class DataWarehouseSavedQueryViewSet(TeamAndOrgViewSetMixin, AccessControlViewSe
 
         # set data modeling node type to view
         try:
-            from products.data_modeling.backend.models.node import NodeType
-            from products.data_modeling.backend.services.saved_query_dag_sync import update_node_type
+            from products.data_modeling.backend.facade.api import update_node_type
+            from products.data_modeling.backend.facade.models import NodeType
 
             update_node_type(saved_query, NodeType.VIEW)
         except Exception as e:
@@ -947,7 +970,7 @@ class DataWarehouseSavedQueryViewSet(TeamAndOrgViewSetMixin, AccessControlViewSe
             organization_id=self.team.organization_id,
             team_id=self.team_id,
             user=cast(User, request.user),
-            was_impersonated=is_impersonated_session(request),
+            was_impersonated=is_impersonated(request),
             item_id=saved_query.id,
             scope="DataWarehouseSavedQuery",
             activity="materialization_disabled",
@@ -994,8 +1017,8 @@ class DataWarehouseSavedQueryViewSet(TeamAndOrgViewSetMixin, AccessControlViewSe
 
         # set data modeling node type to matview
         try:
-            from products.data_modeling.backend.models.node import NodeType
-            from products.data_modeling.backend.services.saved_query_dag_sync import update_node_type
+            from products.data_modeling.backend.facade.api import update_node_type
+            from products.data_modeling.backend.facade.models import NodeType
 
             update_node_type(saved_query, NodeType.MAT_VIEW)
         except Exception as e:
@@ -1006,7 +1029,7 @@ class DataWarehouseSavedQueryViewSet(TeamAndOrgViewSetMixin, AccessControlViewSe
             organization_id=self.team.organization_id,
             team_id=self.team_id,
             user=cast(User, request.user),
-            was_impersonated=is_impersonated_session(request),
+            was_impersonated=is_impersonated(request),
             item_id=saved_query.id,
             scope="DataWarehouseSavedQuery",
             activity="materialization_enabled",
@@ -1179,7 +1202,7 @@ class DataWarehouseSavedQueryViewSet(TeamAndOrgViewSetMixin, AccessControlViewSe
             organization_id=self.team.organization_id,
             team_id=self.team_id,
             user=cast(User, request.user),
-            was_impersonated=is_impersonated_session(request),
+            was_impersonated=is_impersonated(request),
             item_id=saved_query.id,
             scope="DataWarehouseSavedQuery",
             activity="sync_cancelled",
