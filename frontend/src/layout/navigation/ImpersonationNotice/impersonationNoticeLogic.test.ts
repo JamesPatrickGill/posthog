@@ -233,7 +233,8 @@ describe('impersonationNoticeLogic', () => {
 
     describe('returnToTicket listener', () => {
         it('logs out of impersonation back to the ticket and shows a loading state', async () => {
-            logic.actions.setReturnToTicketContext({ ticketNumber: 42, email: 'a@example.com' })
+            userLogic.actions.loadUserSuccess(MOCK_IMPERSONATED_USER)
+            logic.actions.setReturnToTicketContext({ ticketNumber: 42, email: MOCK_IMPERSONATED_USER.email })
 
             const originalLocation = window.location
             Object.defineProperty(window, 'location', {
@@ -250,11 +251,37 @@ describe('impersonationNoticeLogic', () => {
                     // Context is intentionally kept so the button doesn't flip variants
                     // before navigating; isReturningToTicket drives the loading state.
                     .toMatchValues({
-                        returnToTicketContext: { ticketNumber: 42, email: 'a@example.com' },
+                        returnToTicketContext: { ticketNumber: 42, email: MOCK_IMPERSONATED_USER.email },
                         isReturningToTicket: true,
                     })
 
                 expect(window.location.href).toBe('/admin/logout/?next=%2Fsupport%2Ftickets%2F42')
+            } finally {
+                Object.defineProperty(window, 'location', {
+                    configurable: true,
+                    writable: true,
+                    value: originalLocation,
+                })
+            }
+        })
+
+        it('does not navigate from a stored context that fails the email-match guard', async () => {
+            userLogic.actions.loadUserSuccess(MOCK_IMPERSONATED_USER)
+            logic.actions.setReturnToTicketContext({ ticketNumber: 42, email: 'someone-else@example.com' })
+
+            const originalLocation = window.location
+            Object.defineProperty(window, 'location', {
+                configurable: true,
+                writable: true,
+                value: { ...originalLocation, href: 'sentinel' },
+            })
+
+            try {
+                await expectLogic(logic, () => {
+                    logic.actions.returnToTicket()
+                }).toFinishAllListeners()
+
+                expect(window.location.href).toBe('sentinel')
             } finally {
                 Object.defineProperty(window, 'location', {
                     configurable: true,

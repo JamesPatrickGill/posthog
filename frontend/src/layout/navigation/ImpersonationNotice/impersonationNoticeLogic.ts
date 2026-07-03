@@ -230,18 +230,14 @@ export const impersonationNoticeLogic = kea<impersonationNoticeLogicType>([
                 expired !== null && context !== null && expired.email === context.email,
         ],
         returnTicketLabel: [
-            (s) => [s.returnTicketNumber, s.returnToTicketContext],
-            (ticketNumber: number | null, context: ReturnToTicketContext | null): string | null => {
-                const number = ticketNumber ?? context?.ticketNumber
-                return number != null ? `Return to ticket #${number}` : null
-            },
+            (s) => [s.returnTicketNumber],
+            (ticketNumber: number | null): string | null =>
+                ticketNumber != null ? `Return to ticket #${ticketNumber}` : null,
         ],
         returnTicketReason: [
-            (s) => [s.returnTicketNumber, s.returnToTicketContext],
-            (ticketNumber: number | null, context: ReturnToTicketContext | null): string => {
-                const number = ticketNumber ?? context?.ticketNumber
-                return number != null ? `Investigating ticket #${number}` : ''
-            },
+            (s) => [s.returnTicketNumber],
+            (ticketNumber: number | null): string =>
+                ticketNumber != null ? `Investigating ticket #${ticketNumber}` : '',
         ],
     }),
 
@@ -253,7 +249,9 @@ export const impersonationNoticeLogic = kea<impersonationNoticeLogicType>([
             window.location.href = `/admin/logout/?next=${encodeURIComponent('/')}`
         },
         returnToTicket: () => {
-            const ticketNumber = values.returnTicketNumber ?? values.returnToTicketContext?.ticketNumber
+            // returnTicketNumber enforces the impersonation + email-match guard; never
+            // fall back to the raw stored context here or a stale ticket could navigate.
+            const ticketNumber = values.returnTicketNumber
             if (ticketNumber == null) {
                 return
             }
