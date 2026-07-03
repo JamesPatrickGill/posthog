@@ -173,6 +173,10 @@ class S3Table(FunctionCallTable):
     structure: Optional[str] = None
     table_id: Optional[str] = None
     table_size_mib: Optional[float] = None
+    # True when this S3 read backs a materialized view (set at swap time in
+    # DataWarehouseSavedQuery.hogql_definition). Lets workload detection route matview-only
+    # queries to the endpoints cluster without also capturing raw warehouse-source tables.
+    is_materialized_view: bool = False
 
     def to_printed_hogql(self):
         return escape_hogql_identifier(self.name)
