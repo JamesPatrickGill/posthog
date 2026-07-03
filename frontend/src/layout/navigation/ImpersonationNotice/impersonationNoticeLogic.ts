@@ -1,4 +1,5 @@
-import { actions, connect, kea, listeners, path, reducers, selectors } from 'kea'
+import { actions, afterMount, connect, kea, listeners, path, reducers, selectors } from 'kea'
+import { loaders } from 'kea-loaders'
 import { urlToAction } from 'kea-router'
 
 import { lemonToast } from '@posthog/lemon-ui'
@@ -10,8 +11,39 @@ import { userLogic } from 'scenes/userLogic'
 
 import { Region, UserType } from '~/types'
 
-import { adminLoginAs, loginAsFromTicket } from './adminLoginAs'
+import {
+    ImpersonationTicketMessage,
+    ImpersonationTicketResult,
+    adminLoginAs,
+    getImpersonationTicket,
+    loginAsFromTicket,
+} from './adminLoginAs'
 import type { impersonationNoticeLogicType } from './impersonationNoticeLogicType'
+
+export interface TicketMessage {
+    id: string
+    content: string
+    authorType: 'customer' | 'staff'
+    authorName: string
+    createdAt: string
+    isPrivate: boolean
+}
+
+export function toTicketMessage(message: ImpersonationTicketMessage): TicketMessage {
+    const authorType = message.item_context?.author_type === 'customer' || !message.created_by ? 'customer' : 'staff'
+    const staffName =
+        [message.created_by?.first_name, message.created_by?.last_name].filter(Boolean).join(' ') ||
+        message.created_by?.email ||
+        'Support'
+    return {
+        id: message.id,
+        content: message.content || '',
+        authorType,
+        authorName: authorType === 'customer' ? 'Customer' : staffName,
+        createdAt: message.created_at,
+        isPrivate: message.item_context?.is_private || false,
+    }
+}
 
 export interface ExpiredSessionInfo {
     email: string
@@ -67,7 +99,25 @@ export const impersonationNoticeLogic = kea<impersonationNoticeLogicType>([
         returnToPostHog: true,
         setReturnToTicketContext: (context: ReturnToTicketContext | null) => ({ context }),
         returnToTicket: true,
+        toggleTicketExpanded: true,
     }),
+
+    loaders(({ values }) => ({
+        impersonationTicket: [
+            null as ImpersonationTicketResult | null,
+            {
+                // Server-side source of truth: the ticket id stored on the impersonation
+                // session by the from-ticket login. Null when this session didn't start
+                // from a ticket (or we're not impersonating at all).
+                loadImpersonationTicket: async () => {
+                    if (!values.isImpersonated) {
+                        return null
+                    }
+                    return await getImpersonationTicket()
+                },
+            },
+        ],
+    })),
 
     reducers({
         isMinimized: [
@@ -133,16 +183,44 @@ export const impersonationNoticeLogic = kea<impersonationNoticeLogicType>([
                 returnToTicket: () => true,
             },
         ],
+        isTicketExpanded: [
+            false,
+            {
+                toggleTicketExpanded: (state) => !state,
+            },
+        ],
     }),
 
     selectors({
         isReadOnly: [(s) => [s.user], (user: UserType | null): boolean => user?.is_impersonated_read_only ?? true],
         isImpersonated: [(s) => [s.user], (user: UserType | null): boolean => user?.is_impersonated ?? false],
         isSessionExpired: [(s) => [s.expiredSessionInfo], (info: ExpiredSessionInfo | null): boolean => info !== null],
+        // The session ticket loaded from the server is authoritative; the persisted
+        // email-matched context is the fallback for before/while that load resolves.
+        returnTicketNumber: [
+            (s) => [s.user, s.impersonationTicket, s.returnToTicketContext],
+            (
+                user: UserType | null,
+                serverTicket: ImpersonationTicketResult | null,
+                context: ReturnToTicketContext | null
+            ): number | null => {
+                if (!user?.is_impersonated) {
+                    return null
+                }
+                if (serverTicket) {
+                    return serverTicket.ticket_number
+                }
+                return context !== null && user.email === context.email ? context.ticketNumber : null
+            },
+        ],
         canReturnToTicket: [
-            (s) => [s.user, s.returnToTicketContext],
-            (user: UserType | null, context: ReturnToTicketContext | null): boolean =>
-                context !== null && (user?.is_impersonated ?? false) && user?.email === context.email,
+            (s) => [s.returnTicketNumber],
+            (ticketNumber: number | null): boolean => ticketNumber !== null,
+        ],
+        ticketMessages: [
+            (s) => [s.impersonationTicket],
+            (ticket: ImpersonationTicketResult | null): TicketMessage[] =>
+                (ticket?.messages || []).map(toTicketMessage),
         ],
         // The expired session belongs to a ticket impersonation if its email matches
         // the stored ticket context — the live user may already be gone by then.
@@ -152,14 +230,18 @@ export const impersonationNoticeLogic = kea<impersonationNoticeLogicType>([
                 expired !== null && context !== null && expired.email === context.email,
         ],
         returnTicketLabel: [
-            (s) => [s.returnToTicketContext],
-            (context: ReturnToTicketContext | null): string | null =>
-                context ? `Return to ticket #${context.ticketNumber}` : null,
+            (s) => [s.returnTicketNumber, s.returnToTicketContext],
+            (ticketNumber: number | null, context: ReturnToTicketContext | null): string | null => {
+                const number = ticketNumber ?? context?.ticketNumber
+                return number != null ? `Return to ticket #${number}` : null
+            },
         ],
         returnTicketReason: [
-            (s) => [s.returnToTicketContext],
-            (context: ReturnToTicketContext | null): string =>
-                context ? `Investigating ticket #${context.ticketNumber}` : '',
+            (s) => [s.returnTicketNumber, s.returnToTicketContext],
+            (ticketNumber: number | null, context: ReturnToTicketContext | null): string => {
+                const number = ticketNumber ?? context?.ticketNumber
+                return number != null ? `Investigating ticket #${number}` : ''
+            },
         ],
     }),
 
@@ -171,13 +253,13 @@ export const impersonationNoticeLogic = kea<impersonationNoticeLogicType>([
             window.location.href = `/admin/logout/?next=${encodeURIComponent('/')}`
         },
         returnToTicket: () => {
-            const { returnToTicketContext } = values
-            if (!returnToTicketContext) {
+            const ticketNumber = values.returnTicketNumber ?? values.returnToTicketContext?.ticketNumber
+            if (ticketNumber == null) {
                 return
             }
             // Returning to the ticket means dropping the customer impersonation and
             // landing back on the support ticket as the original staff user.
-            const next = urls.supportTicketDetail(returnToTicketContext.ticketNumber)
+            const next = urls.supportTicketDetail(ticketNumber)
             window.location.href = `/admin/logout/?next=${encodeURIComponent(next)}`
         },
         logout: () => {
@@ -306,4 +388,10 @@ export const impersonationNoticeLogic = kea<impersonationNoticeLogicType>([
             }
         },
     })),
+
+    afterMount(({ actions, values }) => {
+        if (values.isImpersonated) {
+            actions.loadImpersonationTicket()
+        }
+    }),
 ])
