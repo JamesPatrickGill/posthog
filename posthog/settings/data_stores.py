@@ -542,6 +542,17 @@ INTERNAL_API_SECRET = get_from_env(
 # Receivers accept INTERNAL_API_SECRET plus these; senders always send INTERNAL_API_SECRET.
 INTERNAL_API_SECRET_FALLBACKS = get_list(os.getenv("INTERNAL_API_SECRET_FALLBACKS", ""))
 
+# Dedicated signing key for the data_modeling_ops internal API (scoped JWTs minted by the
+# modeling-ops admin app). Per-purpose per .agents/security.md — never INTERNAL_API_SECRET,
+# SECRET_KEY, or JWT_SIGNING_KEY. Defaults to a public dev value in DEBUG/TEST; elsewhere it
+# defaults to empty and requests fail closed at request time (DataModelingOpsJWTAuthentication).
+LOCAL_DEV_DATA_MODELING_OPS_JWT_SECRET = "posthog-data-modeling-ops-local"
+DATA_MODELING_OPS_JWT_SECRET = get_from_env(
+    "DATA_MODELING_OPS_JWT_SECRET", LOCAL_DEV_DATA_MODELING_OPS_JWT_SECRET if DEBUG or TEST else ""
+).strip()
+# Previous keys still accepted for verification during zero-downtime rotation, newest first.
+DATA_MODELING_OPS_JWT_SECRET_FALLBACKS = get_list(os.getenv("DATA_MODELING_OPS_JWT_SECRET_FALLBACKS", ""))
+
 EMBEDDING_API_URL = get_from_env("EMBEDDING_API_URL", "")
 
 # Used to generate embeddings on the fly, for use with the document embeddings table
