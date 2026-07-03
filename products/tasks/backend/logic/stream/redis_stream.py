@@ -7,11 +7,10 @@ from django.conf import settings
 
 import structlog
 import redis.exceptions as redis_exceptions
-from asgiref.sync import async_to_sync
 
 from products.tasks.backend.logic.services.connection_token import SANDBOX_EVENT_INGEST_TOKEN_TTL
 from products.tasks.backend.logic.services.sandbox_config import SANDBOX_TTL_SECONDS
-from products.tasks.backend.redis import get_tasks_stream_redis_async
+from products.tasks.backend.redis import get_tasks_stream_redis_async, get_tasks_stream_redis_sync
 
 logger = structlog.get_logger(__name__)
 
@@ -22,6 +21,10 @@ TASK_RUN_STREAM_TIMEOUT = SANDBOX_TTL_SECONDS
 TASK_RUN_STREAM_SEQUENCE_TIMEOUT = int(SANDBOX_EVENT_INGEST_TOKEN_TTL.total_seconds())
 TASK_RUN_STREAM_PREFIX = "task-run-stream:"
 TASK_RUN_STREAM_READ_COUNT = 16
+# XREAD BLOCK is push-based (XADD wakes the blocked client immediately), so a
+# longer block only cuts idle polling — it never delays delivery. Keep it under
+# the keepalive interval so idle readers still wake in time to emit one.
+TASK_RUN_STREAM_READ_BLOCK_MS = 5_000
 TASK_RUN_STREAM_WAIT_INITIAL_DELAY_SECONDS = 0.05
 TASK_RUN_STREAM_WAIT_DELAY_INCREMENT_SECONDS = 0.15
 TASK_RUN_STREAM_WAIT_MAX_DELAY_SECONDS = 2.0
@@ -194,7 +197,7 @@ class TaskRunRedisStream:
     async def read_stream(
         self,
         start_id: str = "0",
-        block_ms: int = 100,
+        block_ms: int = TASK_RUN_STREAM_READ_BLOCK_MS,
         count: Optional[int] = TASK_RUN_STREAM_READ_COUNT,
         keepalive_interval_seconds: float | None = None,
     ) -> AsyncGenerator[dict]:
@@ -212,7 +215,7 @@ class TaskRunRedisStream:
     async def read_stream_entries(
         self,
         start_id: str = "0",
-        block_ms: int = 100,
+        block_ms: int = TASK_RUN_STREAM_READ_BLOCK_MS,
         count: Optional[int] = TASK_RUN_STREAM_READ_COUNT,
         keepalive_interval_seconds: float | None = None,
     ) -> AsyncGenerator[TaskRunStreamEntryOrKeepalive]:
@@ -512,14 +515,18 @@ def publish_task_run_stream_event(run_id: str, event: dict, use_dedicated: bool 
 
     This is intended for sync Django model/view code that needs to mirror
     user-visible task-run events into the live SSE stream.
+
+    Bouncing back to the loop via ``async_to_sync`` would block that executor
+    thread. A sync client does the I/O inline on the calling thread with no
+    event-loop round-trip.
     """
-
-    async def _publish() -> str:
-        redis_stream = TaskRunRedisStream(get_task_run_stream_key(run_id), use_dedicated)
-        return await redis_stream.write_event(event)
-
+    stream_key = get_task_run_stream_key(run_id)
+    client = get_tasks_stream_redis_sync(use_dedicated)
+    raw = json.dumps(event)
     try:
-        return async_to_sync(_publish)()
+        stream_id = client.xadd(stream_key, {DATA_KEY: raw}, maxlen=TASK_RUN_STREAM_MAX_LENGTH, approximate=True)
+        client.expire(stream_key, TASK_RUN_STREAM_TIMEOUT)
+        return _normalize_stream_id(stream_id)
     except Exception:
         logger.exception("task_run_stream_publish_failed", run_id=run_id)
         return None
@@ -527,12 +534,37 @@ def publish_task_run_stream_event(run_id: str, event: dict, use_dedicated: bool 
 
 def publish_task_run_stream_complete(run_id: str, use_dedicated: bool = False) -> None:
     """Synchronously publish a completion sentinel for a task-run stream."""
-
-    async def _publish() -> None:
-        redis_stream = TaskRunRedisStream(get_task_run_stream_key(run_id), use_dedicated)
-        await redis_stream.mark_complete()
+    stream_key = get_task_run_stream_key(run_id)
+    completed_key = get_task_run_stream_completed_key(stream_key)
+    client = get_tasks_stream_redis_sync(use_dedicated)
+    raw = json.dumps({"type": "STREAM_STATUS", "status": "complete"})
 
     try:
-        async_to_sync(_publish)()
+        if settings.TEST:
+            # fakeredis doesn't support WATCH/MULTI; the sequencing race the
+            # transaction guards against can't happen under the test harness.
+            if client.exists(completed_key):
+                return
+            client.xadd(stream_key, {DATA_KEY: raw}, maxlen=TASK_RUN_STREAM_MAX_LENGTH, approximate=True)
+            client.expire(stream_key, TASK_RUN_STREAM_TIMEOUT)
+            client.set(completed_key, "1", ex=TASK_RUN_STREAM_SEQUENCE_TIMEOUT)
+            return
+
+        with client.pipeline(transaction=True) as pipe:
+            while True:
+                try:
+                    pipe.watch(completed_key)
+                    if pipe.exists(completed_key):
+                        pipe.reset()
+                        return
+                    pipe.multi()
+                    pipe.xadd(stream_key, {DATA_KEY: raw}, maxlen=TASK_RUN_STREAM_MAX_LENGTH, approximate=True)
+                    pipe.expire(stream_key, TASK_RUN_STREAM_TIMEOUT)
+                    pipe.set(completed_key, "1", ex=TASK_RUN_STREAM_SEQUENCE_TIMEOUT)
+                    pipe.execute()
+                    return
+                except redis_exceptions.WatchError:
+                    logger.debug("task_run_stream_complete_watch_retry", run_id=run_id)
+                    continue
     except Exception:
         logger.exception("task_run_stream_complete_publish_failed", run_id=run_id)
