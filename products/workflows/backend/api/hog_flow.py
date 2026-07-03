@@ -69,6 +69,7 @@ from products.notifications.backend.facade.api import publish_resource_edited
 from products.workflows.backend.api.graph_operations import apply_graph_operations
 from products.workflows.backend.api.graph_validation import validate_graph
 from products.workflows.backend.api.hog_flow_batch_job import HogFlowBatchJobSerializer
+from products.workflows.backend.models.email_reputation import EmailReputationState
 from products.workflows.backend.models.hog_flow.hog_flow import (
     BILLABLE_ACTION_TYPES,
     PERSON_DEPENDENT_ACTION_TYPES,
@@ -753,6 +754,64 @@ class HogFlowScheduleSerializer(serializers.ModelSerializer):
         return super().update(instance, validated_data)
 
 
+class EmailReputationStateSerializer(serializers.ModelSerializer):
+    """Read-only email deliverability reputation for a workflow, driving the reputation banner."""
+
+    scope = serializers.ChoiceField(
+        choices=EmailReputationState.Scope.choices,
+        read_only=True,
+        help_text="'workflow' for this workflow's own reputation, 'team' for the project-wide aggregate.",
+    )
+    state = serializers.ChoiceField(
+        choices=EmailReputationState.State.choices,
+        read_only=True,
+        help_text="'healthy', 'warned' (over the warning threshold), or 'paused' (auto-paused; needs manual re-enable).",
+    )
+    bounce_rate = serializers.FloatField(read_only=True, help_text="Bounces / emails sent in the last window (0-1).")
+    complaint_rate = serializers.FloatField(
+        read_only=True, help_text="Spam complaints / emails sent in the last window (0-1)."
+    )
+    emails_sent = serializers.IntegerField(
+        read_only=True, help_text="Emails sent in the evaluated window (sample size)."
+    )
+    window_end = serializers.DateTimeField(read_only=True, help_text="End of the evaluated rolling window.")
+    evaluated_at = serializers.DateTimeField(read_only=True, help_text="When the evaluator last assessed this row.")
+    state_changed_at = serializers.DateTimeField(read_only=True, help_text="When the state last changed.")
+    warned_at = serializers.DateTimeField(read_only=True, help_text="When the current warning began, if any.")
+    paused_at = serializers.DateTimeField(read_only=True, help_text="When sending was auto-paused, if paused.")
+    pause_reason = serializers.ChoiceField(
+        choices=EmailReputationState.Reason.choices,
+        read_only=True,
+        allow_null=True,
+        help_text="'bounce' or 'complaint' — which signal triggered the pause.",
+    )
+
+    class Meta:
+        model = EmailReputationState
+        fields = [
+            "scope",
+            "state",
+            "bounce_rate",
+            "complaint_rate",
+            "emails_sent",
+            "window_end",
+            "evaluated_at",
+            "state_changed_at",
+            "warned_at",
+            "paused_at",
+            "pause_reason",
+        ]
+        read_only_fields = fields
+
+
+class TeamEmailReputationResponseSerializer(serializers.Serializer):
+    reputation = EmailReputationStateSerializer(
+        allow_null=True,
+        read_only=True,
+        help_text="Project-wide email reputation aggregate across all workflows; null until first evaluated.",
+    )
+
+
 class HogFlowMinimalSerializer(serializers.ModelSerializer):
     created_by = UserBasicSerializer(read_only=True)
 
@@ -788,7 +847,10 @@ class HogFlowSerializer(HogFlowMinimalSerializer):
     status = serializers.ChoiceField(
         choices=HogFlow.State.choices,
         required=False,
-        help_text="draft (no execution), active (live), archived (disabled).",
+        help_text=(
+            "draft (no execution), active (live), archived (disabled), paused (auto-paused by the email "
+            "reputation guard; read-only — use the reputation re-enable endpoint to resume)."
+        ),
     )
     trigger_masking = HogFlowMaskingSerializer(
         required=False,
@@ -847,6 +909,21 @@ class HogFlowSerializer(HogFlowMinimalSerializer):
             "non-scheduled workflows."
         ),
     )
+    reputation = serializers.SerializerMethodField(
+        help_text=(
+            "Email deliverability reputation for this workflow (bounce/complaint rates, warned/paused state). "
+            "Null until the workflow has sent enough email to be evaluated."
+        ),
+    )
+
+    @extend_schema_field(EmailReputationStateSerializer(allow_null=True))
+    def get_reputation(self, obj: HogFlow) -> Optional[dict]:
+        # unscoped + explicit hog_flow filter: reputation rows are keyed by the workflow's own team_id
+        # (written raw by the Node evaluator), while ambient request scope resolves to the canonical
+        # (parent) team — an ambient-scoped read would silently miss rows in child environments. Access
+        # control is already enforced by the viewset that produced `obj`.
+        state = EmailReputationState.objects.unscoped().filter(hog_flow_id=obj.id).first()
+        return EmailReputationStateSerializer(state).data if state else None
 
     def to_internal_value(self, data):
         status = data.get("status")
@@ -889,6 +966,7 @@ class HogFlowSerializer(HogFlowMinimalSerializer):
             "variables",
             "billable_action_types",
             "schedules",
+            "reputation",
         ]
         read_only_fields = [
             "id",
@@ -900,12 +978,35 @@ class HogFlowSerializer(HogFlowMinimalSerializer):
             "abort_action",
             "billable_action_types",  # Computed field, not user-editable
             "schedules",  # Managed via the schedules sub-resource, surfaced read-only here
+            "reputation",  # Written by the Node email-reputation evaluator
         ]
 
     def validate(self, data):
         instance = cast(Optional[HogFlow], self.instance)
         is_draft = self.context.get("is_draft")
         actions = data.get("actions", instance.actions if instance else [])
+
+        # "paused" is system-managed (email reputation guard). Clients can neither set it nor leave it
+        # via a plain update — the reputation re-enable endpoint is the only exit, so a bad sender can't
+        # bypass the pause by PATCHing status back to active.
+        requested_status = data.get("status")
+        if requested_status == HogFlow.State.PAUSED and (instance is None or instance.status != HogFlow.State.PAUSED):
+            raise serializers.ValidationError(
+                {"status": "'paused' is set automatically by the email reputation guard and cannot be set manually."}
+            )
+        if (
+            instance is not None
+            and instance.status == HogFlow.State.PAUSED
+            and requested_status not in (None, HogFlow.State.PAUSED)
+        ):
+            raise serializers.ValidationError(
+                {
+                    "status": (
+                        "This workflow was paused for email deliverability issues. "
+                        "Use the reputation re-enable endpoint to resume sending."
+                    )
+                }
+            )
 
         # When activating a draft, re-validate actions from the instance with full (non-draft) checks
         status = data.get("status", instance.status if instance else "draft")
@@ -1644,6 +1745,76 @@ class HogFlowViewSet(TeamAndOrgViewSetMixin, LogEntryMixin, AppMetricsMixin, vie
 
         return Response({"deleted": deleted_count})
 
+    @extend_schema(responses={200: TeamEmailReputationResponseSerializer})
+    @action(detail=False, methods=["GET"], pagination_class=None, filter_backends=[], url_path="reputation")
+    def team_reputation(self, request: Request, **kwargs) -> Response:
+        """Project-wide email reputation aggregate across all workflows; reputation is null until first evaluated."""
+        # unscoped + explicit team filter: rows are keyed by the raw team_id the Node evaluator writes,
+        # which may be a child environment id that ambient (canonical) scope would miss.
+        state = EmailReputationState.objects.unscoped().filter(team_id=self.team_id, hog_flow__isnull=True).first()
+        return Response({"reputation": EmailReputationStateSerializer(state).data if state else None})
+
+    @extend_schema(request=None, responses={200: HogFlowSerializer})
+    @action(detail=True, methods=["POST"], url_path="reputation/reenable")
+    def reputation_reenable(self, request: Request, *args, **kwargs) -> Response:
+        """
+        Manually resume a workflow that the email reputation guard auto-paused. Restores the status the
+        workflow held before the pause and resets its reputation state to healthy, so the evaluator
+        starts a fresh warn/pause cycle if rates are still bad. This is the only way out of 'paused' —
+        plain status PATCHes are rejected by the serializer.
+        """
+        hog_flow = self.get_object()
+        if hog_flow.status != HogFlow.State.PAUSED:
+            raise exceptions.ValidationError({"status": "Workflow is not paused by the email reputation guard."})
+
+        before_update = HogFlow.objects.get(pk=hog_flow.pk)
+        reputation = EmailReputationState.objects.unscoped().filter(hog_flow_id=hog_flow.id).first()
+        restored_status = HogFlow.State.ACTIVE
+        if reputation and reputation.previous_flow_status in HogFlow.State.values:
+            restored_status = HogFlow.State(reputation.previous_flow_status)
+
+        now = timezone.now()
+        with transaction.atomic():
+            hog_flow.status = restored_status
+            # post_save signal reloads the flow on the CDP workers
+            hog_flow.save(update_fields=["status", "updated_at"])
+            if reputation:
+                # queryset.update() bypasses RootTeamMixin's canonical-team rewrite on save(), keeping
+                # the row keyed exactly as the Node evaluator wrote it
+                EmailReputationState.objects.unscoped().filter(id=reputation.id).update(
+                    state=EmailReputationState.State.HEALTHY,
+                    pause_reason=None,
+                    warned_at=None,
+                    paused_at=None,
+                    previous_flow_status=None,
+                    state_changed_at=now,
+                    updated_at=now,
+                )
+            # When this was the team's last reputation-paused workflow, clear the team-level pause too so
+            # the aggregate banner disappears and the evaluator restarts the team cycle from healthy.
+            other_paused = (
+                EmailReputationState.objects.unscoped()
+                .filter(team_id=hog_flow.team_id, state=EmailReputationState.State.PAUSED, hog_flow__isnull=False)
+                .exclude(hog_flow_id=hog_flow.id)
+                .exists()
+            )
+            if not other_paused:
+                EmailReputationState.objects.unscoped().filter(
+                    team_id=hog_flow.team_id,
+                    hog_flow__isnull=True,
+                    state=EmailReputationState.State.PAUSED,
+                ).update(
+                    state=EmailReputationState.State.HEALTHY,
+                    pause_reason=None,
+                    warned_at=None,
+                    paused_at=None,
+                    state_changed_at=now,
+                    updated_at=now,
+                )
+
+        log_activity_from_viewset(self, hog_flow, activity="updated", name=hog_flow.name, previous=before_update)
+        return Response(self.get_serializer(hog_flow).data)
+
     @extend_schema(methods=["GET"], responses=HogFlowBatchJobSerializer(many=True))
     @extend_schema(methods=["POST"], request=HogFlowBatchJobSerializer, responses=HogFlowBatchJobSerializer)
     # GET returns a bare list (no pagination) and ignores the viewset's HogFlow filterset; disable both so the
@@ -2031,3 +2202,46 @@ class InternalHogFlowViewSet(TeamAndOrgViewSetMixin, LogEntryMixin, AppMetricsMi
                 batch_job_id=batch_job_id,
             )
             return Response({"error": "Internal server error"}, status=500)
+
+    def internal_email_reputation_notify(self, request: Request, **kwargs) -> Response:
+        """
+        Internal endpoint the Node email-reputation evaluator calls after it has detected and
+        enforced reputation state transitions. Fires an in-app notification per transition through
+        the notifications facade. Detection, persistence and pausing all happen Node-side; this
+        endpoint only handles the user-facing notification.
+
+        Accepts: { "transitions": [ { team_id, scope, new_state, reason, rate, threshold,
+                                       hog_flow_id?, hog_flow_name? }, ... ] }
+        """
+        from products.workflows.backend.reputation.notifications import (  # noqa: PLC0415
+            ReputationTransition,
+            notify_reputation_transition,
+        )
+
+        if request.method != "POST":
+            return Response({"error": "Method not allowed"}, status=405)
+
+        raw_transitions = request.data.get("transitions")
+        if not isinstance(raw_transitions, list):
+            return Response({"error": "transitions must be a list"}, status=400)
+
+        notified = 0
+        for raw in raw_transitions:
+            try:
+                transition = ReputationTransition(
+                    team_id=int(raw["team_id"]),
+                    scope=str(raw["scope"]),
+                    new_state=str(raw["new_state"]),
+                    reason=str(raw["reason"]),
+                    rate=float(raw["rate"]),
+                    threshold=float(raw["threshold"]),
+                    hog_flow_id=raw.get("hog_flow_id"),
+                    hog_flow_name=raw.get("hog_flow_name"),
+                )
+            except (KeyError, TypeError, ValueError):
+                logger.warning("Invalid reputation transition payload", raw=raw)
+                continue
+            notify_reputation_transition(transition)
+            notified += 1
+
+        return Response({"notified": notified})

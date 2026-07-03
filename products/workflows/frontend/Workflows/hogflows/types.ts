@@ -5,6 +5,8 @@ import { CyclotronJobInputsValidationResult } from 'lib/components/CyclotronJob/
 
 import { UserBasicType } from '~/types'
 
+import type { EmailReputationStateApi } from 'products/workflows/frontend/generated/api.schemas'
+
 import { CyclotronJobInputSchemaTypeSchema, HogFlowActionSchema, HogFlowTriggerSchema } from './steps/types'
 
 const HogFlowEdgeSchema = z.object({
@@ -20,7 +22,7 @@ export const HogFlowSchema = z.object({
     version: z.number(),
     name: z.string(),
     description: z.string().optional(),
-    status: z.enum(['active', 'draft', 'archived']),
+    status: z.enum(['active', 'draft', 'archived', 'paused']),
     trigger: HogFlowTriggerSchema.optional(),
     // Optional masking config for the trigger, allows HogFlows to be rate limited per distinct ID or other property
     trigger_masking: z
@@ -80,6 +82,7 @@ export const HogFlowBatchJobSchema = z.object({
 // NOTE: these are purposefully exported as interfaces to support kea typegen
 export interface HogFlow extends z.infer<typeof HogFlowSchema> {
     created_by?: UserBasicType | null
+    reputation?: EmailReputationStateApi | null
 }
 export interface HogFlowEdge extends z.infer<typeof HogFlowEdgeSchema> {}
 export interface HogFlowActionEdge extends Edge<{ edge: HogFlowEdge; label?: string }> {}

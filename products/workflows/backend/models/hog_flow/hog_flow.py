@@ -55,6 +55,9 @@ class HogFlow(UUIDTModel):
         DRAFT = "draft"
         ACTIVE = "active"
         ARCHIVED = "archived"
+        # System-managed pause applied by the email reputation evaluator. Distinct from ARCHIVED
+        # (user-initiated) so re-enable can restore the prior status and the UI can explain why.
+        PAUSED = "paused"
 
     class ExitCondition(models.TextChoices):
         CONVERSION = "exit_on_conversion"

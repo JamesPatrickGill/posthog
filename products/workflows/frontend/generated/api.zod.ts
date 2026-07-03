@@ -402,11 +402,11 @@ export const HogFlowsCreateBody = /* @__PURE__ */ zod.object({
     name: zod.string().max(hogFlowsCreateBodyNameMax).nullish().describe('Workflow name.'),
     description: zod.string().default(hogFlowsCreateBodyDescriptionDefault).describe('Optional description.'),
     status: zod
-        .enum(['draft', 'active', 'archived'])
-        .describe('\* `draft` - Draft\n\* `active` - Active\n\* `archived` - Archived')
+        .enum(['draft', 'active', 'archived', 'paused'])
+        .describe('\* `draft` - Draft\n\* `active` - Active\n\* `archived` - Archived\n\* `paused` - Paused')
         .optional()
         .describe(
-            'draft (no execution), active (live), archived (disabled).\n\n\* `draft` - Draft\n\* `active` - Active\n\* `archived` - Archived'
+            'draft (no execution), active (live), archived (disabled), paused (auto-paused by the email reputation guard; read-only — use the reputation re-enable endpoint to resume).\n\n\* `draft` - Draft\n\* `active` - Active\n\* `archived` - Archived\n\* `paused` - Paused'
         ),
     trigger_masking: zod
         .union([
@@ -717,11 +717,11 @@ export const HogFlowsUpdateBody = /* @__PURE__ */ zod.object({
     name: zod.string().max(hogFlowsUpdateBodyNameMax).nullish().describe('Workflow name.'),
     description: zod.string().default(hogFlowsUpdateBodyDescriptionDefault).describe('Optional description.'),
     status: zod
-        .enum(['draft', 'active', 'archived'])
-        .describe('\* `draft` - Draft\n\* `active` - Active\n\* `archived` - Archived')
+        .enum(['draft', 'active', 'archived', 'paused'])
+        .describe('\* `draft` - Draft\n\* `active` - Active\n\* `archived` - Archived\n\* `paused` - Paused')
         .optional()
         .describe(
-            'draft (no execution), active (live), archived (disabled).\n\n\* `draft` - Draft\n\* `active` - Active\n\* `archived` - Archived'
+            'draft (no execution), active (live), archived (disabled), paused (auto-paused by the email reputation guard; read-only — use the reputation re-enable endpoint to resume).\n\n\* `draft` - Draft\n\* `active` - Active\n\* `archived` - Archived\n\* `paused` - Paused'
         ),
     trigger_masking: zod
         .union([
@@ -1032,11 +1032,11 @@ export const HogFlowsPartialUpdateBody = /* @__PURE__ */ zod.object({
     name: zod.string().max(hogFlowsPartialUpdateBodyNameMax).nullish().describe('Workflow name.'),
     description: zod.string().default(hogFlowsPartialUpdateBodyDescriptionDefault).describe('Optional description.'),
     status: zod
-        .enum(['draft', 'active', 'archived'])
-        .describe('\* `draft` - Draft\n\* `active` - Active\n\* `archived` - Archived')
+        .enum(['draft', 'active', 'archived', 'paused'])
+        .describe('\* `draft` - Draft\n\* `active` - Active\n\* `archived` - Archived\n\* `paused` - Paused')
         .optional()
         .describe(
-            'draft (no execution), active (live), archived (disabled).\n\n\* `draft` - Draft\n\* `active` - Active\n\* `archived` - Archived'
+            'draft (no execution), active (live), archived (disabled), paused (auto-paused by the email reputation guard; read-only — use the reputation re-enable endpoint to resume).\n\n\* `draft` - Draft\n\* `active` - Active\n\* `archived` - Archived\n\* `paused` - Paused'
         ),
     trigger_masking: zod
         .union([
@@ -1475,11 +1475,11 @@ export const HogFlowsInvocationsCreateBody = /* @__PURE__ */ zod.object({
                 .describe('Optional description.'),
             version: zod.number(),
             status: zod
-                .enum(['draft', 'active', 'archived'])
-                .describe('\* `draft` - Draft\n\* `active` - Active\n\* `archived` - Archived')
+                .enum(['draft', 'active', 'archived', 'paused'])
+                .describe('\* `draft` - Draft\n\* `active` - Active\n\* `archived` - Archived\n\* `paused` - Paused')
                 .optional()
                 .describe(
-                    'draft (no execution), active (live), archived (disabled).\n\n\* `draft` - Draft\n\* `active` - Active\n\* `archived` - Archived'
+                    'draft (no execution), active (live), archived (disabled), paused (auto-paused by the email reputation guard; read-only — use the reputation re-enable endpoint to resume).\n\n\* `draft` - Draft\n\* `active` - Active\n\* `archived` - Archived\n\* `paused` - Paused'
                 ),
             created_at: zod.iso.datetime({ offset: true }),
             created_by: zod.object({
@@ -1873,6 +1873,61 @@ export const HogFlowsInvocationsCreateBody = /* @__PURE__ */ zod.object({
                 .describe(
                     "Recurring schedules attached to this workflow (read-only here; manage via the schedules sub-resource). A batch\/schedule workflow only fires when it's active AND has an active schedule. Empty for non-scheduled workflows."
                 ),
+            reputation: zod
+                .union([
+                    zod
+                        .object({
+                            scope: zod
+                                .enum(['workflow', 'team'])
+                                .describe('\* `workflow` - Workflow\n\* `team` - Team')
+                                .describe(
+                                    "'workflow' for this workflow's own reputation, 'team' for the project-wide aggregate.\n\n\* `workflow` - Workflow\n\* `team` - Team"
+                                ),
+                            state: zod
+                                .enum(['healthy', 'warned', 'paused'])
+                                .describe('\* `healthy` - Healthy\n\* `warned` - Warned\n\* `paused` - Paused')
+                                .describe(
+                                    "'healthy', 'warned' (over the warning threshold), or 'paused' (auto-paused; needs manual re-enable).\n\n\* `healthy` - Healthy\n\* `warned` - Warned\n\* `paused` - Paused"
+                                ),
+                            bounce_rate: zod.number().describe('Bounces \/ emails sent in the last window (0-1).'),
+                            complaint_rate: zod
+                                .number()
+                                .describe('Spam complaints \/ emails sent in the last window (0-1).'),
+                            emails_sent: zod.number().describe('Emails sent in the evaluated window (sample size).'),
+                            window_end: zod.iso
+                                .datetime({ offset: true })
+                                .describe('End of the evaluated rolling window.'),
+                            evaluated_at: zod.iso
+                                .datetime({ offset: true })
+                                .describe('When the evaluator last assessed this row.'),
+                            state_changed_at: zod.iso
+                                .datetime({ offset: true })
+                                .describe('When the state last changed.'),
+                            warned_at: zod.iso
+                                .datetime({ offset: true })
+                                .describe('When the current warning began, if any.'),
+                            paused_at: zod.iso
+                                .datetime({ offset: true })
+                                .describe('When sending was auto-paused, if paused.'),
+                            pause_reason: zod
+                                .union([
+                                    zod
+                                        .enum(['bounce', 'complaint'])
+                                        .describe('\* `bounce` - Bounce\n\* `complaint` - Complaint'),
+                                    zod.null(),
+                                ])
+                                .describe(
+                                    "'bounce' or 'complaint' — which signal triggered the pause.\n\n\* `bounce` - Bounce\n\* `complaint` - Complaint"
+                                ),
+                        })
+                        .describe(
+                            'Read-only email deliverability reputation for a workflow, driving the reputation banner.'
+                        ),
+                    zod.null(),
+                ])
+                .describe(
+                    'Email deliverability reputation for this workflow (bounce\/complaint rates, warned\/paused state). Null until the workflow has sent enough email to be evaluated.'
+                ),
         })
         .optional()
         .describe('Optional override; omit to use saved definition.'),
@@ -2021,11 +2076,11 @@ export const HogFlowsBulkDeleteCreateBody = /* @__PURE__ */ zod.object({
     name: zod.string().max(hogFlowsBulkDeleteCreateBodyNameMax).nullish().describe('Workflow name.'),
     description: zod.string().default(hogFlowsBulkDeleteCreateBodyDescriptionDefault).describe('Optional description.'),
     status: zod
-        .enum(['draft', 'active', 'archived'])
-        .describe('\* `draft` - Draft\n\* `active` - Active\n\* `archived` - Archived')
+        .enum(['draft', 'active', 'archived', 'paused'])
+        .describe('\* `draft` - Draft\n\* `active` - Active\n\* `archived` - Archived\n\* `paused` - Paused')
         .optional()
         .describe(
-            'draft (no execution), active (live), archived (disabled).\n\n\* `draft` - Draft\n\* `active` - Active\n\* `archived` - Archived'
+            'draft (no execution), active (live), archived (disabled), paused (auto-paused by the email reputation guard; read-only — use the reputation re-enable endpoint to resume).\n\n\* `draft` - Draft\n\* `active` - Active\n\* `archived` - Archived\n\* `paused` - Paused'
         ),
     trigger_masking: zod
         .union([

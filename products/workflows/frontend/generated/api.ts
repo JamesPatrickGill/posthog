@@ -36,6 +36,7 @@ import type {
     PatchedHogFlowGraphUpdateApi,
     PatchedHogFlowScheduleApi,
     PatchedHogFlowTemplateApi,
+    TeamEmailReputationResponseApi,
     WorkflowStatsRowApi,
 } from './api.schemas'
 
@@ -55,6 +56,26 @@ type NonReadonly<T> = [T] extends [UnionToIntersection<T>]
           [P in keyof Writable<T>]: T[P] extends object ? NonReadonly<NonNullable<T[P]>> : T[P]
       }
     : DistributeReadOnlyOverUnions<T>
+
+export const getInternalHogFlowsEmailReputationNotifyCreateUrl = () => {
+    return `/api/internal/hog_flows/email_reputation_notify`
+}
+
+/**
+ * Internal endpoint the Node email-reputation evaluator calls after it has detected and
+ * enforced reputation state transitions. Fires an in-app notification per transition through
+ * the notifications facade. Detection, persistence and pausing all happen Node-side; this
+ * endpoint only handles the user-facing notification.
+ *
+ * Accepts: { "transitions": [ { team_id, scope, new_state, reason, rate, threshold,
+ *                                hog_flow_id?, hog_flow_name? }, ... ] }
+ */
+export const internalHogFlowsEmailReputationNotifyCreate = async (options?: RequestInit): Promise<void> => {
+    return apiMutator<void>(getInternalHogFlowsEmailReputationNotifyCreateUrl(), {
+        ...options,
+        method: 'POST',
+    })
+}
 
 export const getInternalHogFlowsProcessDueSchedulesCreateUrl = () => {
     return `/api/internal/hog_flows/process_due_schedules`
@@ -530,6 +551,27 @@ export const hogFlowsMetricsTotalsRetrieve = async (
     })
 }
 
+export const getHogFlowsReputationReenableCreateUrl = (projectId: string, id: string) => {
+    return `/api/projects/${projectId}/hog_flows/${id}/reputation/reenable/`
+}
+
+/**
+ * Manually resume a workflow that the email reputation guard auto-paused. Restores the status the
+ * workflow held before the pause and resets its reputation state to healthy, so the evaluator
+ * starts a fresh warn/pause cycle if rates are still bad. This is the only way out of 'paused' —
+ * plain status PATCHes are rejected by the serializer.
+ */
+export const hogFlowsReputationReenableCreate = async (
+    projectId: string,
+    id: string,
+    options?: RequestInit
+): Promise<HogFlowApi> => {
+    return apiMutator<HogFlowApi>(getHogFlowsReputationReenableCreateUrl(projectId, id), {
+        ...options,
+        method: 'POST',
+    })
+}
+
 export const getHogFlowsRerunCreateUrl = (projectId: string, id: string) => {
     return `/api/projects/${projectId}/hog_flows/${id}/rerun/`
 }
@@ -669,6 +711,23 @@ export const hogFlowsMetricsGlobalRetrieve = async (
     options?: RequestInit
 ): Promise<WorkflowStatsRowApi[]> => {
     return apiMutator<WorkflowStatsRowApi[]>(getHogFlowsMetricsGlobalRetrieveUrl(projectId, params), {
+        ...options,
+        method: 'GET',
+    })
+}
+
+export const getHogFlowsReputationRetrieveUrl = (projectId: string) => {
+    return `/api/projects/${projectId}/hog_flows/reputation/`
+}
+
+/**
+ * Project-wide email reputation aggregate across all workflows; reputation is null until first evaluated.
+ */
+export const hogFlowsReputationRetrieve = async (
+    projectId: string,
+    options?: RequestInit
+): Promise<TeamEmailReputationResponseApi> => {
+    return apiMutator<TeamEmailReputationResponseApi>(getHogFlowsReputationRetrieveUrl(projectId), {
         ...options,
         method: 'GET',
     })

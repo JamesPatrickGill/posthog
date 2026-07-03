@@ -153,6 +153,16 @@ export type CdpConfig = ClickhouseConfig & {
     CYCLOTRON_NODE_JANITOR_STALL_TIMEOUT_MS: number
     CYCLOTRON_NODE_JANITOR_MAX_TOUCH_COUNT: number
     CYCLOTRON_NODE_JANITOR_CLEANUP_GRACE_MS: number
+
+    // Email reputation evaluator (Temporal-scheduled bounce/complaint guard for workflows email)
+    EMAIL_REPUTATION_EVALUATION_INTERVAL_MINUTES: number
+    EMAIL_REPUTATION_WINDOW_HOURS: number
+    EMAIL_REPUTATION_MIN_SENDS: number
+    EMAIL_REPUTATION_BOUNCE_WARN_RATE: number
+    EMAIL_REPUTATION_BOUNCE_PAUSE_RATE: number
+    EMAIL_REPUTATION_COMPLAINT_WARN_RATE: number
+    EMAIL_REPUTATION_COMPLAINT_PAUSE_RATE: number
+    EMAIL_REPUTATION_WARN_GRACE_MINUTES: number
 }
 
 export function getDefaultCdpConfig(): CdpConfig {
@@ -289,5 +299,16 @@ export function getDefaultCdpConfig(): CdpConfig {
         CYCLOTRON_NODE_JANITOR_STALL_TIMEOUT_MS: 30000,
         CYCLOTRON_NODE_JANITOR_MAX_TOUCH_COUNT: 3,
         CYCLOTRON_NODE_JANITOR_CLEANUP_GRACE_MS: 10000,
+
+        // Warn ahead of AWS SES's review lines (5% bounce / 0.1% complaint), pause before they're
+        // breached badly enough to endanger the shared sending account.
+        EMAIL_REPUTATION_EVALUATION_INTERVAL_MINUTES: 30,
+        EMAIL_REPUTATION_WINDOW_HOURS: 24,
+        EMAIL_REPUTATION_MIN_SENDS: 100,
+        EMAIL_REPUTATION_BOUNCE_WARN_RATE: 0.02,
+        EMAIL_REPUTATION_BOUNCE_PAUSE_RATE: 0.05,
+        EMAIL_REPUTATION_COMPLAINT_WARN_RATE: 0.001,
+        EMAIL_REPUTATION_COMPLAINT_PAUSE_RATE: 0.005,
+        EMAIL_REPUTATION_WARN_GRACE_MINUTES: 120,
     }
 }

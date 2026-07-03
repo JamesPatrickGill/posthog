@@ -18099,6 +18099,82 @@ export namespace Schemas {
     }
 
     /**
+     * * `workflow` - Workflow
+     * * `team` - Team
+     */
+    export type EmailReputationStateScopeEnum = typeof EmailReputationStateScopeEnum[keyof typeof EmailReputationStateScopeEnum];
+
+
+    export const EmailReputationStateScopeEnum = {
+      Workflow: 'workflow',
+      Team: 'team',
+    } as const;
+
+    /**
+     * * `healthy` - Healthy
+     * * `warned` - Warned
+     * * `paused` - Paused
+     */
+    export type EmailReputationStateStateEnum = typeof EmailReputationStateStateEnum[keyof typeof EmailReputationStateStateEnum];
+
+
+    export const EmailReputationStateStateEnum = {
+      Healthy: 'healthy',
+      Warned: 'warned',
+      Paused: 'paused',
+    } as const;
+
+    /**
+     * * `bounce` - Bounce
+     * * `complaint` - Complaint
+     */
+    export type PauseReasonEnum = typeof PauseReasonEnum[keyof typeof PauseReasonEnum];
+
+
+    export const PauseReasonEnum = {
+      Bounce: 'bounce',
+      Complaint: 'complaint',
+    } as const;
+
+    /**
+     * Read-only email deliverability reputation for a workflow, driving the reputation banner.
+     */
+    export interface EmailReputationState {
+      /** 'workflow' for this workflow's own reputation, 'team' for the project-wide aggregate.
+       *
+       * * `workflow` - Workflow
+       * * `team` - Team */
+      readonly scope: EmailReputationStateScopeEnum;
+      /** 'healthy', 'warned' (over the warning threshold), or 'paused' (auto-paused; needs manual re-enable).
+       *
+       * * `healthy` - Healthy
+       * * `warned` - Warned
+       * * `paused` - Paused */
+      readonly state: EmailReputationStateStateEnum;
+      /** Bounces / emails sent in the last window (0-1). */
+      readonly bounce_rate: number;
+      /** Spam complaints / emails sent in the last window (0-1). */
+      readonly complaint_rate: number;
+      /** Emails sent in the evaluated window (sample size). */
+      readonly emails_sent: number;
+      /** End of the evaluated rolling window. */
+      readonly window_end: string;
+      /** When the evaluator last assessed this row. */
+      readonly evaluated_at: string;
+      /** When the state last changed. */
+      readonly state_changed_at: string;
+      /** When the current warning began, if any. */
+      readonly warned_at: string;
+      /** When sending was auto-paused, if paused. */
+      readonly paused_at: string;
+      /** 'bounce' or 'complaint' — which signal triggered the pause.
+       *
+       * * `bounce` - Bounce
+       * * `complaint` - Complaint */
+      readonly pause_reason: PauseReasonEnum | null;
+    }
+
+    /**
      * Highest htmlID suffix per element type, e.g. {"u_row": 1, "u_content_text": 2}.
      */
     export type EmailTemplateDesignCounters = { [key: string]: unknown };
@@ -24640,6 +24716,7 @@ export namespace Schemas {
      * * `draft` - Draft
      * * `active` - Active
      * * `archived` - Archived
+     * * `paused` - Paused
      */
     export type HogFlowStatusEnum = typeof HogFlowStatusEnum[keyof typeof HogFlowStatusEnum];
 
@@ -24648,6 +24725,7 @@ export namespace Schemas {
       Draft: 'draft',
       Active: 'active',
       Archived: 'archived',
+      Paused: 'paused',
     } as const;
 
     export interface HogFlowMasking {
@@ -24869,11 +24947,12 @@ export namespace Schemas {
       /** Optional description. */
       description?: string;
       readonly version: number;
-      /** draft (no execution), active (live), archived (disabled).
+      /** draft (no execution), active (live), archived (disabled), paused (auto-paused by the email reputation guard; read-only — use the reputation re-enable endpoint to resume).
        *
        * * `draft` - Draft
        * * `active` - Active
-       * * `archived` - Archived */
+       * * `archived` - Archived
+       * * `paused` - Paused */
       status?: HogFlowStatusEnum;
       readonly created_at: string;
       readonly created_by: UserBasic;
@@ -24901,6 +24980,8 @@ export namespace Schemas {
       readonly billable_action_types: unknown;
       /** Recurring schedules attached to this workflow (read-only here; manage via the schedules sub-resource). A batch/schedule workflow only fires when it's active AND has an active schedule. Empty for non-scheduled workflows. */
       readonly schedules: readonly HogFlowSchedule[];
+      /** Email deliverability reputation for this workflow (bounce/complaint rates, warned/paused state). Null until the workflow has sent enough email to be evaluated. */
+      readonly reputation: EmailReputationState | null;
     }
 
     /**
@@ -37764,11 +37845,12 @@ export namespace Schemas {
       /** Optional description. */
       description?: string;
       readonly version?: number;
-      /** draft (no execution), active (live), archived (disabled).
+      /** draft (no execution), active (live), archived (disabled), paused (auto-paused by the email reputation guard; read-only — use the reputation re-enable endpoint to resume).
        *
        * * `draft` - Draft
        * * `active` - Active
-       * * `archived` - Archived */
+       * * `archived` - Archived
+       * * `paused` - Paused */
       status?: HogFlowStatusEnum;
       readonly created_at?: string;
       readonly created_by?: UserBasic;
@@ -37796,6 +37878,8 @@ export namespace Schemas {
       readonly billable_action_types?: unknown;
       /** Recurring schedules attached to this workflow (read-only here; manage via the schedules sub-resource). A batch/schedule workflow only fires when it's active AND has an active schedule. Empty for non-scheduled workflows. */
       readonly schedules?: readonly HogFlowSchedule[];
+      /** Email deliverability reputation for this workflow (bounce/complaint rates, warned/paused state). Null until the workflow has sent enough email to be evaluated. */
+      readonly reputation?: EmailReputationState | null;
     }
 
     export interface PatchedHogFlowGraphUpdate {
@@ -52400,6 +52484,11 @@ export namespace Schemas {
       readonly events_retention_enforced: boolean;
     }
 
+    export interface TeamEmailReputationResponse {
+      /** Project-wide email reputation aggregate across all workflows; null until first evaluated. */
+      readonly reputation: EmailReputationState | null;
+    }
+
     export type TestHogRequestConditionsItem = { [key: string]: unknown };
 
     export interface TestHogRequest {
@@ -56479,6 +56568,7 @@ export namespace Schemas {
      * * `draft` - Draft
      * * `active` - Active
      * * `archived` - Archived
+     * * `paused` - Paused
      */
     status?: EnvironmentsHogFlowsListStatus;
     updated_at?: string;
@@ -56491,6 +56581,7 @@ export namespace Schemas {
       Active: 'active',
       Archived: 'archived',
       Draft: 'draft',
+      Paused: 'paused',
     } as const;
 
     export type EnvironmentsHogFlowsInvocationResultsRetrieveParams = {
@@ -62956,6 +63047,7 @@ export namespace Schemas {
      * * `draft` - Draft
      * * `active` - Active
      * * `archived` - Archived
+     * * `paused` - Paused
      */
     status?: HogFlowsListStatus;
     updated_at?: string;
@@ -62968,6 +63060,7 @@ export namespace Schemas {
       Active: 'active',
       Archived: 'archived',
       Draft: 'draft',
+      Paused: 'paused',
     } as const;
 
     export type HogFlowsInvocationResultsRetrieveParams = {

@@ -27,6 +27,7 @@ import { WorkflowInvocations } from './WorkflowInvocations'
 import { workflowLogic } from './workflowLogic'
 import { WorkflowLogs } from './WorkflowLogs'
 import { WorkflowMetrics } from './WorkflowMetrics'
+import { WorkflowReputationBanner } from './WorkflowReputationBanner'
 import { WorkflowSceneHeader } from './WorkflowSceneHeader'
 import { WorkflowSceneLogicProps, WorkflowTab, workflowSceneLogic } from './workflowSceneLogic'
 
@@ -125,6 +126,7 @@ export function WorkflowScene(props: WorkflowSceneLogicProps): JSX.Element {
         <SceneContent className="h-full flex flex-col grow" data-attr="workflow-scene">
             <BindLogic logic={workflowLogic} props={{ id: props.id, templateId, editTemplateId }}>
                 <WorkflowSceneHeader {...props} />
+                <WorkflowReputationBanner />
                 {/* Only show Logs and Metrics tabs if the workflow has already been created */}
                 {!props.id || props.id === 'new' ? (
                     <Workflow {...props} />

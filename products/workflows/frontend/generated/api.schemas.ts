@@ -223,6 +223,7 @@ export interface PatchedHogFlowTemplateApi {
  * * `draft` - Draft
  * * `active` - Active
  * * `archived` - Archived
+ * * `paused` - Paused
  */
 export type HogFlowStatusEnumApi = (typeof HogFlowStatusEnumApi)[keyof typeof HogFlowStatusEnumApi]
 
@@ -230,6 +231,7 @@ export const HogFlowStatusEnumApi = {
     Draft: 'draft',
     Active: 'active',
     Archived: 'archived',
+    Paused: 'paused',
 } as const
 
 /**
@@ -467,6 +469,81 @@ export interface HogFlowScheduleApi {
     readonly updated_at: string
 }
 
+/**
+ * * `workflow` - Workflow
+ * * `team` - Team
+ */
+export type EmailReputationStateScopeEnumApi =
+    (typeof EmailReputationStateScopeEnumApi)[keyof typeof EmailReputationStateScopeEnumApi]
+
+export const EmailReputationStateScopeEnumApi = {
+    Workflow: 'workflow',
+    Team: 'team',
+} as const
+
+/**
+ * * `healthy` - Healthy
+ * * `warned` - Warned
+ * * `paused` - Paused
+ */
+export type EmailReputationStateStateEnumApi =
+    (typeof EmailReputationStateStateEnumApi)[keyof typeof EmailReputationStateStateEnumApi]
+
+export const EmailReputationStateStateEnumApi = {
+    Healthy: 'healthy',
+    Warned: 'warned',
+    Paused: 'paused',
+} as const
+
+/**
+ * * `bounce` - Bounce
+ * * `complaint` - Complaint
+ */
+export type PauseReasonEnumApi = (typeof PauseReasonEnumApi)[keyof typeof PauseReasonEnumApi]
+
+export const PauseReasonEnumApi = {
+    Bounce: 'bounce',
+    Complaint: 'complaint',
+} as const
+
+/**
+ * Read-only email deliverability reputation for a workflow, driving the reputation banner.
+ */
+export interface EmailReputationStateApi {
+    /** 'workflow' for this workflow's own reputation, 'team' for the project-wide aggregate.
+     *
+     * * `workflow` - Workflow
+     * * `team` - Team */
+    readonly scope: EmailReputationStateScopeEnumApi
+    /** 'healthy', 'warned' (over the warning threshold), or 'paused' (auto-paused; needs manual re-enable).
+     *
+     * * `healthy` - Healthy
+     * * `warned` - Warned
+     * * `paused` - Paused */
+    readonly state: EmailReputationStateStateEnumApi
+    /** Bounces / emails sent in the last window (0-1). */
+    readonly bounce_rate: number
+    /** Spam complaints / emails sent in the last window (0-1). */
+    readonly complaint_rate: number
+    /** Emails sent in the evaluated window (sample size). */
+    readonly emails_sent: number
+    /** End of the evaluated rolling window. */
+    readonly window_end: string
+    /** When the evaluator last assessed this row. */
+    readonly evaluated_at: string
+    /** When the state last changed. */
+    readonly state_changed_at: string
+    /** When the current warning began, if any. */
+    readonly warned_at: string
+    /** When sending was auto-paused, if paused. */
+    readonly paused_at: string
+    /** 'bounce' or 'complaint' — which signal triggered the pause.
+     *
+     * * `bounce` - Bounce
+     * * `complaint` - Complaint */
+    readonly pause_reason: PauseReasonEnumApi | null
+}
+
 export interface HogFlowApi {
     readonly id: string
     /**
@@ -478,11 +555,12 @@ export interface HogFlowApi {
     /** Optional description. */
     description?: string
     readonly version: number
-    /** draft (no execution), active (live), archived (disabled).
+    /** draft (no execution), active (live), archived (disabled), paused (auto-paused by the email reputation guard; read-only — use the reputation re-enable endpoint to resume).
      *
      * * `draft` - Draft
      * * `active` - Active
-     * * `archived` - Archived */
+     * * `archived` - Archived
+     * * `paused` - Paused */
     status?: HogFlowStatusEnumApi
     readonly created_at: string
     readonly created_by: UserBasicApi
@@ -510,6 +588,8 @@ export interface HogFlowApi {
     readonly billable_action_types: unknown
     /** Recurring schedules attached to this workflow (read-only here; manage via the schedules sub-resource). A batch/schedule workflow only fires when it's active AND has an active schedule. Empty for non-scheduled workflows. */
     readonly schedules: readonly HogFlowScheduleApi[]
+    /** Email deliverability reputation for this workflow (bounce/complaint rates, warned/paused state). Null until the workflow has sent enough email to be evaluated. */
+    readonly reputation: EmailReputationStateApi | null
 }
 
 /**
@@ -528,11 +608,12 @@ export interface PatchedHogFlowApi {
     /** Optional description. */
     description?: string
     readonly version?: number
-    /** draft (no execution), active (live), archived (disabled).
+    /** draft (no execution), active (live), archived (disabled), paused (auto-paused by the email reputation guard; read-only — use the reputation re-enable endpoint to resume).
      *
      * * `draft` - Draft
      * * `active` - Active
-     * * `archived` - Archived */
+     * * `archived` - Archived
+     * * `paused` - Paused */
     status?: HogFlowStatusEnumApi
     readonly created_at?: string
     readonly created_by?: UserBasicApi
@@ -560,6 +641,8 @@ export interface PatchedHogFlowApi {
     readonly billable_action_types?: unknown
     /** Recurring schedules attached to this workflow (read-only here; manage via the schedules sub-resource). A batch/schedule workflow only fires when it's active AND has an active schedule. Empty for non-scheduled workflows. */
     readonly schedules?: readonly HogFlowScheduleApi[]
+    /** Email deliverability reputation for this workflow (bounce/complaint rates, warned/paused state). Null until the workflow has sent enough email to be evaluated. */
+    readonly reputation?: EmailReputationStateApi | null
 }
 
 /**
@@ -831,6 +914,11 @@ export interface WorkflowStatsRowApi {
     failed: number
 }
 
+export interface TeamEmailReputationResponseApi {
+    /** Project-wide email reputation aggregate across all workflows; null until first evaluated. */
+    readonly reputation: EmailReputationStateApi | null
+}
+
 /**
  * Property filters to apply
  */
@@ -914,6 +1002,7 @@ export type HogFlowsListParams = {
      * * `draft` - Draft
      * * `active` - Active
      * * `archived` - Archived
+     * * `paused` - Paused
      */
     status?: HogFlowsListStatus
     updated_at?: string
@@ -925,6 +1014,7 @@ export const HogFlowsListStatus = {
     Active: 'active',
     Archived: 'archived',
     Draft: 'draft',
+    Paused: 'paused',
 } as const
 
 export type HogFlowsInvocationResultsRetrieveParams = {

@@ -10,6 +10,7 @@ import {
     IconNotification,
     IconPieChart,
     IconPlug,
+    IconSend,
     IconStar,
     IconTrending,
     IconWarning,
@@ -33,6 +34,7 @@ const NOTIFICATION_TYPE_ICONS: Record<string, { Icon: ComponentType<{ className?
     reminder: { Icon: IconClock, color: 'text-primary' },
     web_analytics_digest: { Icon: IconPieChart, color: 'text-primary' },
     achievement_unlocked: { Icon: IconStar, color: 'text-warning' },
+    email_reputation: { Icon: IconSend, color: 'text-danger' },
 }
 
 export function getNotificationIcon(notificationType: string, className: string = 'size-5'): JSX.Element {

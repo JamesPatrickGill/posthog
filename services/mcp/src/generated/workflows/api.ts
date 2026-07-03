@@ -23,9 +23,9 @@ export const HogFlowsListQueryParams = /* @__PURE__ */ zod.object({
     limit: zod.number().optional().describe('Number of results to return per page.'),
     offset: zod.number().optional().describe('The initial index from which to return the results.'),
     status: zod
-        .enum(['active', 'archived', 'draft'])
+        .enum(['active', 'archived', 'draft', 'paused'])
         .optional()
-        .describe('* `draft` - Draft\n* `active` - Active\n* `archived` - Archived'),
+        .describe('* `draft` - Draft\n* `active` - Active\n* `archived` - Archived\n* `paused` - Paused'),
     updated_at: zod.iso.datetime({ offset: true }).optional(),
 })
 
@@ -57,11 +57,11 @@ export const HogFlowsCreateBody = /* @__PURE__ */ zod.object({
     name: zod.string().max(hogFlowsCreateBodyNameMax).nullish().describe('Workflow name.'),
     description: zod.string().default(hogFlowsCreateBodyDescriptionDefault).describe('Optional description.'),
     status: zod
-        .enum(['draft', 'active', 'archived'])
-        .describe('* `draft` - Draft\n* `active` - Active\n* `archived` - Archived')
+        .enum(['draft', 'active', 'archived', 'paused'])
+        .describe('* `draft` - Draft\n* `active` - Active\n* `archived` - Archived\n* `paused` - Paused')
         .optional()
         .describe(
-            'draft (no execution), active (live), archived (disabled).\n\n* `draft` - Draft\n* `active` - Active\n* `archived` - Archived'
+            'draft (no execution), active (live), archived (disabled), paused (auto-paused by the email reputation guard; read-only — use the reputation re-enable endpoint to resume).\n\n* `draft` - Draft\n* `active` - Active\n* `archived` - Archived\n* `paused` - Paused'
         ),
     trigger_masking: zod
         .union([

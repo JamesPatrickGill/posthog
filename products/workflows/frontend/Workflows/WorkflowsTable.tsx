@@ -1,7 +1,16 @@
 import { useActions, useValues } from 'kea'
 import { useMemo } from 'react'
 
-import { LemonCheckbox, LemonDivider, LemonInput, LemonSelect, LemonTag, Link, Tooltip } from '@posthog/lemon-ui'
+import {
+    LemonBanner,
+    LemonCheckbox,
+    LemonDivider,
+    LemonInput,
+    LemonSelect,
+    LemonTag,
+    Link,
+    Tooltip,
+} from '@posthog/lemon-ui'
 
 import { AppMetricsSparkline } from 'lib/components/AppMetrics/AppMetricsSparkline'
 import { MailHog } from 'lib/components/hedgehogs'
@@ -23,10 +32,11 @@ import { newWorkflowLogic } from './newWorkflowLogic'
 import { workflowLogic } from './workflowLogic'
 import { WorkflowStatusFilter, workflowsLogic } from './workflowsLogic'
 
-const STATUS_CONFIG: Record<string, { label: string; type: 'success' | 'default' | 'muted' }> = {
+const STATUS_CONFIG: Record<string, { label: string; type: 'success' | 'default' | 'muted' | 'danger' }> = {
     active: { label: 'Active', type: 'success' },
     draft: { label: 'Draft', type: 'default' },
     archived: { label: 'Archived', type: 'muted' },
+    paused: { label: 'Paused', type: 'danger' },
 }
 
 function WorkflowTypeTag({ workflow }: { workflow: HogFlow }): JSX.Element {
@@ -100,9 +110,11 @@ export function WorkflowsTable(): JSX.Element {
         selectedArchivedWorkflowIds,
         allArchivedSelected,
         selectedArchivedCount,
+        teamReputation,
     } = useValues(logic)
     const {
         loadWorkflows,
+        loadTeamReputation,
         toggleWorkflowStatus,
         duplicateWorkflow,
         archiveWorkflow,
@@ -129,6 +141,7 @@ export function WorkflowsTable(): JSX.Element {
         // Since logic isn't getting unmounted when navigating away from this scene, we need to reload workflows
         // when the component re-mounts
         loadWorkflows()
+        loadTeamReputation()
     })
 
     const isArchived = filters.status === 'archived'
@@ -261,6 +274,11 @@ export function WorkflowsTable(): JSX.Element {
                                         fullWidth
                                         status={workflow.status === 'draft' ? 'default' : 'danger'}
                                         onClick={() => toggleWorkflowStatus(workflow)}
+                                        disabledReason={
+                                            workflow.status === 'paused'
+                                                ? 'This workflow was paused for email deliverability issues. Open it to review and re-enable sending.'
+                                                : undefined
+                                        }
                                         tooltip={
                                             workflow.status === 'draft'
                                                 ? 'Enables the workflow to start sending messages'
@@ -313,6 +331,24 @@ export function WorkflowsTable(): JSX.Element {
 
     return (
         <div className="workflows-section" data-attr="workflows-table" data-loading={workflowsLoading}>
+            {teamReputation && teamReputation.state !== 'healthy' && (
+                <LemonBanner type={teamReputation.state === 'paused' ? 'error' : 'warning'} className="mb-4">
+                    {teamReputation.state === 'paused' ? (
+                        <>
+                            <b>Email sending is paused across this project.</b> The project-wide{' '}
+                            {teamReputation.pause_reason === 'complaint' ? 'spam complaint rate' : 'bounce rate'}{' '}
+                            crossed the safe sending limit, so email workflows were paused automatically. Open a paused
+                            workflow to review and re-enable it.
+                        </>
+                    ) : (
+                        <>
+                            <b>This project's email reputation needs attention.</b> Bounce or complaint rates across
+                            your workflows are elevated — if they don't improve, email sending will be paused
+                            automatically.
+                        </>
+                    )}
+                </LemonBanner>
+            )}
             {showProductIntroduction && (
                 <ProductIntroduction
                     productName="Workflow"
