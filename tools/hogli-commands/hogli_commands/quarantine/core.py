@@ -25,11 +25,11 @@ File format (repo root, sorted by ``id``, 4-space indent, trailing newline)::
     }
 
 Fields: ``runner`` defaults to ``"pytest"``; ``mode`` is ``"run"`` (default,
-the test still executes but cannot fail the suite) or ``"skip"`` (for hangs,
-import-time flakes, and state-polluters — the test is not executed at all);
-``issue`` is optional; everything else is required. ``added``/``expires`` are
-ISO dates, so they also compare correctly as plain strings (which is how the
-JS reader compares them).
+the matching test still executes but tolerated failures do not fail the suite)
+or ``"skip"`` (for hangs, import-time flakes, and state-polluters — the test is
+not executed at all); ``issue`` is optional; everything else is required.
+``added``/``expires`` are ISO dates, so they also compare correctly as plain
+strings (which is how the JS reader compares them).
 
 Selector grammar (``id``, pytest):
 
@@ -47,7 +47,9 @@ plus the ``it``/``test`` title (jest's ``currentTestName``). The same prefix
 rules apply — a file, directory, or ``product:`` selector covers every test
 under it, and a ``::``-qualified selector covers a describe block (space
 boundary) or an exact test. Only the path before ``::`` is constrained; the
-name after it may contain spaces.
+name after it may contain spaces. ``test.each`` row titles are resolved after
+the adapter sees the declaration, so quarantine those at file, directory, or
+``product:`` scope.
 
 When several entries match the same test, the most specific (longest)
 selector wins — so a narrow ``mode: skip`` entry overrides a broad

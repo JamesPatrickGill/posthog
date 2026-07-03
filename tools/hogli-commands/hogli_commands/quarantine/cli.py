@@ -58,7 +58,7 @@ def _load_for_writing(path: Path) -> core.LoadResult:
     type=click.Choice(core.MODES),
     default="run",
     show_default=True,
-    help="run = still executes but cannot fail CI (xfail); skip = not executed (hangs, state-polluters).",
+    help="run = still executes with tolerated failures; skip = not executed (hangs, state-polluters).",
 )
 @click.option(
     "--runner",

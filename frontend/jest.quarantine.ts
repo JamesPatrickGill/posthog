@@ -9,10 +9,11 @@
  * A jest id is `<repo-relative-file>::<full test name>`, where the name is the
  * space-joined ancestor `describe` titles plus the `it`/`test` title (jest's
  * `currentTestName`). Installed as a `setupFilesAfterEnv` module, it wraps the
- * `describe`/`it`/`test` globals so a matching active entry either skips the
- * test (`mode: "skip"`, for hangs/state-polluters) or tolerates its failure
- * (`mode: "run"` — jest has no native xfail, so the test still executes and a
- * failure is swallowed instead of failing the suite).
+ * `describe`/`it`/`test` globals and lifecycle hooks so a matching active entry
+ * either skips the test (`mode: "skip"`, for hangs/state-polluters) or
+ * tolerates its body and matching hook failures (`mode: "run"` — jest has no
+ * native non-strict xfail, so failures are swallowed instead of failing the
+ * suite).
  *
  * Fail-open: any problem reading or applying the file leaves the globals
  * untouched and the run proceeds normally.
@@ -189,6 +190,15 @@ function currentTestPath(): string | undefined {
     }
 }
 
+function currentTestName(): string | undefined {
+    try {
+        const name = expect.getState().currentTestName
+        return typeof name === 'string' && name.length > 0 ? name : undefined
+    } catch {
+        return undefined
+    }
+}
+
 function toDecision(entry: QuarantineEntry, testId: string): Decision {
     const attribution = entry.issue || entry.owner || 'no owner'
     return {
@@ -227,9 +237,27 @@ function decideForTest(name: unknown): Decision | null {
     return decideFor(`${relativePath}::${[...describeStack, stringifyName(name)].join(' ')}`)
 }
 
+function decideForRunningTest(): Decision | null {
+    const relativePath = relativeTestPath()
+    const name = currentTestName()
+    if (relativePath === null || name === undefined) {
+        return null
+    }
+    return decideFor(`${relativePath}::${name}`)
+}
+
 function decideForFile(): Decision | null {
     const relativePath = relativeTestPath()
     return relativePath === null ? null : decideFor(relativePath)
+}
+
+function decideForScope(): Decision | null {
+    const relativePath = relativeTestPath()
+    if (relativePath === null) {
+        return null
+    }
+    const scopeId = describeStack.length > 0 ? `${relativePath}::${describeStack.join(' ')}` : relativePath
+    return decideFor(scopeId)
 }
 
 function errorText(error: unknown): string {
@@ -253,7 +281,7 @@ function isThenable(value: unknown): value is PromiseLike<unknown> {
     return isRecord(value) && typeof (value as { then?: unknown }).then === 'function'
 }
 
-/** Run a test body swallowing any thrown error or rejected promise (jest's non-strict xfail analog). */
+/** Run a callback swallowing any thrown error or rejected promise (jest's non-strict xfail analog). */
 function tolerate(fn: (...args: unknown[]) => unknown, decision: Decision): (...args: unknown[]) => unknown {
     return function (this: unknown, ...args: unknown[]): unknown {
         try {
@@ -272,33 +300,62 @@ function tolerate(fn: (...args: unknown[]) => unknown, decision: Decision): (...
     }
 }
 
-/** Tolerate an `it`/`test` body, handling the done-callback style that `tolerate` can't (it swallows via the promise/throw path). */
-function tolerateProvides(
+function runDoneStyle(
+    fn: (done: jest.DoneCallback) => void,
+    decision: Decision,
+    done: jest.DoneCallback,
+    thisArg: unknown
+): void {
+    const tolerantDone = function (): void {
+        done()
+    } as jest.DoneCallback
+    tolerantDone.fail = function (): void {
+        done()
+    }
+    try {
+        fn.call(thisArg, tolerantDone)
+    } catch (error) {
+        warnTolerated(decision, error)
+        done()
+    }
+}
+
+/**
+ * Tolerate an `it`/`test` body or hook, handling the done-callback style that
+ * `tolerate` can't (it swallows via the promise/throw path).
+ */
+function tolerateProvidesWhen(
     fn: jest.ProvidesCallback | undefined,
-    decision: Decision
+    getDecision: () => Decision | null
 ): jest.ProvidesCallback | undefined {
     if (typeof fn !== 'function') {
         return fn
     }
     if (fn.length >= 1) {
-        // done-callback style: hand it a `done` that reports success regardless.
         const doneStyle = fn as (done: jest.DoneCallback) => void
         return function (this: unknown, done: jest.DoneCallback): void {
-            const tolerantDone = function (): void {
-                done()
-            } as jest.DoneCallback
-            tolerantDone.fail = function (): void {
-                done()
+            const decision = getDecision()
+            if (decision === null || decision.mode !== 'run') {
+                doneStyle.call(this, done)
+                return
             }
-            try {
-                doneStyle.call(this, tolerantDone)
-            } catch (error) {
-                warnTolerated(decision, error)
-                done()
-            }
+            runDoneStyle(doneStyle, decision, done, this)
         }
     }
-    return tolerate(fn as () => unknown, decision) as jest.ProvidesCallback
+    return function (this: unknown): unknown {
+        const decision = getDecision()
+        if (decision === null || decision.mode !== 'run') {
+            return (fn as () => unknown).call(this)
+        }
+        return tolerate(fn as () => unknown, decision).call(this)
+    } as jest.ProvidesCallback
+}
+
+function tolerateProvides(
+    fn: jest.ProvidesCallback | undefined,
+    decision: Decision
+): jest.ProvidesCallback | undefined {
+    return tolerateProvidesWhen(fn, () => decision)
 }
 
 /** Copy every own member (skip/only/todo/each/…) from a jest global onto its wrapper. */
@@ -318,7 +375,7 @@ type EachFactory = (name: string, fn: (...args: unknown[]) => unknown, timeout?:
 type EachEntry = (...args: unknown[]) => EachFactory
 
 /** File-scope `.each`: skip or tolerate the whole table (row titles aren't known here). */
-function wrapEach(base: jest.It): jest.Each {
+function wrapEach(base: jest.It, skipBase: jest.It): jest.Each {
     const wrapped = (...eachArgs: unknown[]): EachFactory => {
         const factory = (base.each as unknown as EachEntry)(...eachArgs)
         const decision = decideForFile()
@@ -326,7 +383,8 @@ function wrapEach(base: jest.It): jest.Each {
             return factory
         }
         if (decision.mode === 'skip') {
-            return (base.skip.each as unknown as EachEntry)(...eachArgs)
+            warnSkip(decision)
+            return (skipBase.each as unknown as EachEntry)(...eachArgs)
         }
         return (name: string, fn: (...args: unknown[]) => unknown, timeout?: number): void => {
             factory(name, tolerate(fn, decision), timeout)
@@ -335,7 +393,7 @@ function wrapEach(base: jest.It): jest.Each {
     return wrapped as unknown as jest.Each
 }
 
-function wrapIt(original: jest.It): jest.It {
+function wrapIt(original: jest.It, wrapConcurrent = true): jest.It {
     const run = (source: jest.It, name: string, fn?: jest.ProvidesCallback, timeout?: number): void => {
         const decision = decideForTest(name)
         if (decision === null) {
@@ -359,10 +417,13 @@ function wrapIt(original: jest.It): jest.It {
         run(original.only, name, fn, timeout)
     }) as jest.It
     copyMembers(wrappedOnly, original.only)
-    wrappedOnly.each = wrapEach(original.only)
+    wrappedOnly.each = wrapEach(original.only, original.skip)
     wrapped.only = wrappedOnly
 
-    wrapped.each = wrapEach(original)
+    if (wrapConcurrent && typeof original.concurrent === 'function') {
+        wrapped.concurrent = wrapIt(original.concurrent, false)
+    }
+    wrapped.each = wrapEach(original, original.skip)
     return wrapped
 }
 
@@ -392,6 +453,23 @@ function wrapDescribe(original: jest.Describe): jest.Describe {
     return wrapped
 }
 
+function wrapLifecycle(
+    original: jest.Lifecycle,
+    getDecision: () => Decision | null,
+    useDeclarationDecision = false
+): jest.Lifecycle {
+    return ((fn: jest.ProvidesHookCallback, timeout?: number): void => {
+        const declarationDecision = useDeclarationDecision ? getDecision() : null
+        original(
+            tolerateProvidesWhen(
+                fn as jest.ProvidesCallback,
+                () => declarationDecision ?? getDecision()
+            ) as jest.ProvidesHookCallback,
+            timeout
+        )
+    }) as jest.Lifecycle
+}
+
 function install(entries: QuarantineEntry[]): void {
     if (entries.length === 0) {
         return
@@ -400,6 +478,10 @@ function install(entries: QuarantineEntry[]): void {
         describe: jest.Describe
         it: jest.It
         test: jest.It
+        beforeEach: jest.Lifecycle
+        afterEach: jest.Lifecycle
+        beforeAll: jest.Lifecycle
+        afterAll: jest.Lifecycle
     }
     if (typeof globals.describe === 'function') {
         globals.describe = wrapDescribe(globals.describe)
@@ -409,6 +491,18 @@ function install(entries: QuarantineEntry[]): void {
     }
     if (typeof globals.test === 'function') {
         globals.test = wrapIt(globals.test)
+    }
+    if (typeof globals.beforeEach === 'function') {
+        globals.beforeEach = wrapLifecycle(globals.beforeEach, decideForRunningTest)
+    }
+    if (typeof globals.afterEach === 'function') {
+        globals.afterEach = wrapLifecycle(globals.afterEach, decideForRunningTest)
+    }
+    if (typeof globals.beforeAll === 'function') {
+        globals.beforeAll = wrapLifecycle(globals.beforeAll, decideForScope, true)
+    }
+    if (typeof globals.afterAll === 'function') {
+        globals.afterAll = wrapLifecycle(globals.afterAll, decideForScope, true)
     }
 }
 

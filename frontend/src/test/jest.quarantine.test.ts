@@ -1,3 +1,7 @@
+import { spawnSync } from 'child_process'
+import * as fs from 'fs'
+import * as path from 'path'
+
 import {
     activeJestEntries,
     findMatch,
@@ -9,6 +13,11 @@ import {
 } from '../../jest.quarantine'
 
 const TODAY = '2026-06-10'
+const REPO_ROOT = path.resolve(__dirname, '../../..')
+const FRONTEND_DIR = path.join(REPO_ROOT, 'frontend')
+const QUARANTINE_PATH = path.join(REPO_ROOT, '.test_quarantine.json')
+const RUNTIME_FIXTURE_ID = 'frontend/src/test/jest.quarantine.runtime.fixture.ts'
+const RUNTIME_FIXTURE_MATCH = '**/jest.quarantine.runtime.fixture.ts'
 
 function entry(overrides: Partial<QuarantineEntry> = {}): QuarantineEntry {
     return {
@@ -19,6 +28,43 @@ function entry(overrides: Partial<QuarantineEntry> = {}): QuarantineEntry {
         issue: '',
         expires: '2026-06-20',
         ...overrides,
+    }
+}
+
+function readOptionalFile(filePath: string): string | null {
+    try {
+        return fs.readFileSync(filePath, 'utf-8')
+    } catch (error) {
+        if ((error as NodeJS.ErrnoException).code === 'ENOENT') {
+            return null
+        }
+        throw error
+    }
+}
+
+function restoreOptionalFile(filePath: string, content: string | null): void {
+    if (content === null) {
+        try {
+            fs.unlinkSync(filePath)
+        } catch (error) {
+            if ((error as NodeJS.ErrnoException).code !== 'ENOENT') {
+                throw error
+            }
+        }
+        return
+    }
+    fs.writeFileSync(filePath, content)
+}
+
+function runtimeEntry(id: string, mode: 'run' | 'skip' = 'run'): Record<string, string> {
+    return {
+        id,
+        runner: 'jest',
+        reason: 'runtime quarantine adapter test',
+        owner: '@team-devex',
+        added: TODAY,
+        expires: '2099-12-31',
+        mode,
     }
 }
 
@@ -96,5 +142,56 @@ describe('jest.quarantine', () => {
         test('maps a dashed product name to the underscored directory', () => {
             expect(productPathPrefix('product:batch-exports')).toBe('products/batch_exports/')
         })
+    })
+
+    describe('runtime adapter', () => {
+        test('enforces skip and tolerated failures in a real jest worker', () => {
+            expect.hasAssertions()
+            const originalQuarantine = readOptionalFile(QUARANTINE_PATH)
+            const fixtureSuiteId = `${RUNTIME_FIXTURE_ID}::jest quarantine runtime fixture`
+            const payload = {
+                version: 1,
+                entries: [
+                    runtimeEntry(fixtureSuiteId),
+                    runtimeEntry(`${fixtureSuiteId} tolerates body failure`),
+                    runtimeEntry(`${fixtureSuiteId} tolerates async rejection`),
+                    runtimeEntry(`${fixtureSuiteId} tolerates beforeEach failure`),
+                    runtimeEntry(`${fixtureSuiteId} tolerates afterEach failure`),
+                    runtimeEntry(`${fixtureSuiteId} skips body`, 'skip'),
+                ],
+            }
+
+            try {
+                fs.writeFileSync(QUARANTINE_PATH, `${JSON.stringify(payload, null, 4)}\n`)
+                const result = spawnSync(
+                    path.join(FRONTEND_DIR, 'node_modules/.bin/jest'),
+                    [
+                        '--config',
+                        path.join(FRONTEND_DIR, 'jest.config.ts'),
+                        '--runInBand',
+                        '--no-cache',
+                        '--testMatch',
+                        RUNTIME_FIXTURE_MATCH,
+                    ],
+                    {
+                        cwd: FRONTEND_DIR,
+                        encoding: 'utf-8',
+                        env: { ...process.env, CI: '1' },
+                    }
+                )
+                const output = `${result.stdout}\n${result.stderr}`
+                if (result.status !== 0) {
+                    throw new Error(`fixture jest run failed with status ${result.status}\n${output}`)
+                }
+                expect(output).toContain('[quarantine] tolerated failure')
+                expect(output).toContain('quarantined body failure')
+                expect(output).toContain('quarantined beforeEach failure')
+                expect(output).toContain('quarantined afterEach failure')
+                expect(output).toContain('[quarantine] skipping')
+                expect(output).not.toContain('skipped body should not run')
+            } finally {
+                restoreOptionalFile(QUARANTINE_PATH, originalQuarantine)
+            }
+        }, 30000)
     })
 })
