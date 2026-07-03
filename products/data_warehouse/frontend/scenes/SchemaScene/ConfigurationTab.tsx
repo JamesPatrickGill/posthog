@@ -439,6 +439,7 @@ function SyncMethodSection({
                         <SyncMethodForm
                             ref={formRef}
                             hideFooter
+                            sourceType={source?.source_type}
                             onSaveDisabledReasonChange={setSaveDisabledReason}
                             saveButtonIsLoading={saving}
                             schema={{
