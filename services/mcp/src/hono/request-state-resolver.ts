@@ -9,6 +9,7 @@ import {
 } from '@/lib/posthog/flags'
 import type { RequestProperties } from '@/lib/request-properties'
 import type { McpMode } from '@/lib/utils'
+import { CODE_EXECUTION_FEATURE_FLAG } from '@/tools/code-exec/constants'
 import { SQL_SCHEMA_DISCOVERY_FEATURE_FLAG } from '@/tools/posthogAiTools/readDataWarehouseSchema'
 import { RENDER_UI_FEATURE_FLAG } from '@/tools/render-ui'
 import { getRequiredFeatureFlags, getScopeGatedTools, type ScopeGatedTool } from '@/tools/toolDefinitions'
@@ -118,7 +119,17 @@ export class RequestStateResolver {
         // it already arrives via `getRequiredFeatureFlags()`; keep it listed (and dedupe)
         // since the instructions layer also reads it for SQL discovery steering — neither
         // concern should depend on the other's wiring.
-        const allFlagKeys = [...new Set([...toolFlagKeys, RENDER_UI_FEATURE_FLAG, SQL_SCHEMA_DISCOVERY_FEATURE_FLAG])]
+        // `mcp-code-execution` rides the same batched evaluation as `mcp-render-ui`:
+        // not a catalog tool flag, but the exec dispatcher gates the code-execution
+        // verbs (and their prompt section) on it via `state.toolFeatureFlags`.
+        const allFlagKeys = [
+            ...new Set([
+                ...toolFlagKeys,
+                RENDER_UI_FEATURE_FLAG,
+                SQL_SCHEMA_DISCOVERY_FEATURE_FLAG,
+                CODE_EXECUTION_FEATURE_FLAG,
+            ]),
+        ]
 
         const flagAnalyticsContext = await reqCtx.safelyGetAnalyticsContext(context)
         const flagGroups = flagAnalyticsContext ? buildMCPAnalyticsGroups(flagAnalyticsContext) : undefined

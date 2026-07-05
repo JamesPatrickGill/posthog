@@ -15,6 +15,7 @@ import { RENDER_UI_RESOURCE_URI } from '@/resources/ui-apps.generated'
 import EXECUTE_SQL_PROMPT from '@/templates/execute-sql-prompt.md'
 import SCHEMA_DISCOVERY_INFOSCHEMA from '@/templates/sections/schema-discovery-infoschema.md'
 import SCHEMA_DISCOVERY_LEGACY from '@/templates/sections/schema-discovery-legacy.md'
+import { CODE_EXECUTION_FEATURE_FLAG } from '@/tools/code-exec/constants'
 import {
     getRenderableToolNames,
     makeRenderUiSchema,
@@ -82,6 +83,7 @@ export class InstructionsBuilder {
                 }),
             featureFlags: state.toolFeatureFlags,
             renderUiEnabled: state.renderUiEnabled,
+            codeExecutionEnabled: state.toolFeatureFlags?.[CODE_EXECUTION_FEATURE_FLAG] === true,
         }
     }
 

@@ -7,6 +7,7 @@ import { ToolInputValidationError } from '@/lib/errors'
 import { estimateTokens } from '@/lib/estimate-tokens'
 import { formatResponse } from '@/lib/response'
 
+import type { CodeExecutionRuntime } from './code-exec/runtime'
 import { TOKEN_CHAR_LIMIT, listAvailablePaths, resolveSchemaPath, summarizeSchema } from './schema-utils'
 import type { ScopeGatedTool } from './toolDefinitions'
 import {
@@ -42,6 +43,19 @@ export type ExecInnerCallTracker = (toolName: string, properties: ExecInnerCallP
 
 export interface ExecToolOptions {
     requireDestructiveConfirmation?: boolean
+    /**
+     * Code-execution runtime backing the `run` / `apply` / `types` verbs.
+     * Wired only when the `mcp-code-execution` flag is on; when absent the
+     * dispatcher behaves exactly as before (the verbs read as unknown commands).
+     */
+    codeExecution?: CodeExecutionRuntime
+}
+
+function unknownCommandError(verb: string, codeExecutionEnabled: boolean): Error {
+    const verbs = codeExecutionEnabled
+        ? 'tools, search, info, schema, call, types, run, apply'
+        : 'tools, search, info, schema, call'
+    return new Error(`Unknown command: "${verb}". Supported commands: ${verbs}`)
 }
 
 function makeExecSchema(commandReference: string): z.ZodObject<{ command: z.ZodString }> {
@@ -52,7 +66,9 @@ function makeExecSchema(commandReference: string): z.ZodObject<{ command: z.ZodS
 
 function parseCommand(input: string): { verb: string; rest: string } {
     const trimmed = input.trim()
-    const idx = trimmed.indexOf(' ')
+    // Split on any whitespace, not just a space — a multi-line `run <script>`
+    // command may put a newline right after the verb.
+    const idx = trimmed.search(/\s/)
     if (idx === -1) {
         return { verb: trimmed, rest: '' }
     }
@@ -476,8 +492,48 @@ export function createExecTool(
                     return outputText
                 }
 
+                case 'types': {
+                    const runtime = options.codeExecution
+                    if (!runtime) {
+                        throw unknownCommandError(verb, false)
+                    }
+                    if (!rest) {
+                        throw new Error('Usage: types <query> | types show <symbol | domain.method | domain>')
+                    }
+                    const { verb: typesSubVerb, rest: showTarget } = parseCommand(rest)
+                    if (typesSubVerb === 'show') {
+                        if (!showTarget) {
+                            throw new Error('Usage: types show <symbol | domain.method | domain>')
+                        }
+                        return runtime.showTypes(showTarget)
+                    }
+                    return runtime.searchTypes(rest)
+                }
+
+                case 'run': {
+                    const runtime = options.codeExecution
+                    if (!runtime) {
+                        throw unknownCommandError(verb, false)
+                    }
+                    if (!rest) {
+                        throw new Error('Usage: run <typescript source>')
+                    }
+                    return runtime.run(rest)
+                }
+
+                case 'apply': {
+                    const runtime = options.codeExecution
+                    if (!runtime) {
+                        throw unknownCommandError(verb, false)
+                    }
+                    if (!rest) {
+                        throw new Error('Usage: apply <plan token>')
+                    }
+                    return runtime.apply(rest)
+                }
+
                 default:
-                    throw new Error(`Unknown command: "${verb}". Supported commands: tools, search, info, schema, call`)
+                    throw unknownCommandError(verb, options.codeExecution !== undefined)
             }
         },
     }
