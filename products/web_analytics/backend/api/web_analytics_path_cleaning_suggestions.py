@@ -122,6 +122,8 @@ class WebAnalyticsPathCleaningSuggestionViewSet(TeamAndOrgViewSetMixin, viewsets
     )
     @action(detail=True, methods=["post"], required_scopes=["web_analytics:write"])
     def apply(self, request: Request, pk: str | None = None, **kwargs: Any) -> Response:
+        if pk is None:
+            raise NotFound("No such path-cleaning suggestion.")
         issue = HealthIssue.objects.filter(team_id=self.team.id, kind=SUGGESTIONS_KIND, id=pk).first()
         if issue is None:
             raise NotFound("No such path-cleaning suggestion.")
