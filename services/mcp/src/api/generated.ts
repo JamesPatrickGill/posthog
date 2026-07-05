@@ -18205,6 +18205,11 @@ export namespace Schemas {
     }
 
     /**
+     * Optional flat string-valued annotations for this action (e.g. `{"kind": "self-improvement"}`), recorded alongside `tags` on the run's per-action bookkeeping — never shown on the report. At most 20 entries; keys up to 100 chars, values up to 1000. Your skill body may name specific keys to set; otherwise omit it.
+     */
+    export type EditReportRequestMetadata = {[key: string]: string};
+
+    /**
      * One suggested reviewer — identified by `github_login`, `user_uuid`, or both.
      *
      * The server canonicalizes each entry to a lowercased GitHub login: a `user_uuid` is resolved to the
@@ -18249,6 +18254,14 @@ export namespace Schemas {
          * @maxItems 10
          */
       suggested_reviewers?: SuggestedReviewer[];
+      /**
+         * Optional category slugs for this action (lowercase kebab-case, e.g. `cost-spike`, `self-improvement`) — the same tag vocabulary you maintain for signal findings, extended to the report channel. Recorded on the run's per-action bookkeeping (never shown on the report itself); near-miss formats are normalized to slugs.
+         * @maxItems 10
+         * @items.maxLength 50
+         */
+      tags?: string[];
+      /** Optional flat string-valued annotations for this action (e.g. `{"kind": "self-improvement"}`), recorded alongside `tags` on the run's per-action bookkeeping — never shown on the report. At most 20 entries; keys up to 100 chars, values up to 1000. Your skill body may name specific keys to set; otherwise omit it. */
+      metadata?: EditReportRequestMetadata;
     }
 
     export interface EditReportResponse {
@@ -18532,6 +18545,11 @@ export namespace Schemas {
     }
 
     /**
+     * Optional flat string-valued annotations for this action (e.g. `{"kind": "self-improvement"}`), recorded alongside `tags` on the run's per-action bookkeeping — never shown on the report. At most 20 entries; keys up to 100 chars, values up to 1000. Your skill body may name specific keys to set; otherwise omit it.
+     */
+    export type EmitReportRequestMetadata = {[key: string]: string};
+
+    /**
      * One observation backing an authored report — becomes a bound signal row on the report.
      */
     export interface ReportEvidence {
@@ -18595,6 +18613,14 @@ export namespace Schemas {
          * @maxItems 10
          */
       suggested_reviewers?: SuggestedReviewer[];
+      /**
+         * Optional category slugs for this action (lowercase kebab-case, e.g. `cost-spike`, `self-improvement`) — the same tag vocabulary you maintain for signal findings, extended to the report channel. Recorded on the run's per-action bookkeeping (never shown on the report itself); near-miss formats are normalized to slugs.
+         * @maxItems 10
+         * @items.maxLength 50
+         */
+      tags?: string[];
+      /** Optional flat string-valued annotations for this action (e.g. `{"kind": "self-improvement"}`), recorded alongside `tags` on the run's per-action bookkeeping — never shown on the report. At most 20 entries; keys up to 100 chars, values up to 1000. Your skill body may name specific keys to set; otherwise omit it. */
+      metadata?: EmitReportRequestMetadata;
     }
 
     export interface EmitReportResponse {

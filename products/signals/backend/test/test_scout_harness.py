@@ -244,6 +244,9 @@ class TestPromptBuilder(BaseTest):
         # for a report scout — it doesn't fire `emit_signal`.
         assert "signals-scout-emit-signal" not in prompt
         assert "Tagging your findings" not in prompt
+        # The report channel gets its own tagging section instead — dropping it kills the tag
+        # vocabulary loop on report actions (the warehouse measurement surface).
+        assert "Tagging your report actions" in prompt
         # Shared scaffolding is still present on both personas.
         assert "First: read your skill" in prompt
         assert "Report operational friction" in prompt
@@ -251,21 +254,35 @@ class TestPromptBuilder(BaseTest):
 
     @parameterized.expand(
         [
-            # (label, skill_name, metadata, allowed_tools, expect_section). A pristine canonical
-            # scout (harness-seeded row on an on-disk fleet name) must never see the
-            # self-improvement section — applying an `improve:` suggestion would mark its row
-            # diverged and cut it off from upstream sync. Custom scouts get it on both channels,
+            # (label, skill_name, metadata, allowed_tools, expect_section, expect_escalation).
+            # A pristine canonical scout (harness-seeded row on an on-disk fleet name) must never
+            # see the self-improvement section — applying an `improve:` suggestion would mark its
+            # row diverged and cut it off from upstream sync. Custom scouts get it on both channels,
             # and so does a *diverged* seeded row (content hash no longer matching the stamped
             # `canonical_hash`): the team already owns that body, sync leaves it alone.
-            ("custom_signal_scout", "signals-scout-errors", {}, [], True),
-            ("custom_report_scout", "signals-scout-errors", {}, ["emit_report", "edit_report"], True),
+            # The report-escalation bullet is a further refinement: only a custom scout that can
+            # actually author reports gets it — steering a signal-channel or edit-only scout at
+            # `emit-report` would point it at an endpoint that fails closed.
+            ("custom_signal_scout", "signals-scout-errors", {}, [], True, False),
+            ("custom_report_scout", "signals-scout-errors", {}, ["emit_report", "edit_report"], True, True),
+            ("custom_emit_only_scout", "signals-scout-errors", {}, ["emit_report"], True, True),
+            ("custom_edit_only_scout", "signals-scout-errors", {}, ["edit_report"], True, False),
             # No stored canonical_hash (pre-hash-tracking legacy row): unprovable, stays canonical.
-            ("canonical_scout_no_hash", "signals-scout-general", {"seeded_by": HARNESS_SEEDED_BY}, [], False),
+            ("canonical_scout_no_hash", "signals-scout-general", {"seeded_by": HARNESS_SEEDED_BY}, [], False, False),
             (
                 "diverged_canonical_scout",
                 "signals-scout-general",
                 {"seeded_by": HARNESS_SEEDED_BY, "canonical_hash": "0" * 64},
                 [],
+                True,
+                False,
+            ),
+            (
+                "diverged_canonical_report_scout",
+                "signals-scout-general",
+                {"seeded_by": HARNESS_SEEDED_BY, "canonical_hash": "0" * 64},
+                ["emit_report", "edit_report"],
+                True,
                 True,
             ),
         ]
@@ -277,6 +294,7 @@ class TestPromptBuilder(BaseTest):
         metadata: dict,
         allowed_tools: list[str],
         expect_section: bool,
+        expect_escalation: bool,
     ) -> None:
         LLMSkill.objects.create(
             team=self.team,
@@ -297,6 +315,7 @@ class TestPromptBuilder(BaseTest):
         # section, and it must be skill-namespaced (scratchpad keys are unique per (team, key),
         # so a domain-only key would let two scouts clobber each other's suggestions).
         assert ("improve:<your-skill-name>:<topic>" in prompt) is expect_section
+        assert ("Escalate a proven suggestion as an inbox report" in prompt) is expect_escalation
         # The upstream friction channel is origin-independent: canonical defects still route there.
         assert "agent-feedback" in prompt
 

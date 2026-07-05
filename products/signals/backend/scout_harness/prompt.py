@@ -137,6 +137,28 @@ Attach 1-5 `tags` to each emit — lowercase kebab-case slugs naming the *catego
 - Your emitted tags are recorded per finding (visible via `signals-scout-runs-emissions-list`), so you can audit actual usage against your taxonomy if they drift.
 - Near-miss formats are normalized to slugs at emit, but aim for clean slugs."""
 
+# Report-channel counterpart to _TAGGING. Templated on the tool phrase so an emit-only or edit-only
+# scout never sees a report tool it can't call (the endpoints fail closed on the exact tool).
+_TAGGING_REPORT_TEMPLATE = """# Tagging your report actions
+
+Attach 1-5 `tags` to each {tools_phrase} — lowercase kebab-case slugs naming the *category* of the report or edit (`cost-spike`, `tracking-gap`, `self-improvement`), not the specific entity (that's what evidence `source_id`s and your `report:` pointers are for). Tags are recorded on your run's per-action bookkeeping, never shown on the report itself, and are how structure emerges from what the scout fleet does to the inbox. The vocabulary is yours to own and evolve:
+
+- **Keep your taxonomy in the scratchpad.** Maintain a `tags:<domain>:taxonomy` entry listing your tags and what each means — your step-1 scratchpad search surfaces it. Update it when you coin, rename, or retire a tag.
+- **Reuse before coining.** If an existing tag fits, use it — consistency is what makes tags queryable. Coin a new slug only when a genuinely new category emerges.
+- **`metadata` is for structured annotations, not prose.** The optional flat `metadata` dict (string values only) carries specific keys your skill body asks you to record (e.g. `{{"kind": "self-improvement"}}`). If your skill names no keys and no convention in this prompt applies, omit it.
+- Near-miss tag formats are normalized to slugs at the call, but aim for clean slugs."""
+
+
+def _tagging_report_section(*, can_emit: bool, can_edit: bool) -> str:
+    if can_emit and can_edit:
+        tools_phrase = "`signals-scout-emit-report` / `signals-scout-edit-report` call"
+    elif can_emit:
+        tools_phrase = "`signals-scout-emit-report` call"
+    else:
+        tools_phrase = "`signals-scout-edit-report` call"
+    return _TAGGING_REPORT_TEMPLATE.format(tools_phrase=tools_phrase)
+
+
 _WRITING_DESCRIPTION_SIGNAL = """# Writing the description (how it renders in the inbox)
 
 Your `description` is rendered as GitHub-flavored markdown in the inbox and **collapsed to the first ~300 characters** behind a "Show more" toggle. Write for that surface:
@@ -249,6 +271,31 @@ This scout's skill was authored by your team, and you are the only one who sees 
 - You are also the janitor of your own suggestions — the scratchpad is writable only from a scout run, so the owner cannot clear an entry after acting on it. When a prior `improve:` entry of yours has been addressed (your skill body now reflects it, or the issue no longer reproduces), `forget` it or rewrite it as resolved so the pending list stays meaningful.
 - At most one new `improve:` entry per run, near close-out, and mention it in your summary. It is never a substitute for finishing the run."""
 
+# Appended to _SELF_IMPROVEMENT only for a custom scout that can author reports (`emit_report` in its
+# allowed_tools): the scratchpad ledger is pull-based (the owner sees it only when reviewing the scout),
+# so a suggestion that has proven itself gets an active escalation path into the inbox. The `{edit_clause}`
+# slot carries the edit-first dedupe instruction when the scout also has `edit_report` — never name a
+# tool the scout can't call.
+_SELF_IMPROVEMENT_ESCALATION_TEMPLATE = """- **Escalate a proven suggestion as an inbox report.** The scratchpad entry only reaches your team when someone reviews this scout, so when a suggestion has earned attention — its `improve:` entry has accumulated two or more dated observed lines across runs, or a single run demonstrably wasted a large share of its budget on the problem — surface it actively: author a report about it with `signals-scout-emit-report`{edit_clause}. Tag it `self-improvement` and set `metadata` to `{{"kind": "self-improvement"}}` so it is measurable as scout-ops output rather than a product finding; set `actionability` to `requires_human_input` (applying a skill edit is your team's decision, never autostart material) and pass the `NO_REPO` sentinel; route it with `suggested_reviewers` when you know who tends this scout. Keep the `improve:` scratchpad entry as the ledger either way — the report is the escalation, not a replacement. At most one such report per run, and never for a first observation."""
+
+_SELF_IMPROVEMENT_ESCALATION_EDIT_CLAUSE = (
+    " (or, if you already escalated this suggestion, `append_note` to that existing report via "
+    "`signals-scout-edit-report` instead of authoring a duplicate — keep its `report_id` in the "
+    "`improve:` entry)"
+)
+
+
+def _self_improvement_section(*, can_emit_report: bool, can_edit_report: bool) -> str:
+    """The self-improvement section for a custom scout, extended with the report-escalation bullet
+    when the scout can author reports. A signal-channel or edit-only custom scout keeps the
+    scratchpad-only base — escalation without `emit_report` would steer it at a tool that fails closed."""
+    if not can_emit_report:
+        return _SELF_IMPROVEMENT
+    edit_clause = _SELF_IMPROVEMENT_ESCALATION_EDIT_CLAUSE if can_edit_report else ""
+    escalation = _SELF_IMPROVEMENT_ESCALATION_TEMPLATE.format(edit_clause=edit_clause)
+    return f"{_SELF_IMPROVEMENT}\n{escalation}"
+
+
 _OPERATIONAL_FRICTION = """# Report operational friction
 
 You run this tooling end to end on a schedule, so your experience is how PostHog makes the scout system better over time. If something gets in your way as you work — a tool you needed was missing, a tool returned wrong, confusing, or unusable data, an error you couldn't recover from, the project profile lacked something you expected, or these instructions sent you down the wrong path — proactively report it via the `agent-feedback` MCP tool when it's available to you this run.
@@ -321,6 +368,7 @@ def _report_tail_sections(*, can_emit: bool, can_edit: bool) -> list[str]:
     else:  # edit-only — no authoring, so no suggested-reviewers / writing-a-report sections
         how_a_run_works = f"{_HOW_A_RUN_WORKS_HEAD}\n{_REPORT_STEPS_EDIT_ONLY}\n{_REPORT_CLOSE_OUT_STEP}"
         channel_sections = [_EDITING_REPORT_EDIT_ONLY, _REPORT_SCRATCHPAD_POINTER]
+    channel_sections.append(_tagging_report_section(can_emit=can_emit, can_edit=can_edit))
     return [
         how_a_run_works,
         _SCRATCHPAD_KEYS,
@@ -395,7 +443,13 @@ def build_run_prompt(skill: LoadedSkill, *, run_id: str, team_id: int, started_a
     if skill.origin == "custom":
         # Slot the self-improvement invitation between friction reporting and the output format
         # (the last element of every tail). Custom scouts only — see the note on _SELF_IMPROVEMENT.
-        sections = [*sections[:-1], _SELF_IMPROVEMENT, sections[-1]]
+        # A report-authoring custom scout additionally gets the escalation bullet (emit a report
+        # for a suggestion that keeps recurring), gated on the exact tools it can call.
+        self_improvement = _self_improvement_section(
+            can_emit_report=report_channel and can_emit_report,
+            can_edit_report=report_channel and can_edit_report,
+        )
+        sections = [*sections[:-1], self_improvement, sections[-1]]
     tail = _render_tail(sections, schema_json=schema_json)
     return f"""{intro}
 # Your run identity
