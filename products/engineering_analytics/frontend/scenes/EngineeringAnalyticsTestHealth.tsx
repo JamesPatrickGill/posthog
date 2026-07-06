@@ -33,7 +33,7 @@ import {
     engineeringAnalyticsLogic,
 } from './engineeringAnalyticsLogic'
 
-// Runners with an enforcement adapter — mirrors ADAPTED_RUNNERS in the quarantine
+// Runners with an enforcement adapter; mirrors ADAPTED_RUNNERS in the quarantine
 // contract (tools/hogli-commands/hogli_commands/quarantine/core.py), which the frontend can't import.
 const ENFORCED_RUNNERS = ['pytest', 'jest']
 

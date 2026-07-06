@@ -408,7 +408,7 @@ def test_list_shows_status(runner: CliRunner, tmp_path: Path) -> None:
         ),
         # forward compat: a runner without an adapter (and an unknown field) warn but pass
         ([raw_entry(runner="some-future-runner", future_field="x")], 0, "no enforcement adapter"),
-        # jest now has an enforcement adapter — a valid jest entry passes clean
+        # jest now has an enforcement adapter; a valid jest entry passes clean
         ([raw_entry(runner="jest", id="frontend/src/x.test.ts")], 0, "OK"),
         # known-product selector passes; unknown product fails
         ([raw_entry(id="product:batch-exports")], 0, "OK"),

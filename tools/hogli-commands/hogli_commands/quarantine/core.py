@@ -26,7 +26,7 @@ File format (repo root, sorted by ``id``, 4-space indent, trailing newline)::
 
 Fields: ``runner`` defaults to ``"pytest"``; ``mode`` is ``"run"`` (default,
 the matching test still executes but tolerated failures do not fail the suite)
-or ``"skip"`` (for hangs, import-time flakes, and state-polluters — the test is
+or ``"skip"`` (for hangs, import-time flakes, and state-polluters; the test is
 not executed at all); ``issue`` is optional; everything else is required.
 ``added``/``expires`` are ISO dates, so they also compare correctly as plain
 strings (which is how the JS reader compares them).
@@ -44,7 +44,7 @@ Selector grammar (``id``, pytest):
 Selector grammar (``id``, jest): a jest id is ``<repo-relative-file>::<full
 test name>``, where the name is the space-joined ancestor ``describe`` titles
 plus the ``it``/``test`` title (jest's ``currentTestName``). The same prefix
-rules apply — a file, directory, or ``product:`` selector covers every test
+rules apply: a file, directory, or ``product:`` selector covers every test
 under it, and a ``::``-qualified selector covers a describe block (space
 boundary) or an exact test. Only the path before ``::`` is constrained; the
 name after it may contain spaces. ``test.each`` row titles are resolved after
@@ -85,7 +85,7 @@ DEFAULT_RUNNER = "pytest"
 JEST_RUNNER = "jest"
 # Runners with an enforcement adapter that consumes this contract (pytest via
 # ``pytest_support``, jest via ``frontend/jest.quarantine.ts``). Entries for any
-# other runner are kept but only informational — ``check`` warns, never errors.
+# other runner are kept but only informational; ``check`` warns, never errors.
 ADAPTED_RUNNERS = (DEFAULT_RUNNER, JEST_RUNNER)
 MODES = ("run", "skip")
 
@@ -290,7 +290,7 @@ def _validate_product_selector(selector: str) -> str | None:
         return "use the dashed product name (e.g. 'batch-exports'), not the directory form"
     product_dir = REPO_ROOT / product_path_prefix(selector)
     if not product_dir.is_dir():
-        return f"no directory {product_dir.relative_to(REPO_ROOT)} — is the product name right?"
+        return f"no directory {product_dir.relative_to(REPO_ROOT)}. Is the product name right?"
     return None
 
 
