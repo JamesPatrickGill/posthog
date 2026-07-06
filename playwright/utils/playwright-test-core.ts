@@ -34,6 +34,9 @@ export const test = base.extend<{ page: Page; _quarantine: void }>({
 
     // Auto fixture: skip a `mode: "skip"` quarantined test before its body runs.
     // titlePath starts with the file name, so slice(1) is the describe/test name.
+    // Skip enforcement rides this base, so a spec must import `test` from here (or
+    // a base that extends it), not straight from `@playwright/test`, or its skip
+    // entries silently no-op. `mode: "run"` needs no base (the reporter sees all).
     _quarantine: [
         // eslint-disable-next-line no-empty-pattern -- Playwright fixtures require the deps arg; we use none.
         async ({}, use) => {

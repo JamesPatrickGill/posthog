@@ -119,6 +119,21 @@ export function parseQuarantine(text: string): RawEntry[] {
     return data.entries.filter(isRawEntry)
 }
 
+/**
+ * True only for a real `YYYY-MM-DD` calendar date. `expires` is compared
+ * lexicographically below, so a non-zero-padded ('2026-9-05') or non-date
+ * ('soon') string would sort wrong and mask a test forever — core.py's
+ * `date.fromisoformat` rejects those, and this guard keeps the reader in step
+ * (fail-safe: an unparseable expiry drops the entry rather than activating it).
+ */
+export function isIsoDate(value: string): boolean {
+    if (!/^\d{4}-\d{2}-\d{2}$/.test(value)) {
+        return false
+    }
+    const parsed = new Date(`${value}T00:00:00Z`)
+    return !isNaN(parsed.getTime()) && parsed.toISOString().slice(0, 10) === value
+}
+
 /** Unexpired `runner: "playwright"` entries only — other runners and expired entries are excluded. */
 export function activePlaywrightEntries(entries: RawEntry[], todayIso: string): QuarantineEntry[] {
     const active: QuarantineEntry[] = []
@@ -126,7 +141,7 @@ export function activePlaywrightEntries(entries: RawEntry[], todayIso: string): 
         if ((entry.runner ?? DEFAULT_RUNNER) !== RUNNER) {
             continue
         }
-        if (typeof entry.expires !== 'string' || entry.expires < todayIso) {
+        if (typeof entry.expires !== 'string' || !isIsoDate(entry.expires) || entry.expires < todayIso) {
             continue
         }
         if (entry.mode !== undefined && entry.mode !== 'run' && entry.mode !== 'skip') {

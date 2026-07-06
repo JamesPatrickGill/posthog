@@ -57,6 +57,17 @@ describe('playwright.quarantine', () => {
             ]
             expect(activePlaywrightEntries(raw, TODAY).map((e) => e.id)).toEqual(['a', 'f'])
         })
+
+        // A malformed expires must drop the entry (fail-safe), mirroring core.py's
+        // date.fromisoformat rejection. Without the ISO guard, the raw string compare
+        // sorts these after TODAY and would mask the test past its expiry forever.
+        test.each<[string, string]>([
+            ['non-zero-padded', '2026-9-05'],
+            ['non-date text', 'soon'],
+            ['impossible month', '2026-13-05'],
+        ])('drops an entry whose expires is %s', (_label, expires) => {
+            expect(activePlaywrightEntries([{ id: 'x', runner: 'playwright', expires }], TODAY)).toEqual([])
+        })
     })
 
     describe('decideForTest', () => {

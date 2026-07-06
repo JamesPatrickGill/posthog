@@ -8,12 +8,29 @@
  * overrides the final run status to `passed` so they don't block CI. A single
  * non-quarantined failure keeps the run red.
  *
- * The override is deliberately conservative — it fires ONLY when every failure
- * is a per-test `unexpected` outcome that a `mode: "run"` entry covers. A
- * run-level error (`onError`: worker crash, global setup/teardown throw,
- * uncaught error) or a global-timeout run (`status: "timedout"`) is not a
- * per-test failure, so it always keeps the run red — masking one of those
- * would be far worse than a flaky test blocking a merge.
+ * Scope: this only flips the run-level status the CI exit code reads. The
+ * per-test outcome in junit-results.xml is written by the separate junit
+ * reporter and still records the failure, so a per-test consumer of that file
+ * (e.g. test-health ingestion) sees it as failed. Unlike pytest's xfail, the
+ * quarantine does not rewrite the per-test result, only the merge gate.
+ *
+ * The override is deliberately conservative: it fires ONLY when the run's final
+ * status is a plain `failed`, no `onError` fired, and every `unexpected` test
+ * outcome is covered by a `mode: "run"` entry. Anything surfaced through
+ * `onError` (global setup/teardown throw, uncaught error) or a non-`failed`
+ * final status (`timedout`, `interrupted`) keeps the run red, because masking a
+ * run-level problem would be far worse than a flaky test blocking a merge.
+ *
+ * Two accepted limitations follow from that conservatism:
+ *   - Reaching `--max-failures` both fires `onError` ("Testing stopped early")
+ *     and finalizes the run as `interrupted`, so once the cap is hit quarantine
+ *     no longer suppresses those failures. That is the safe direction (stay
+ *     red) and the alternative (overriding an `onError` run) is not worth it.
+ *   - A mid-test worker crash (OOM/segfault) is attributed by Playwright to
+ *     that test as `unexpected` rather than through `onError`, so a crash in a
+ *     `mode: "run"` test is tolerated as that test's own failure. Playwright
+ *     restarts the worker and re-runs the rest, so the blast radius is the
+ *     quarantined test itself.
  *
  * `mode: "skip"` is handled earlier by the auto fixture in
  * `utils/playwright-test-core.ts`; skipped tests never reach here as failures.
@@ -28,11 +45,18 @@ import type { FullResult, Reporter, Suite, TestCase } from '@playwright/test/rep
 
 import { QuarantineDecision, QuarantineEntry, decideForTest, loadActiveEntries } from './playwright.quarantine'
 
-/** Describe titles from the root down, then the test title — the playwright name parts. */
-function nameParts(test: TestCase): string[] {
+/**
+ * Describe titles from the root down, then the test title — the playwright name
+ * parts. Anonymous `describe(() => {…})` blocks (empty title) are skipped, so
+ * this matches Playwright's own `titlePath()` that the skip fixture consumes via
+ * `info.titlePath` — otherwise the two enforcement halves derive different ids.
+ */
+export function nameParts(test: TestCase): string[] {
     const describes: string[] = []
     for (let suite: Suite | undefined = test.parent; suite && suite.type === 'describe'; suite = suite.parent) {
-        describes.unshift(suite.title)
+        if (suite.title) {
+            describes.unshift(suite.title)
+        }
     }
     return [...describes, test.title]
 }
@@ -42,8 +66,9 @@ export default class QuarantineReporter implements Reporter {
     private rootSuite: Suite | undefined
     private sawRunError = false
 
-    constructor() {
-        this.entries = loadActiveEntries()
+    // entries is injectable so the onEnd override can be unit-tested without a file.
+    constructor(entries: QuarantineEntry[] = loadActiveEntries()) {
+        this.entries = entries
     }
 
     // We only emit occasional warnings, so let Playwright keep its default terminal reporter.

@@ -54,6 +54,13 @@ Selector grammar (``id``, playwright — ``runner: "playwright"``):
 - a bare spec/directory prefix or ``product:<dashed-name>`` works the same as
   for pytest.
 
+  Caveat: because playwright names are space-joined and flat, the space
+  boundary that lets a selector cover a nested ``describe`` cannot tell a leaf
+  test name from a describe prefix. So a full-name selector also matches any
+  sibling whose name begins with it plus a space (``::checkout pays`` covers
+  ``::checkout pays with coupon``). Prefer the narrowest describe title, or the
+  spec path, when a sibling shares a word-prefix.
+
 When several entries match the same test, the most specific (longest)
 selector wins — so a narrow ``mode: skip`` entry overrides a broad
 ``mode: run`` one.
