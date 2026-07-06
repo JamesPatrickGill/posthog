@@ -1,5 +1,6 @@
 import { spawnSync } from 'child_process'
 import * as fs from 'fs'
+import * as os from 'os'
 import * as path from 'path'
 
 import {
@@ -15,7 +16,6 @@ import {
 const TODAY = '2026-06-10'
 const REPO_ROOT = path.resolve(__dirname, '../../..')
 const FRONTEND_DIR = path.join(REPO_ROOT, 'frontend')
-const QUARANTINE_PATH = path.join(REPO_ROOT, '.test_quarantine.json')
 const RUNTIME_FIXTURE_ID = 'frontend/src/test/jest.quarantine.runtime.fixture.ts'
 const RUNTIME_FIXTURE_MATCH = '**/jest.quarantine.runtime.fixture.ts'
 
@@ -29,31 +29,6 @@ function entry(overrides: Partial<QuarantineEntry> = {}): QuarantineEntry {
         expires: '2026-06-20',
         ...overrides,
     }
-}
-
-function readOptionalFile(filePath: string): string | null {
-    try {
-        return fs.readFileSync(filePath, 'utf-8')
-    } catch (error) {
-        if ((error as NodeJS.ErrnoException).code === 'ENOENT') {
-            return null
-        }
-        throw error
-    }
-}
-
-function restoreOptionalFile(filePath: string, content: string | null): void {
-    if (content === null) {
-        try {
-            fs.unlinkSync(filePath)
-        } catch (error) {
-            if ((error as NodeJS.ErrnoException).code !== 'ENOENT') {
-                throw error
-            }
-        }
-        return
-    }
-    fs.writeFileSync(filePath, content)
 }
 
 function runtimeEntry(id: string, mode: 'run' | 'skip' = 'run'): Record<string, string> {
@@ -70,7 +45,7 @@ function runtimeEntry(id: string, mode: 'run' | 'skip' = 'run'): Record<string, 
 
 describe('jest.quarantine', () => {
     describe('selectorMatches', () => {
-        // The JS reimplements core.py's grammar, so it can drift independently — these lock it.
+        // The JS reimplements core.py's grammar, so it can drift independently; these lock it.
         test.each<[string, string, string, boolean]>([
             ['file covers a test in it', 'frontend/src/x.test.ts', 'frontend/src/x.test.ts::A loads', true],
             ['directory prefix', 'frontend/src', 'frontend/src/x.test.ts::A loads', true],
@@ -147,7 +122,6 @@ describe('jest.quarantine', () => {
     describe('runtime adapter', () => {
         test('enforces skip and tolerated failures in a real jest worker', () => {
             expect.hasAssertions()
-            const originalQuarantine = readOptionalFile(QUARANTINE_PATH)
             const fixtureSuiteId = `${RUNTIME_FIXTURE_ID}::jest quarantine runtime fixture`
             const payload = {
                 version: 1,
@@ -161,8 +135,12 @@ describe('jest.quarantine', () => {
                 ],
             }
 
+            // Write to an isolated temp file, never the committed repo-root one, so parallel
+            // workers and a killed run can't read or leave behind fixture-only entries.
+            const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'jest-quarantine-'))
+            const quarantinePath = path.join(tmpDir, '.test_quarantine.json')
             try {
-                fs.writeFileSync(QUARANTINE_PATH, `${JSON.stringify(payload, null, 4)}\n`)
+                fs.writeFileSync(quarantinePath, `${JSON.stringify(payload, null, 4)}\n`)
                 const result = spawnSync(
                     path.join(FRONTEND_DIR, 'node_modules/.bin/jest'),
                     [
@@ -176,7 +154,7 @@ describe('jest.quarantine', () => {
                     {
                         cwd: FRONTEND_DIR,
                         encoding: 'utf-8',
-                        env: { ...process.env, CI: '1' },
+                        env: { ...process.env, CI: '1', POSTHOG_TEST_QUARANTINE_PATH: quarantinePath },
                     }
                 )
                 const output = `${result.stdout}\n${result.stderr}`
@@ -190,7 +168,7 @@ describe('jest.quarantine', () => {
                 expect(output).toContain('[quarantine] skipping')
                 expect(output).not.toContain('skipped body should not run')
             } finally {
-                restoreOptionalFile(QUARANTINE_PATH, originalQuarantine)
+                fs.rmSync(tmpDir, { recursive: true, force: true })
             }
         }, 30000)
     })

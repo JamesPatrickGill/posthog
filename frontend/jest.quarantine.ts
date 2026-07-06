@@ -1,7 +1,7 @@
 /**
  * Jest adapter for the test quarantine.
  *
- * Schema contract: tools/hogli-commands/hogli_commands/quarantine/core.py — this
+ * Schema contract: tools/hogli-commands/hogli_commands/quarantine/core.py; this
  * file consumes that contract for `runner: "jest"` entries and must not
  * reimplement parsing, date handling, or matching beyond what it documents.
  * It is the jest sibling of `quarantine/pytest_support.py`.
@@ -11,8 +11,8 @@
  * `currentTestName`). Installed as a `setupFilesAfterEnv` module, it wraps the
  * `describe`/`it`/`test` globals and lifecycle hooks so a matching active entry
  * either skips the test (`mode: "skip"`, for hangs/state-polluters) or
- * tolerates its body and matching hook failures (`mode: "run"` — jest has no
- * native non-strict xfail, so failures are swallowed instead of failing the
+ * tolerates its body and matching hook failures (`mode: "run"`, since jest has
+ * no native non-strict xfail, so failures are swallowed instead of failing the
  * suite).
  *
  * Fail-open: any problem reading or applying the file leaves the globals
@@ -33,7 +33,9 @@ const PRODUCT_PREFIX = 'product:'
 
 // __dirname is <repo>/frontend, so the repo root is one directory up.
 const REPO_ROOT = path.resolve(__dirname, '..')
-const QUARANTINE_PATH = path.join(REPO_ROOT, '.test_quarantine.json')
+// Overridable so the adapter's own runtime test can point a spawned jest worker
+// at an isolated fixture file instead of the committed repo-root one.
+const QUARANTINE_PATH = process.env.POSTHOG_TEST_QUARANTINE_PATH || path.join(REPO_ROOT, '.test_quarantine.json')
 
 interface RawEntry {
     id: string
@@ -115,7 +117,7 @@ export function parseQuarantine(text: string): RawEntry[] {
     return data.entries.filter(isRawEntry)
 }
 
-/** Unexpired `runner: "jest"` entries only — other runners and expired entries are excluded. */
+/** Unexpired `runner: "jest"` entries only; other runners and expired entries are excluded. */
 export function activeJestEntries(entries: RawEntry[], todayIso: string): QuarantineEntry[] {
     const active: QuarantineEntry[] = []
     for (const entry of entries) {
@@ -203,7 +205,7 @@ function toDecision(entry: QuarantineEntry, testId: string): Decision {
     const attribution = entry.issue || entry.owner || 'no owner'
     return {
         mode: entry.mode,
-        label: `${testId} — quarantined until ${entry.expires}: ${entry.reason} (${attribution})`,
+        label: `${testId}: quarantined until ${entry.expires}: ${entry.reason} (${attribution})`,
     }
 }
 

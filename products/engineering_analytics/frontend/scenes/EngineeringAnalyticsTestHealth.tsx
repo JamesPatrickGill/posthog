@@ -238,14 +238,13 @@ export function EngineeringAnalyticsTestHealth(): JSX.Element {
                                 title={
                                     ENFORCED_RUNNERS.includes(row.runner)
                                         ? 'Enforced by the Jest adapter.'
-                                        : 'No enforcement adapter yet — entry is informational.'
+                                        : 'No enforcement adapter yet. This entry is informational.'
                                 }
                             >
                                 <LemonTag
                                     type={ENFORCED_RUNNERS.includes(row.runner) ? 'option' : 'muted'}
                                     size="small"
                                 >
-
                                     {row.runner}
                                 </LemonTag>
                             </Tooltip>

@@ -1,7 +1,7 @@
 """Schema and rules for ``.test_quarantine.json`` — THE quarantine contract.
 
 This module is stdlib-only and runner-agnostic: it knows nothing about pytest
-markers or CI. Runner adapters (``pytest_support``, a future jest adapter,
+markers or CI. Runner adapters (``pytest_support``, ``jest.quarantine.ts``,
 ``.github/scripts/turbo-discover.js``) consume the contract below and
 interpret selectors for their runner; they must not reimplement parsing,
 date handling, or matching beyond what is documented here.
