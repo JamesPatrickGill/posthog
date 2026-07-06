@@ -25,7 +25,6 @@ function runWorker(mode: string): Promise<{ imgs: number; ms: number }> {
                 ...process.env,
                 MODE: mode,
                 WORK_N,
-                NODE_TLS_REJECT_UNAUTHORIZED: '0',
                 // pin every native thread pool to 1 so each worker process ≈ one core
                 TF_NUM_INTRAOP_THREADS: '1',
                 TF_NUM_INTEROP_THREADS: '1',

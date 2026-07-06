@@ -9,14 +9,8 @@
  */
 import * as ort from 'onnxruntime-node'
 
+import { type Box, roundTo32 } from './geometry.ts'
 import { type Src, srcSharp } from './src-image.ts'
-
-export interface Box {
-    left: number
-    top: number
-    width: number
-    height: number
-}
 
 export interface DetectOpts {
     detLimit?: number // long side fed to the model (mult of 32). Bigger = catches smaller text, slower.
@@ -57,10 +51,6 @@ export async function loadDbnet(modelPath: string): Promise<DbnetModel> {
         executionMode: 'sequential',
     })
     return { session, inputName: session.inputNames[0], outputName: session.outputNames[0] }
-}
-
-function roundTo32(n: number): number {
-    return Math.max(32, Math.round(n / 32) * 32)
 }
 
 async function preprocess(

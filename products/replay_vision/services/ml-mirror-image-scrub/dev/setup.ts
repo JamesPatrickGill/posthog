@@ -13,8 +13,6 @@ import { mkdir, writeFile } from 'node:fs/promises'
 import sharp from 'sharp'
 
 const ROOT = new URL('..', import.meta.url).pathname
-const TLS = { rejectUnauthorized: false } as const // this env serves an incomplete cert chain; PoC only
-process.env.NODE_TLS_REJECT_UNAUTHORIZED = '0'
 
 const MODELS: { url: string; file: string }[] = [
     {
@@ -40,7 +38,7 @@ const DATASETS: { dataset: string; dir: string; count: number }[] = [
 const UA = 'Mozilla/5.0 posthog-replay-image-scrub' // HF + most CDNs reject requests without one
 
 async function get(url: string): Promise<Response> {
-    return fetch(url, { signal: AbortSignal.timeout(60000), headers: { 'user-agent': UA }, ...(TLS as object) })
+    return fetch(url, { signal: AbortSignal.timeout(60000), headers: { 'user-agent': UA } })
 }
 
 const sleep = (ms: number): Promise<void> => new Promise((r) => setTimeout(r, ms))

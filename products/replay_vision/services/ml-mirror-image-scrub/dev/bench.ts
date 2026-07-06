@@ -120,7 +120,7 @@ async function main(): Promise<void> {
     console.log(`  latency:    p50 ${fmt(pct(blat, 50))}ms   p95 ${fmt(pct(blat, 95))}ms   mean ${fmt(blurMean)}ms\n`)
 
     // --- 2 + 3. advanced ---
-    console.log('loading models (nsfw + blazeface + dbnet)...')
+    console.log('loading models (nsfw + yunet + dbnet)...')
     const tLoad = performance.now()
     const models = await loadModels()
     console.log(`  models loaded in ${fmt((performance.now() - tLoad) / 1000)}s\n`)

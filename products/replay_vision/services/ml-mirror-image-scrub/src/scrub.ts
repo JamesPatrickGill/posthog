@@ -15,6 +15,7 @@ import sharp from 'sharp'
 
 import { BLANK_PNG, blurOnly } from './blur.ts'
 import { type DbnetModel, detectTextDbnet, loadDbnet } from './dbnet.ts'
+import { type Box } from './geometry.ts'
 import { type Src, decodeSrc, srcSharp } from './src-image.ts'
 import { type YunetModel, detectFacesYunet, loadYunet } from './yunet.ts'
 
@@ -47,7 +48,7 @@ export async function loadModels(
         await tf.setBackend('wasm')
         await tf.ready()
     }
-    console.error(`  tfjs backend: ${tf.getBackend()}`)
+    console.log(`  tfjs backend: ${tf.getBackend()}`)
 
     const [nsfwModel, dbnet, yunet] = await Promise.all([
         nsfw.load(), // default MobileNetV2 224 model, fetched + cached
@@ -57,8 +58,9 @@ export async function loadModels(
     return { nsfw: nsfwModel, dbnet, yunet }
 }
 
-export async function disposeModels(_m: Models): Promise<void> {
-    // nothing to tear down
+export async function disposeModels(m: Models): Promise<void> {
+    m.nsfw.model.dispose()
+    await Promise.all([m.dbnet.session.release(), m.yunet.session.release()])
 }
 
 // --- advanced pipeline --------------------------------------------------------------------------
@@ -91,13 +93,6 @@ const EDGE_BLUR = Number(process.env.EDGE_BLUR ?? 4) // sigma to feather redacti
  *  while small images aren't over-blocked. Re-detection by the verifier confirms it's strong enough. */
 function pixelateBlock(W: number, H: number): number {
     return PIXELATE_ENV ?? Math.max(10, Math.min(24, Math.round(Math.max(W, H) / 170)))
-}
-
-interface Box {
-    left: number
-    top: number
-    width: number
-    height: number
 }
 
 function clampBox(b: Box, W: number, H: number): Box | null {
@@ -368,17 +363,23 @@ async function compose(
         }
     }
 
-    const textLayer = Buffer.from(alphaText.buffer, alphaText.byteOffset, alphaText.byteLength)
     const faceLayer = Buffer.from(alphaFace.buffer, alphaFace.byteOffset, alphaFace.byteLength)
     const raw3 = { raw: { width: W, height: H, channels: 3 } } as const
     const raw1 = { raw: { width: W, height: H, channels: 1 } } as const
 
+    const composites: sharp.OverlayOptions[] = []
+
     // Text: solid bars whose edges are softened by blurring the COLOUR layer (alpha stays hard, so no
     // original text is ever revealed; the blur only fades the fill into its background margin).
-    const redBlurred = EDGE_BLUR > 0 ? await sharp(red, raw3).blur(EDGE_BLUR).raw().toBuffer() : red
-    const composites: sharp.OverlayOptions[] = [
-        { input: await sharp(redBlurred, raw3).joinChannel(textLayer, raw1).png().toBuffer(), left: 0, top: 0 },
-    ]
+    if (textBoxes.length > 0) {
+        const textLayer = Buffer.from(alphaText.buffer, alphaText.byteOffset, alphaText.byteLength)
+        const redBlurred = EDGE_BLUR > 0 ? await sharp(red, raw3).blur(EDGE_BLUR).raw().toBuffer() : red
+        composites.push({
+            input: await sharp(redBlurred, raw3).joinChannel(textLayer, raw1).png().toBuffer(),
+            left: 0,
+            top: 0,
+        })
+    }
     // Faces: composite the CRISP (unblurred) mosaic. Blurring a mosaic re-smooths it into a face a
     // detector can find again, so the face layer must skip the edge blur the text layer uses.
     if (faceBoxes.length > 0) {

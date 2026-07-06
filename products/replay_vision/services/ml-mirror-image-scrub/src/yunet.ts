@@ -7,14 +7,8 @@
  */
 import * as ort from 'onnxruntime-node'
 
+import { type Box, roundTo32 } from './geometry.ts'
 import { type Src, srcSharp } from './src-image.ts'
-
-export interface Box {
-    left: number
-    top: number
-    width: number
-    height: number
-}
 
 const YUNET_LONG = Number(process.env.YUNET_LONG ?? 640) // detection long side (mult of 32)
 const SCORE_MIN = Number(process.env.YUNET_SCORE ?? 0.7)
@@ -36,10 +30,6 @@ export async function loadYunet(modelPath: string): Promise<YunetModel> {
         executionMode: 'sequential',
     })
     return { session, inputName: session.inputNames[0] }
-}
-
-function roundTo32(n: number): number {
-    return Math.max(32, Math.round(n / 32) * 32)
 }
 
 function iou(a: Box, b: Box): number {

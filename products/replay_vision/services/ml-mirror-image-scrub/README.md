@@ -105,8 +105,9 @@ npm run bench        # latency + per-stage breakdown
 npm run consume      # the consumer worker; `npm run produce -- <img> <team>` to feed it
 ```
 
-Some hosts serve an incomplete TLS chain; the scripts set `NODE_TLS_REJECT_UNAUTHORIZED=0` for the
-model/data downloads (PoC only).
+If the model/data downloads fail with a TLS chain error, your machine is missing an intermediate CA.
+Point `NODE_EXTRA_CA_CERTS` at a complete bundle (e.g. certifi's `cacert.pem`) rather than disabling
+certificate validation.
 
 ## The self-verifying test
 
