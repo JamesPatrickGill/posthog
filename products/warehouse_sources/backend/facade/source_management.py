@@ -63,6 +63,8 @@ _LAZY = {
     "source_requires_ssl": "sources.postgres.postgres",
     "PostgresSource": "sources.postgres.source",
     "SnowflakeSource": "sources.snowflake.source",
+    "detect_typeform_response_types_transition": "sources.typeform.schema_transition",
+    "apply_typeform_response_types_reset": "sources.typeform.schema_transition",
 }
 
 __all__ = sorted(_LAZY)

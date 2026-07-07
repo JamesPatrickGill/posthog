@@ -27992,6 +27992,7 @@ class SourceFieldSelectConfig(BaseModel):
     model_config = ConfigDict(
         extra="forbid",
     )
+    caption: str | None = None
     converter: SourceFieldSelectConfigConverter | None = None
     defaultValue: str
     label: str
