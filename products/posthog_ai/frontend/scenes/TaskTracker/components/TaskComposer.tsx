@@ -14,6 +14,7 @@ import { cycleMode } from 'products/posthog_ai/frontend/utils/composerModes'
 
 import { ComposerModelEffortPickers } from '../../../components/composer/ComposerModelEffortPickers'
 import { ComposerModePicker } from '../../../components/composer/ComposerModePicker'
+import { ComposerModeShortcut } from '../../../components/composer/ComposerModeShortcut'
 import { taskTrackerSceneLogic } from '../taskTrackerSceneLogic'
 import { RepositorySelector } from './RepositorySelector'
 
@@ -49,6 +50,9 @@ export function TaskComposer(): JSX.Element {
                             value={newTaskData.repositoryConfig}
                             onChange={(config) => setNewTaskData({ repositoryConfig: config })}
                         />
+                        <ComposerModeShortcut
+                            onCycle={() => setNewTaskData({ permissionMode: cycleMode(newTaskData.permissionMode) })}
+                        />
                         <Composer.Root
                             value={newTaskData.description}
                             onChange={(value) => setNewTaskData({ description: value })}
@@ -64,15 +68,6 @@ export function TaskComposer(): JSX.Element {
                                         submitShortcut="cmd-enter"
                                         autoFocus
                                         data-attr="task-composer-input"
-                                        onKeyDown={(e) => {
-                                            // shift+tab cycles the permission mode, matching `/code`.
-                                            if (e.key === 'Tab' && e.shiftKey) {
-                                                e.preventDefault()
-                                                setNewTaskData({
-                                                    permissionMode: cycleMode(newTaskData.permissionMode),
-                                                })
-                                            }
-                                        }}
                                     />
                                 </Composer.Field>
                                 <Composer.Footer className="flex items-center gap-1 pl-2">

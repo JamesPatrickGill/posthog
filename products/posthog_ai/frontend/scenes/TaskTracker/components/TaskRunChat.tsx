@@ -10,6 +10,7 @@ import { cycleMode } from 'products/posthog_ai/frontend/utils/composerModes'
 
 import { ComposerModelEffortPickers } from '../../../components/composer/ComposerModelEffortPickers'
 import { ComposerModePicker } from '../../../components/composer/ComposerModePicker'
+import { ComposerModeShortcut } from '../../../components/composer/ComposerModeShortcut'
 import { taskDetailSceneLogic } from '../taskDetailSceneLogic'
 
 export interface TaskRunChatProps {
@@ -93,6 +94,8 @@ function TaskRunChatContent({ logicProps }: { logicProps: RunInteractionLogicPro
             <div className="@container/thread flex flex-col h-full -mx-4">
                 <RunSurface.Thread className="flex-1 min-h-0" listClassName="py-4" rowClassName="px-4" />
                 <RunSurface.Composer>
+                    {/* Inside the slot children: detaches while a pending approval replaces the composer. */}
+                    <ComposerModeShortcut onCycle={() => setMode(cycleMode(selectedMode))} />
                     <RunSurface.Resources />
                     <Composer.Root
                         value={composerForm.draft}
@@ -116,17 +119,7 @@ function TaskRunChatContent({ logicProps }: { logicProps: RunInteractionLogicPro
                                 <Composer.Placeholder>
                                     {isTerminal ? 'Send a message to start a new run…' : 'Send a follow-up message…'}
                                 </Composer.Placeholder>
-                                <Composer.Textarea
-                                    data-attr="sandbox-composer-input"
-                                    submitShortcut="cmd-enter"
-                                    onKeyDown={(e) => {
-                                        // shift+tab cycles the permission mode, matching `/code`.
-                                        if (e.key === 'Tab' && e.shiftKey) {
-                                            e.preventDefault()
-                                            setMode(cycleMode(selectedMode))
-                                        }
-                                    }}
-                                />
+                                <Composer.Textarea data-attr="sandbox-composer-input" submitShortcut="cmd-enter" />
                             </Composer.Field>
                             <Composer.Footer className="flex items-center gap-1 pl-2">
                                 {/* Mode + model/effort pickers: selection lives in the bound runInteractionLogic and
