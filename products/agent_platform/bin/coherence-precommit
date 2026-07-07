@@ -1,0 +1,51 @@
+#!/usr/bin/env bash
+# coherence-precommit — lint-staged command for agent_platform changes.
+#
+# For each coherence root (a dir with coherence.config.json) whose files are
+# staged, runs `coherence verify --fast` (structural claims + boundary anchoring
+# + meta-oracle; no DB, no test runner). Blocks the commit on a red.
+#
+# Scoped: lint-staged only invokes this for products/agent_platform/** files.
+# Graceful: if the tool isn't installed, it skips (exit 0) with a hint rather
+# than blocking — run products/agent_platform/bin/coherence-install to enable.
+# Bypass any commit with `git commit --no-verify`.
+set -uo pipefail
+
+REPO_ROOT="$(git rev-parse --show-toplevel)"
+CLI="$REPO_ROOT/products/agent_platform/.coherence-tool/repo/dist/cli.js"
+
+# Auto-bootstrap on first use: build the pinned CLI into the gitignored cache.
+if [ ! -f "$CLI" ]; then
+    printf '\033[36m[coherence] first-time setup: installing the eval tool (one-time clone + build)...\033[0m\n' >&2
+    "$REPO_ROOT/products/agent_platform/bin/coherence-install" >&2 || true
+fi
+# If it still isn't there (e.g. offline), skip this commit rather than hard-blocking
+# on setup — it retries on the next commit.
+if [ ! -f "$CLI" ]; then
+    printf '\033[33m[coherence] tool unavailable (offline?) — skipping this commit; will retry next time.\033[0m\n' >&2
+    exit 0
+fi
+
+# Map each staged file (passed by lint-staged) to its coherence root: the
+# nearest ancestor dir holding a coherence.config.json. Dedup into a set.
+declare -A roots
+for f in "$@"; do
+    d="$(cd "$(dirname "$f")" 2>/dev/null && pwd)" || continue
+    while [ -n "$d" ] && [ "$d" != "/" ]; do
+        if [ -f "$d/coherence.config.json" ]; then
+            roots["$d"]=1
+            break
+        fi
+        [ "$d" = "$REPO_ROOT" ] && break
+        d="$(dirname "$d")"
+    done
+done
+
+status=0
+for root in "${!roots[@]}"; do
+    printf '\033[36m[coherence] verify --fast: %s\033[0m\n' "${root#"$REPO_ROOT"/}" >&2
+    if ! (cd "$root" && node "$CLI" verify --fast >&2); then
+        status=1
+    fi
+done
+exit "$status"
