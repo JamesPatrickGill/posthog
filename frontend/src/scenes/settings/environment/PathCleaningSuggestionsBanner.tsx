@@ -3,11 +3,19 @@ import { useActions, useValues } from 'kea'
 import { IconArrowRight } from '@posthog/icons'
 import { LemonBanner } from '@posthog/lemon-ui'
 
+import { RestrictionScope, useRestrictedArea } from 'lib/components/RestrictedArea'
+import { TeamMembershipLevel } from 'lib/constants'
+
 import { pathCleaningSuggestionsLogic } from './pathCleaningSuggestionsLogic'
 
 export function PathCleaningSuggestionsBanner(): JSX.Element | null {
     const { latestSuggestion, suggestionsLoading } = useValues(pathCleaningSuggestionsLogic)
     const { applySuggestion, dismissSuggestion } = useActions(pathCleaningSuggestionsLogic)
+    // Applying writes path_cleaning_filters, an admin-gated team field — mirror the backend gate.
+    const restrictedReason = useRestrictedArea({
+        scope: RestrictionScope.Project,
+        minimumAccessLevel: TeamMembershipLevel.Admin,
+    })
 
     if (suggestionsLoading || !latestSuggestion || latestSuggestion.rules.length === 0) {
         return null
@@ -22,6 +30,7 @@ export function PathCleaningSuggestionsBanner(): JSX.Element | null {
             action={{
                 children: 'Apply all',
                 onClick: () => applySuggestion(latestSuggestion.id),
+                disabledReason: restrictedReason,
             }}
             onClose={() => dismissSuggestion(latestSuggestion.id)}
         >

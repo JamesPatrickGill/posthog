@@ -42,17 +42,17 @@ class PathCleaningSuggestionsCheck(HealthCheck):
     remediation = Remediation(
         human="""
             Open Settings → Web analytics → Path cleaning. Review the suggested rules — each one
-            shows the regex, the replacement alias, and before/after examples from your real paths —
+            shows the regex, the replacement alias, and how many of your real paths it matched —
             then apply them all or add the ones you want by hand. Rules collapse dynamic URL segments
             (IDs, slugs, tokens) so the Paths table groups equivalent pages together.
         """,
         agent="""
             Fetch this issue's payload: `rules` is a list of validated path-cleaning rules
-            (regex, alias, order, match_count, before/after examples computed against the team's real
-            sampled paths). To apply them, call the web-analytics path-cleaning-suggestions `apply`
-            endpoint with this issue's id — it merges the rules into the team's `path_cleaning_filters`
-            without overwriting existing rules and resolves this issue. To regenerate fresher
-            suggestions first, call the `generate` endpoint.
+            (regex, alias, order, and match_count — how many of the team's real sampled paths the
+            rule rewrote). To apply them, call the web-analytics path-cleaning-suggestions `apply`
+            endpoint with this issue's id (requires project admin) — it merges the rules into the
+            team's `path_cleaning_filters` without overwriting existing rules and resolves this
+            issue. To regenerate fresher suggestions first, call the `generate` endpoint.
         """,
     )
 

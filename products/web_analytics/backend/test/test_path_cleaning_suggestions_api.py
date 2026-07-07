@@ -4,7 +4,7 @@ from unittest.mock import patch
 from parameterized import parameterized
 from rest_framework import status
 
-from posthog.models import Organization, Team
+from posthog.models import Organization, OrganizationMembership, Team
 from posthog.models.health_issue import HealthIssue
 from posthog.models.personal_api_key import PersonalAPIKey, hash_key_value
 from posthog.models.utils import generate_random_token_personal
@@ -12,6 +12,7 @@ from posthog.models.utils import generate_random_token_personal
 from products.web_analytics.backend.path_cleaning_suggestions import service
 from products.web_analytics.backend.path_cleaning_suggestions.prompts import SuggestedRule, SuggestedRulesResponse
 
+# Mirrors the stored payload shape: no `examples` — real paths never land in health-issue payloads.
 RULES = [
     {
         "regex": r"/users/\d+/profile",
@@ -19,7 +20,6 @@ RULES = [
         "order": 0,
         "reason": "user id",
         "match_count": 3,
-        "examples": [{"before": "/users/1/profile", "after": "/users/<id>/profile"}],
     }
 ]
 
@@ -27,6 +27,13 @@ KIND = "path_cleaning_suggestions"
 
 
 class TestPathCleaningSuggestionsAPI(APIBaseTest):
+    def setUp(self) -> None:
+        super().setUp()
+        # apply is project-admin gated (path_cleaning_filters is an admin-only team field), so the
+        # default test user is elevated; the non-admin test demotes explicitly.
+        self.organization_membership.level = OrganizationMembership.Level.ADMIN
+        self.organization_membership.save()
+
     def _url(self, suffix: str = "") -> str:
         return f"/api/projects/{self.team.id}/web_analytics_path_cleaning_suggestions/{suffix}"
 
@@ -89,6 +96,19 @@ class TestPathCleaningSuggestionsAPI(APIBaseTest):
         self.client.logout()
         response = self.client.post(self._url(f"{suggestion.id}/apply/"), headers={"authorization": f"Bearer {value}"})
         self.assertEqual(response.status_code, expected)
+
+    def test_apply_requires_project_admin(self) -> None:
+        # path_cleaning_filters is admin-gated on the team API; this endpoint must not be a bypass.
+        self.organization_membership.level = OrganizationMembership.Level.MEMBER
+        self.organization_membership.save()
+        self.team.path_cleaning_filters = []
+        self.team.save()
+        suggestion = self._make_suggestion(self.team)
+
+        response = self.client.post(self._url(f"{suggestion.id}/apply/"))
+        self.assertEqual(response.status_code, status.HTTP_403_FORBIDDEN)
+        self.team.refresh_from_db()
+        self.assertEqual(self.team.path_cleaning_filters, [])
 
     def test_generate_stores_health_issue_and_returns_suggestion(self) -> None:
         self.team.path_cleaning_filters = []
