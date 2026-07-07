@@ -68,7 +68,6 @@ function TaskRunChatContent({ logicProps }: { logicProps: RunInteractionLogicPro
         selectedModel,
         selectedEffort,
         selectedMode,
-        planApprovalOpen,
     } = useValues(runInteractionLogic(logicProps))
     const {
         setComposerFormValues,
@@ -92,14 +91,7 @@ function TaskRunChatContent({ logicProps }: { logicProps: RunInteractionLogicPro
             interaction="live"
         >
             <div className="@container/thread flex flex-col h-full -mx-4">
-                {/* While a plan approval's plan view is open, the input region grows over the whole thread
-                area so the user reviews the plan full-screen; the thread returns once the plan is closed
-                or resolved. */}
-                <RunSurface.Thread
-                    className={planApprovalOpen ? 'hidden' : 'flex-1 min-h-0'}
-                    listClassName="py-4"
-                    rowClassName="px-4"
-                />
+                <RunSurface.Thread className="flex-1 min-h-0" listClassName="py-4" rowClassName="px-4" />
                 <RunSurface.Composer>
                     <RunSurface.Resources />
                     <Composer.Root

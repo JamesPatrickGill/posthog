@@ -4,7 +4,6 @@ import { IconWarning } from '@posthog/icons'
 import { LemonTag, Spinner } from '@posthog/lemon-ui'
 
 import { CodeSnippet, Language } from 'lib/components/CodeSnippet'
-import { cn } from 'lib/utils/css-classes'
 
 import type { MultiQuestionFormQuestion } from '~/queries/schema/schema-assistant-messages'
 
@@ -13,8 +12,7 @@ import { MarkdownMessage } from '../messages/MarkdownMessage'
 import { getPermissionDisplay } from '../policy/permissionDisplayUtils'
 import { isPlanPermissionRequest, mapPermissionOptions, type ApprovalCardOption } from '../policy/permissionUtils'
 import type { PermissionRequestRecord } from '../types/streamTypes'
-import { PlanApprovalActions } from './PlanApprovalActions'
-import { getPlanPayload, PlanPreview } from './PlanPreview'
+import { isPermissionModeOptionId, PlanApprovalSelector } from './PlanApprovalActions'
 import { QuestionField } from './QuestionField'
 
 interface PermissionInputProps {
@@ -42,9 +40,10 @@ function toPermissionQuestion(
 
 /**
  * Self-contained input-area renderer for an ACP `permission_request` on a sandbox conversation.
- * A plan approval (`ExitPlanMode`) renders as the plan document sheet + the approve/reject action row;
- * every other request reuses the `QuestionField` surface as sandbox questions do, preserving the ACP
- * option ids sent back to the runtime. `allow_always` stays hidden unless filtering would leave no choices.
+ * A plan approval (`ExitPlanMode`) renders `/code`'s plan-approval selector (the plan itself is the
+ * document card in the thread); every other request reuses the `QuestionField` surface as sandbox
+ * questions do, preserving the ACP option ids sent back to the runtime. `allow_always` stays hidden
+ * unless filtering would leave no choices.
  *
  * Submitting POSTs through `runStreamLogic.respondToPermission`; the logic's
  * `respondingToPermission` drives the loading/double-submit guard and re-enables the controls when the
@@ -52,32 +51,28 @@ function toPermissionQuestion(
  */
 export function PermissionInput({ streamKey, request }: PermissionInputProps): JSX.Element {
     const boundLogic = runStreamLogic({ streamKey })
-    const { respondToPermission, setPlanApprovalExpanded } = useActions(boundLogic)
-    const { respondingToPermission, planApprovalExpanded } = useValues(boundLogic)
+    const { respondToPermission, cancelRun } = useActions(boundLogic)
+    const { respondingToPermission } = useValues(boundLogic)
 
-    if (isPlanPermissionRequest(request)) {
-        // A plan approval keeps every wire option: the accept-with-mode choices arrive as
-        // `allow_always` (which the generic card hides as "remembered") and must all stay offered.
-        const planOptions = mapPermissionOptions(request.options, true)
-        const planPayload = getPlanPayload(request.rawToolCall.input)
-        const planText = planPayload.plan ?? request.description ?? request.title ?? ''
+    // A plan approval keeps every wire option: the accept-with-mode choices arrive as `allow_always`
+    // (which the generic card hides as "remembered") and must all stay offered. If the wire offers no
+    // recognizable mode ids, fall through to the generic card so the request stays actionable.
+    const planOptions = isPlanPermissionRequest(request) ? mapPermissionOptions(request.options, true) : []
+    const planApproveOptions = planOptions.filter(
+        (option) => option.decision === 'approved' && isPermissionModeOptionId(option.optionId)
+    )
+    if (planApproveOptions.length > 0) {
         return (
-            <div className={cn('flex flex-col gap-3 p-3', planApprovalExpanded && 'h-full min-h-0')}>
-                <PlanPreview
-                    plan={planText}
-                    planFilePath={planPayload.planFilePath}
-                    id={`permission-${request.requestId}`}
-                    expanded={planApprovalExpanded}
-                    onExpandedChange={setPlanApprovalExpanded}
-                />
-                <PlanApprovalActions
-                    approveOptions={planOptions.filter((option) => option.decision === 'approved')}
+            <div className="p-3">
+                <PlanApprovalSelector
+                    approveOptions={planApproveOptions}
                     rejectOption={planOptions.find((option) => option.decision === 'declined')}
                     responding={respondingToPermission}
                     onApprove={(optionId) => respondToPermission({ requestId: request.requestId, optionId })}
                     onReject={(optionId, feedback) =>
                         respondToPermission({ requestId: request.requestId, optionId, customInput: feedback })
                     }
+                    onCancel={() => cancelRun()}
                 />
             </div>
         )

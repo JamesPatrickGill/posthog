@@ -3,8 +3,6 @@ import { createContext, type ReactNode, useContext, useEffect } from 'react'
 
 import { LemonDivider } from '@posthog/lemon-ui'
 
-import { cn } from 'lib/utils/css-classes'
-
 import { isTerminalRunStatus, runStreamLogic } from '../logics/runStreamLogic'
 import { taskLogic } from '../logics/taskLogic'
 import { OriginProduct } from '../types/taskTypes'
@@ -203,19 +201,16 @@ function RunSurfaceThread({
  */
 function RunSurfaceComposer({ children }: { children?: ReactNode }): JSX.Element | null {
     const { interaction, runId } = useRunSurfaceContext()
-    const { pendingPermissionRequest, planApprovalOpen, currentRunStatus } = useValues(runStreamLogic)
+    const { pendingPermissionRequest, currentRunStatus } = useValues(runStreamLogic)
     if (interaction !== 'live') {
         return null
     }
     // Pending approval/question takes precedence over the composer.
     if (pendingPermissionRequest && !isTerminalRunStatus(currentRunStatus)) {
         const isQuestion = !!pendingPermissionRequest.questions && pendingPermissionRequest.questions.length > 0
-        // An open plan approval grows over the whole thread area (the layout hides the thread meanwhile) so
-        // the user reviews the plan full-screen; closing the plan — and every other approval — shrinks back
-        // to the compact bar above the composer slot.
         return (
-            <div className={cn('border-t px-4 py-3', planApprovalOpen && 'flex-1 min-h-0')}>
-                <div className={cn('mx-auto w-full max-w-180', planApprovalOpen && 'h-full min-h-0')}>
+            <div className="border-t px-4 py-3">
+                <div className="mx-auto w-full max-w-180">
                     {isQuestion ? (
                         <QuestionInput streamKey={runId} request={pendingPermissionRequest} />
                     ) : (

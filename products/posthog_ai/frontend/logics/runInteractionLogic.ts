@@ -79,14 +79,7 @@ export const runInteractionLogic = kea<runInteractionLogicType>([
             projectLogic,
             ['currentProjectId'],
             runStreamLogic({ streamKey: props.streamKey ?? props.runId }),
-            [
-                'currentRunStatus',
-                'pendingPermissionRequest',
-                'planApprovalOpen',
-                'respondingToPermission',
-                'isThinking',
-                'currentMode',
-            ],
+            ['currentRunStatus', 'pendingPermissionRequest', 'respondingToPermission', 'isThinking', 'currentMode'],
         ],
         actions: [
             runStreamLogic({ streamKey: props.streamKey ?? props.runId }),

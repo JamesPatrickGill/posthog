@@ -1,12 +1,20 @@
-import { Suspense, lazy, memo } from 'react'
+import { Suspense, lazy, memo, useState } from 'react'
 
-import { IconDocument, IconGlobe, IconMagicWand, IconSearch, IconTerminal, IconWrench } from '@posthog/icons'
+import {
+    IconCheckCircle,
+    IconChevronRight,
+    IconDocument,
+    IconGlobe,
+    IconMagicWand,
+    IconSearch,
+    IconTerminal,
+    IconWrench,
+} from '@posthog/icons'
 
 // IconRobot is not exported from @posthog/icons — it lives only in the legacy lib icon set.
 import { IconRobot } from 'lib/lemon-ui/icons'
 
-import { MarkdownMessage } from '../../messages/MarkdownMessage'
-import { getPlanPayload } from '../PlanPreview'
+import { getPlanPayload, PlanCard } from '../PlanCard'
 import { EditorSkeleton } from './EditorSkeleton'
 import { FilePath } from './FilePath'
 import { GenericMcpToolRenderer } from './GenericMcpToolRenderer'
@@ -111,22 +119,64 @@ const ReadToolRenderer = memo(function ReadToolRenderer(props: ToolRendererProps
     )
 })
 
-/** ExitPlanMode — the agent's proposed plan; markdown in the body (auto-expands while running, collapses after). */
-const ExitPlanModeRenderer = memo(function ExitPlanModeRenderer(props: ToolRendererProps): JSX.Element {
-    const { message, icon, turnComplete, turnCancelled } = props
-    const { plan: planFromInput, planFilePath } = getPlanPayload(message.rawInput)
+/**
+ * ExitPlanMode — `/code`'s `PlanApprovalView`: while the approval is pending the plan renders as the
+ * tinted document card directly in the thread (the approval actions live in the composer slot); once
+ * resolved it collapses to a status row ("Plan approved…" / "(Plan rejected)") with a show/hide toggle.
+ */
+const ExitPlanModeRenderer = memo(function ExitPlanModeRenderer(props: ToolRendererProps): JSX.Element | null {
+    const { message, turnComplete, turnCancelled } = props
+    const [isPlanExpanded, setIsPlanExpanded] = useState(false)
+    const { plan: planFromInput } = getPlanPayload(message.rawInput)
     const plan = planFromInput ?? getContentText(message.content)
 
+    const isComplete = message.status === 'completed'
+    const isIncomplete = message.status === 'pending' || message.status === 'in_progress'
+    // A denied plan surfaces as a failed tool call; a cancelled/finished turn leaves it incomplete forever.
+    const wasRejected = message.status === 'failed' || (isIncomplete && !!(turnCancelled || turnComplete))
+    const showResult = isComplete || wasRejected
+
+    if (!plan && !showResult) {
+        return null
+    }
+
+    if (!showResult) {
+        return <div className="my-2">{plan && <PlanCard plan={plan} id={`plan-${message.id}`} />}</div>
+    }
+
+    const statusContent = isComplete ? (
+        <>
+            <IconCheckCircle className="size-4 shrink-0 text-success" />
+            <span className="text-[13px] text-success">Plan approved — proceeding with implementation</span>
+        </>
+    ) : (
+        <span className="text-[13px] text-muted">(Plan rejected)</span>
+    )
+
     return (
-        <ToolActivity
-            message={message}
-            icon={icon ?? <IconDocument />}
-            title={message.title || 'Plan'}
-            subtitle={planFilePath ? <FilePath path={planFilePath} /> : undefined}
-            body={plan ? <MarkdownMessage content={plan} id={`plan-${message.id}`} /> : undefined}
-            turnComplete={turnComplete}
-            turnCancelled={turnCancelled}
-        />
+        <div className="my-2">
+            {plan ? (
+                <button
+                    type="button"
+                    onClick={() => setIsPlanExpanded((expanded) => !expanded)}
+                    aria-expanded={isPlanExpanded}
+                    className="flex items-center gap-2 rounded px-1 text-left hover:bg-fill-button-tertiary-hover"
+                >
+                    <IconChevronRight
+                        className={`size-3 shrink-0 text-muted transition-transform ${isPlanExpanded ? 'rotate-90' : ''}`}
+                    />
+                    {statusContent}
+                    <span className="text-[13px] text-muted">· {isPlanExpanded ? 'hide plan' : 'show plan'}</span>
+                </button>
+            ) : (
+                <div className="flex items-center gap-2 px-1">{statusContent}</div>
+            )}
+            {plan && isPlanExpanded && (
+                <div className="mt-2">
+                    <PlanCard plan={plan} id={`plan-${message.id}`} />
+                </div>
+            )}
+        </div>
     )
 })
 
