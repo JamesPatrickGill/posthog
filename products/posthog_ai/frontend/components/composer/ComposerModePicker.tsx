@@ -43,29 +43,29 @@ export interface ComposerModePickerProps {
 }
 
 /**
- * Controlled, logic-free permission-mode picker for a composer footer — the parity counterpart to `/code`'s
- * `ModeSelector`, including its styling: a subtle trigger tinted in the mode color, and a menu of icon + label
- * rows with the mode description in a tooltip. The caller owns the selection and its side effects (the run
- * composer syncs it to the running agent at send time; the new-task composer seeds the first run with it).
- * Also reused by the plan-approval card, where `modes` narrows the menu to the wire-offered modes.
+ * Controlled, logic-free permission-mode picker for a composer footer, styled to match the adjacent
+ * model/effort pickers (outline trigger, anchor-width menu with a section label) — with `/code`'s per-mode
+ * icon + color coding kept on the menu rows and the mode description in a tooltip. The caller owns the
+ * selection and its side effects (the run composer syncs it to the running agent at send time; the new-task
+ * composer seeds the first run with it). Also reused by the plan-approval card, where `modes` narrows the
+ * menu to the wire-offered modes.
  */
 export function ComposerModePicker({ selectedMode, onModeChange, modes }: ComposerModePickerProps): JSX.Element {
     const [open, setOpen] = useState(false)
-    const currentStyle = MODE_STYLES[selectedMode]
     const options = modes ? MODE_OPTIONS.filter((option) => modes.includes(option.value)) : MODE_OPTIONS
 
     return (
         <DropdownMenu open={open} onOpenChange={setOpen}>
             <DropdownMenuTrigger
                 render={
-                    <Button variant="default" size="sm" aria-label="Mode">
-                        <span className={currentStyle.className}>{currentStyle.icon}</span>
-                        <span className={currentStyle.className}>{getModeLabel(selectedMode)}</span>
-                        <IconChevronDown className="text-muted" />
+                    <Button variant="outline" size="sm" aria-label="Mode">
+                        {MODE_STYLES[selectedMode].icon}
+                        {getModeLabel(selectedMode)}
+                        <IconChevronDown />
                     </Button>
                 }
             />
-            <DropdownMenuContent align="start" side="top" sideOffset={6} className="min-w-[200px]">
+            <DropdownMenuContent className="w-auto min-w-(--anchor-width)">
                 {/* Base UI's GroupLabel (what DropdownMenuLabel renders) requires a Group ancestor. */}
                 <DropdownMenuGroup>
                     <DropdownMenuLabel>Mode</DropdownMenuLabel>

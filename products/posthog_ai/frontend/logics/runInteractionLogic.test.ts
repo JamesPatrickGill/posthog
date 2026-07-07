@@ -142,20 +142,20 @@ describe('runInteractionLogic', () => {
 
     it('does not send any command when the model or effort is picked', async () => {
         setThinking(false)
-        logic.actions.setModel('claude-sonnet-4-6')
+        logic.actions.setModel('claude-opus-4-8')
         logic.actions.setEffort('low')
 
         await expectLogic(logic).toFinishAllListeners()
 
         // Picking is client-side only now — nothing is synced until the message is sent.
         expect(tasksRunsCommandCreate).not.toHaveBeenCalled()
-        expect(logic.values.selectedModel).toBe('claude-sonnet-4-6')
+        expect(logic.values.selectedModel).toBe('claude-opus-4-8')
         expect(logic.values.selectedEffort).toBe('low')
     })
 
     it('syncs a changed model to the agent right before the message, and only when it changed', async () => {
         setThinking(false)
-        logic.actions.setModel('claude-sonnet-4-6')
+        logic.actions.setModel('claude-opus-4-8')
         logic.actions.setComposerFormValues({ draft: 'ship it' })
 
         await expectLogic(logic, () => {
@@ -164,7 +164,7 @@ describe('runInteractionLogic', () => {
 
         // The config sync lands before the message, never inside it.
         expect((tasksRunsCommandCreate as jest.Mock).mock.calls).toEqual([
-            setConfigCommand('model', 'claude-sonnet-4-6'),
+            setConfigCommand('model', 'claude-opus-4-8'),
             userMessageCommand('ship it'),
         ])
 
@@ -293,7 +293,7 @@ describe('runInteractionLogic', () => {
         expect(tasksRunsCommandCreate).not.toHaveBeenCalled()
         expect(tasksRunCreate).toHaveBeenCalledWith('997', TASK_ID, {
             runtime_adapter: 'claude',
-            model: 'claude-opus-4-8',
+            model: 'claude-sonnet-5',
             reasoning_effort: 'high',
             initial_permission_mode: 'auto',
             resume_from_run_id: RUN_ID,

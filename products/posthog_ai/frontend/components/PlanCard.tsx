@@ -111,8 +111,9 @@ export function PlanCard({ plan, id }: PlanCardProps): JSX.Element {
         )
     }
 
+    // Mobile-first height cap: small screens get most of the viewport, `sm+` keeps /code's half-viewport cap.
     return (
-        <div className="flex max-h-[50vh] max-w-[750px] flex-col overflow-hidden rounded-lg border-2 border-accent bg-accent-highlight-secondary">
+        <div className="flex max-h-[75vh] max-w-[750px] flex-col overflow-hidden rounded-lg border-2 border-accent bg-accent-highlight-secondary sm:max-h-[50vh]">
             <div className="flex items-center justify-between gap-2 border-b border-accent px-3 py-1.5">
                 <div className="flex min-w-0 items-center gap-2 text-accent">
                     <IconListCheck className="size-4 shrink-0" />
