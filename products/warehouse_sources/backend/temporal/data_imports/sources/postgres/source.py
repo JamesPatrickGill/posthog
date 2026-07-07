@@ -59,7 +59,12 @@ from products.warehouse_sources.backend.temporal.data_imports.sources.postgres.p
     postgres_source,
     source_requires_ssl,
 )
-from products.warehouse_sources.backend.types import ExternalDataSourceType, IncrementalField, IncrementalFieldType
+from products.warehouse_sources.backend.types import (
+    ExternalDataSourceType,
+    IncrementalField,
+    IncrementalFieldType,
+    IndexMechanism,
+)
 
 log = logging.getLogger(__name__)
 
@@ -138,6 +143,10 @@ RLS_WARNING_MESSAGE = (
 
 @SourceRegistry.register
 class PostgresSource(SQLSource[PostgresSourceConfig], SSHTunnelMixin, ValidateDatabaseHostMixin):
+    # Declared explicitly (not inherited) because this source detects indexed columns:
+    # test_index_mechanism.py requires detection and mechanism to be paired consciously.
+    index_mechanism = IndexMechanism.INDEX
+
     def __init__(self, source_name: str = "Postgres"):
         super().__init__()
         self.source_name = source_name
