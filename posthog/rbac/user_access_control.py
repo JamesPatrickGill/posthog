@@ -67,6 +67,7 @@ ACCESS_CONTROL_RESOURCES: tuple[APIScopeObject, ...] = (
     "external_data_source",
     "warehouse_objects",
     "feature_flag",
+    "heatmap",
     "insight",
     "llm_analytics",
     "notebook",
@@ -297,6 +298,8 @@ def model_to_resource(model: Model) -> Optional[APIScopeObject]:
         return "export"
     if name == "sessionrecordingplaylist":
         return "session_recording_playlist"
+    if name == "savedheatmap":
+        return "heatmap"
     if name == "experimentsavedmetric":
         return "experiment_saved_metric"
     if name == "experimentholdout":
