@@ -101,7 +101,14 @@ export enum DashboardEventSource {
     DashboardVariableOverride = 'dashboard_variable_override',
 }
 
-export type DashboardFilterChangeType = 'date' | 'properties' | 'breakdown' | 'variable' | 'quick_filters'
+export type DashboardFilterChangeType =
+    | 'date'
+    | 'properties'
+    | 'breakdown'
+    | 'variable'
+    | 'quick_filters'
+    | 'interval'
+    | 'test_accounts'
 
 export enum InsightEventSource {
     LongPress = 'long_press',

@@ -17,7 +17,7 @@ import { urls } from 'scenes/urls'
 import { QuickFilterContext } from '~/queries/schema/schema-general'
 import { DashboardMode, DashboardPlacement, DashboardType } from '~/types'
 
-import { DashboardEditBar } from './DashboardEditBar'
+import { DashboardEditBar, DashboardIntervalFilter } from './DashboardEditBar'
 import { dashboardFiltersLogic } from './dashboardFiltersLogic'
 import { DashboardEditSaveCancelButtons } from './DashboardHeaderActions'
 import { dashboardLogic } from './dashboardLogic'
@@ -62,6 +62,10 @@ export function DashboardPrimaryFilters(): JSX.Element {
                         )}
                     />
                 </Shortcut>
+            </div>
+
+            <div className={clsx('content-end', { 'h-[61px]': hasVariables })}>
+                <DashboardIntervalFilter />
             </div>
 
             {canEditDashboard && dashboard && (
