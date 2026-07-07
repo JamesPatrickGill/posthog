@@ -110,6 +110,7 @@ class TestExternalDataSchema(APIBaseTest):
             "incremental_fields": [
                 {"label": "created_at", "type": "datetime", "field": "created", "field_type": "integer"}
             ],
+            "index_warning_copy": {"mechanism": "index", "suggestion": "Consider adding an index"},
             "incremental_available": False,
             "append_available": True,
             "cdc_available": None,
@@ -228,6 +229,7 @@ class TestExternalDataSchema(APIBaseTest):
                     "is_indexed": False,
                 },
             ],
+            "index_warning_copy": {"mechanism": "index", "suggestion": "Consider adding an index"},
             "incremental_available": True,
             "append_available": True,
             "cdc_available": None,

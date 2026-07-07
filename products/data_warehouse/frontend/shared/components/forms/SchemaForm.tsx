@@ -684,7 +684,7 @@ export default function SchemaForm(): JSX.Element {
 
 const SyncMethodModal = (): JSX.Element => {
     const { cancelSyncMethodModal, updateSchemaSyncType, toggleSchemaShouldSync } = useActions(sourceWizardLogic)
-    const { syncMethodModalOpen, currentSyncMethodModalSchema, selectedConnector } = useValues(sourceWizardLogic)
+    const { syncMethodModalOpen, currentSyncMethodModalSchema } = useValues(sourceWizardLogic)
 
     if (!currentSyncMethodModalSchema) {
         return <></>
@@ -702,7 +702,6 @@ const SyncMethodModal = (): JSX.Element => {
         >
             <SyncMethodForm
                 schema={currentSyncMethodModalSchema}
-                sourceType={selectedConnector?.name}
                 onClose={cancelSyncMethodModal}
                 isNewSource
                 onSave={(
