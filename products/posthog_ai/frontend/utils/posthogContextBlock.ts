@@ -24,13 +24,22 @@ export function formatPosthogContextBlock(items: AttachedContextItem[]): string 
     return lines.join('\n')
 }
 
+/**
+ * Interpolated provider data must never contain the block tags themselves:
+ * `unwrapUserMessageContent` strips up to the FIRST `</posthog_context>`, so a value carrying that
+ * literal would truncate the replayed message and leak the rest of the block into the thread.
+ */
+function sanitize(text: string): string {
+    return text.replace(/<\/?posthog_context>/g, '')
+}
+
 function formatItem(item: AttachedContextItem): string {
     if (item.key === undefined || item.key === null || item.key === '') {
-        return `- ${item.type}: "${item.value ?? ''}"`
+        return `- ${sanitize(item.type)}: "${sanitize(item.value ?? '')}"`
     }
-    let line = `- ${item.type} ${item.key}`
+    let line = `- ${sanitize(item.type)} ${sanitize(String(item.key))}`
     if (item.label) {
-        line += ` ("${item.label}")`
+        line += ` ("${sanitize(item.label)}")`
     }
     return line
 }
