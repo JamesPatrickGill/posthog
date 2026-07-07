@@ -160,9 +160,10 @@ export interface PlanApprovalSelectorProps {
 /**
  * Plan-approval selector — a port of `/code`'s `PlanApprovalSelector`: an "Approve and proceed" line
  * with the per-mode "Yes, and…" wire options collapsed into the shared mode dropdown beside it, and
- * the inline reject-with-feedback line below. Window-level keyboard nav (works regardless of where
- * focus sits): ↑↓ move between the two rows, Enter approves, Tab/Shift+Tab cycles the permission mode,
- * digits act on rows, Esc cancels. Approve
+ * the inline reject-with-feedback line below. Window-level keyboard nav (no focus required — works
+ * while focus rests on the page body or inside the card, without hijacking keys from elements
+ * elsewhere on the page): ↑↓ move between the two rows, Enter approves, Tab/Shift+Tab cycles the
+ * permission mode, digits act on rows, Esc cancels. Approve
  * → `onApprove(<modeOptionId>)`; reject requires
  * feedback text → `onReject(<rejectOptionId>, feedback)` (empty Enter is a no-op). The approved mode
  * is remembered and pre-selected on the next plan.
@@ -198,6 +199,7 @@ export function PlanApprovalSelector({
     const [selectedIndex, setSelectedIndex] = useState(0)
     const [hoveredIndex, setHoveredIndex] = useState<number | null>(null)
     const [feedback, setFeedback] = useState('')
+    const containerRef = useRef<HTMLDivElement>(null)
 
     const rejectIndex = rejectOption ? 1 : -1
     const rowCount = rejectOption ? 2 : 1
@@ -243,9 +245,10 @@ export function PlanApprovalSelector({
         setSelectedMode(modes[(idx + delta + modes.length) % modes.length])
     }
 
-    // Window-level shortcuts, so keyboard nav works wherever focus sits (thread, page body) — not
-    // just while the selector itself is focused. Typing contexts keep their keys: the reject
-    // textarea owns the keyboard while its row is selected, and any other form field is left alone.
+    // Window-level shortcuts, so keyboard nav works without the selector being focused (the CLI-like
+    // default is focus parked on the page body). Everything else keeps its keys: the reject textarea
+    // owns the keyboard while its row is selected, form fields are left alone, and focus resting on
+    // any element outside the card keeps native Tab/Enter behavior.
     useEffect(() => {
         const handleKeyDown = (e: KeyboardEvent): void => {
             if (rejectSelected || e.defaultPrevented) {
@@ -262,6 +265,13 @@ export function PlanApprovalSelector({
                     // mode, it must not approve the plan.
                     target.closest('[role="menu"]') !== null)
             ) {
+                return
+            }
+            // A key pressed while focus sits on some other element (a nav link, a button in another
+            // panel) keeps its native behavior — Tab must keep moving focus and Enter must keep
+            // activating that element. The selector owns the keyboard only while focus rests on the
+            // page body (the CLI-like default) or within its own subtree.
+            if (target instanceof HTMLElement && target !== document.body && !containerRef.current?.contains(target)) {
                 return
             }
             switch (e.key) {
@@ -340,7 +350,7 @@ export function PlanApprovalSelector({
     const approveActive = selectedIndex === 0 || hoveredIndex === 0
 
     return (
-        <div className="rounded border bg-surface-primary p-3">
+        <div ref={containerRef} className="rounded border bg-surface-primary p-3">
             <div className="flex flex-col gap-2">
                 <span className="font-medium text-[13px] text-accent">Implementation Plan</span>
 

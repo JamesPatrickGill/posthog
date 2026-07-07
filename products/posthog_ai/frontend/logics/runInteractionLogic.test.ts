@@ -24,6 +24,7 @@ jest.mock('./runStreamLogic', () => {
             respondToPermission: (payload: unknown) => ({ payload }),
             cancelRun: (run?: unknown) => ({ run }),
             markTurnComplete: true,
+            setCurrentMode: (mode: string) => ({ mode }),
             setStubStatus: (status: string | null) => ({ status }),
             setStubThinking: (thinking: boolean) => ({ thinking }),
         }),
@@ -42,7 +43,12 @@ jest.mock('./runStreamLogic', () => {
             ],
             pendingPermissionRequest: [null, {}],
             respondingToPermission: [false, {}],
-            currentMode: [null, {}],
+            currentMode: [
+                null,
+                {
+                    setCurrentMode: (_: string | null, { mode }: { mode: string }) => mode,
+                },
+            ],
         }),
     ])
     return {
@@ -203,6 +209,39 @@ describe('runInteractionLogic', () => {
         }).toFinishAllListeners()
 
         expect((tasksRunsCommandCreate as jest.Mock).mock.calls).toEqual([userMessageCommand('again')])
+    })
+
+    it('adopts the agent-confirmed mode over a stale manual pick and stays in sync at send time', async () => {
+        setThinking(false)
+        logic.actions.setMode('plan')
+        expect(logic.values.selectedMode).toBe('plan')
+
+        // The agent transitions autonomously (e.g. a plan approval leaves Plan mode) and confirms via a
+        // `current_mode_update` frame — the live mode replaces the earlier pick.
+        stream.actions.setCurrentMode('acceptEdits')
+        expect(logic.values.selectedMode).toBe('acceptEdits')
+
+        logic.actions.setComposerFormValues({ draft: 'go on' })
+        await expectLogic(logic, () => {
+            logic.actions.submitComposerForm()
+        }).toFinishAllListeners()
+
+        // Already in sync with the agent — only the message goes out, no stale mode re-sync.
+        expect((tasksRunsCommandCreate as jest.Mock).mock.calls).toEqual([userMessageCommand('go on')])
+    })
+
+    it('seeds the picker from the stored launch mode and ignores unrecognized wire modes', () => {
+        // No live `current_mode_update` yet — the run's REST-stored launch mode drives the display.
+        logic = runInteractionLogic({ taskId: TASK_ID, runId: RUN_ID, onRunStarted, currentMode: 'plan' })
+        expect(logic.values.selectedMode).toBe('plan')
+
+        // An unrecognized wire mode (a future mode, another runtime's vocabulary) must not leak out as a
+        // fake PermissionMode — it degrades to the stored launch mode.
+        stream.actions.setCurrentMode('full-access')
+        expect(logic.values.selectedMode).toBe('plan')
+
+        stream.actions.setCurrentMode('acceptEdits')
+        expect(logic.values.selectedMode).toBe('acceptEdits')
     })
 
     it('seeds a fresh run with the picked permission mode when the run is terminal', async () => {

@@ -234,13 +234,13 @@ describe('Sandbox approval input area', () => {
         it('opens the mode dropdown with the wire-offered modes', () => {
             render(<PermissionInput streamKey="conv-1" request={makePlanRequest()} />)
 
-            fireEvent.click(screen.getByRole('button', { name: 'Mode' }))
+            fireEvent.click(screen.getByLabelText('Mode'))
 
-            expect(screen.getByRole('menuitem', { name: 'Accept edits' })).toBeInTheDocument()
-            expect(screen.getByRole('menuitem', { name: 'Default' })).toBeInTheDocument()
+            expect(screen.getByText('Accept edits')).toBeInTheDocument()
+            expect(screen.getByText('Default')).toBeInTheDocument()
             // The wire offered no plan/bypass options, so the menu must not list them.
-            expect(screen.queryByRole('menuitem', { name: 'Plan' })).not.toBeInTheDocument()
-            expect(screen.queryByRole('menuitem', { name: 'Bypass permissions' })).not.toBeInTheDocument()
+            expect(screen.queryByText('Plan')).not.toBeInTheDocument()
+            expect(screen.queryByText('Bypass permissions')).not.toBeInTheDocument()
         })
 
         it('sends plan rejection feedback through the reject row, ignoring an empty submit', () => {
@@ -274,6 +274,26 @@ describe('Sandbox approval input area', () => {
             expect(respondToPermission).toHaveBeenCalledWith({ requestId: 'req-1', optionId: 'auto' })
         })
 
+        it('leaves keys alone when focus sits on an element outside the card', () => {
+            render(<PermissionInput streamKey="conv-1" request={makePlanRequest()} />)
+
+            // Focus parked on unrelated page chrome (a nav button) — Enter must keep activating that
+            // element and Tab must keep moving focus, never approve the plan or cycle its mode.
+            const outsideButton = document.createElement('button')
+            document.body.appendChild(outsideButton)
+            outsideButton.focus()
+
+            const tabNotPrevented = fireEvent.keyDown(outsideButton, { key: 'Tab' })
+            fireEvent.keyDown(outsideButton, { key: 'Enter' })
+            fireEvent.keyDown(outsideButton, { key: '1' })
+            outsideButton.remove()
+
+            // Tab was not prevented — the browser's native focus traversal still happens.
+            expect(tabNotPrevented).toBe(true)
+            expect(respondToPermission).not.toHaveBeenCalled()
+            expect(cancelRun).not.toHaveBeenCalled()
+        })
+
         it('blocks plan approval while the response POST is in flight', () => {
             ;(useValues as jest.Mock).mockReturnValue({ respondingToPermission: true })
             render(<PermissionInput streamKey="conv-1" request={makePlanRequest()} />)
@@ -281,6 +301,29 @@ describe('Sandbox approval input area', () => {
             fireEvent.click(screen.getByText('Approve and proceed'))
 
             expect(respondToPermission).not.toHaveBeenCalled()
+        })
+
+        it('keeps the approve options on the fallback card when no plan mode id is recognized', () => {
+            // Version-skew shape: a plan request whose approve ids all predate/postdate the known mode
+            // enum. The fallback card must keep the `allow_always` approve options, not go decline-only.
+            render(
+                <PermissionInput
+                    streamKey="conv-1"
+                    request={makePlanRequest({
+                        options: [
+                            { optionId: 'future-mode', name: 'Yes, use future mode', kind: 'allow_always' },
+                            {
+                                optionId: 'reject_with_feedback',
+                                name: 'No, tell the agent what to do differently',
+                                kind: 'reject_once',
+                            },
+                        ],
+                    })}
+                />
+            )
+
+            expect(screen.getByText('Yes, use future mode')).toBeInTheDocument()
+            expect(screen.getByText('No, tell the agent what to do differently')).toBeInTheDocument()
         })
 
         it('does not show plan copy just because the title mentions a plan', () => {

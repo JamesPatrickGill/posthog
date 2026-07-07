@@ -79,8 +79,10 @@ export function PermissionInput({ streamKey, request }: PermissionInputProps): J
     }
 
     // A request whose every option was filtered out (e.g. only `allow_always` without a rememberable
-    // preview) must still be answerable — fall back to showing everything.
-    const defaultOptions = mapPermissionOptions(request.options)
+    // preview) must still be answerable — fall back to showing everything. A plan that fell through
+    // (unrecognized mode ids) keeps its unfiltered options: its approve choices are `allow_always`-kind
+    // and the default filtering would leave a decline-only card.
+    const defaultOptions = planOptions.length > 0 ? planOptions : mapPermissionOptions(request.options)
     const mappedOptions = defaultOptions.length > 0 ? defaultOptions : mapPermissionOptions(request.options, true)
     // Only the legacy `reject_with_feedback` kind is feedback-only — reachable solely through the
     // text field. A `reject_once` decline is a plain one-click button with no optional-feedback toggle.

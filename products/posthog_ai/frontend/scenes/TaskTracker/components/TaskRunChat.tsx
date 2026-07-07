@@ -43,6 +43,7 @@ export function TaskRunChat({ taskId, runId, streamKey, onRunStarted }: TaskRunC
         streamKey,
         currentModel: selectedRun?.state?.model,
         currentEffort: selectedRun?.state?.reasoning_effort,
+        currentMode: selectedRun?.state?.initial_permission_mode,
         onRunStarted: (newRunId) => {
             setSelectedRunId(newRunId, taskId)
             loadTaskRuns()

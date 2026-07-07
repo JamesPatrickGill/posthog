@@ -9,7 +9,11 @@ import {
     DEFAULT_COMPOSER_MODEL,
     resolveEffortForModel,
 } from 'products/posthog_ai/frontend/utils/composerModels'
-import { DEFAULT_COMPOSER_MODE, type PermissionMode } from 'products/posthog_ai/frontend/utils/composerModes'
+import {
+    DEFAULT_COMPOSER_MODE,
+    getModeOption,
+    type PermissionMode,
+} from 'products/posthog_ai/frontend/utils/composerModes'
 import { tasksRunCreate, tasksRunsCommandCreate } from 'products/tasks/frontend/generated/api'
 import {
     ClaudeRuntimeAdapterEnumApi,
@@ -30,10 +34,11 @@ export interface RunInteractionLogicProps {
      * `RunSurface` binds, never diverging from it. API calls still use the real `runId`.
      */
     streamKey?: string
-    /** The run's stored model / reasoning effort, injected by the consumer. They seed the picker's display and
-     * the config a terminal-run send launches the next run with (override ?? this ?? default). */
+    /** The run's stored model / reasoning effort / launch mode, injected by the consumer. They seed the picker's
+     * display and the config a terminal-run send launches the next run with (override ?? this ?? default). */
     currentModel?: string | null
     currentEffort?: string | null
+    currentMode?: string | null
     /** Called with the new run's id after a terminal-run send starts a fresh run, so the surface can
      * re-point selection to it (the run lifecycle / selection is a tasks-scene concern, injected here). */
     onRunStarted?: (runId: string) => void
@@ -83,7 +88,7 @@ export const runInteractionLogic = kea<runInteractionLogicType>([
         ],
         actions: [
             runStreamLogic({ streamKey: props.streamKey ?? props.runId }),
-            ['pushHumanMessage', 'respondToPermission', 'cancelRun', 'markTurnComplete'],
+            ['pushHumanMessage', 'respondToPermission', 'cancelRun', 'markTurnComplete', 'setCurrentMode'],
         ],
     })),
 
@@ -171,6 +176,10 @@ export const runInteractionLogic = kea<runInteractionLogicType>([
             null as PermissionMode | null,
             {
                 setMode: (_, { mode }) => mode,
+                // Unlike model/effort, the mode genuinely changes server-side (e.g. a plan approval moves the
+                // session out of Plan mode) — the agent's confirmed mode is authoritative, so a stale manual
+                // pick must not keep shadowing the stream's `current_mode_update`.
+                setCurrentMode: () => null,
             },
         ],
         // The model/effort last synced to the agent session via `set_config_option`. null means "not synced
@@ -191,6 +200,9 @@ export const runInteractionLogic = kea<runInteractionLogicType>([
             null as PermissionMode | null,
             {
                 setSentMode: (_, { mode }) => mode,
+                // Cleared alongside `modeOverride` so the send-time sync check compares against the agent's
+                // live mode, not a marker the agent has since moved past.
+                setCurrentMode: () => null,
             },
         ],
     }),
@@ -245,11 +257,14 @@ export const runInteractionLogic = kea<runInteractionLogicType>([
                 resolveEffortForModel(override ?? current ?? DEFAULT_COMPOSER_EFFORT, model),
         ],
         // The permission mode to display and launch with: the client-side override, else the session's live
-        // mode (from the stream's `current_mode_update` frames), else the default.
+        // mode (from the stream's `current_mode_update` frames), else the run's stored launch mode, else the
+        // default. The wire values are narrowed via `getModeOption` — an unrecognized mode string (a future
+        // mode, another runtime's vocabulary) degrades to the next fallback instead of leaking out as a
+        // fake `PermissionMode`.
         selectedMode: [
-            (s) => [s.modeOverride, s.currentMode],
-            (override, current): PermissionMode =>
-                override ?? (current as PermissionMode | null) ?? DEFAULT_COMPOSER_MODE,
+            (s) => [s.modeOverride, s.currentMode, (_, p) => p.currentMode],
+            (override, current, initial): PermissionMode =>
+                override ?? getModeOption(current)?.value ?? getModeOption(initial)?.value ?? DEFAULT_COMPOSER_MODE,
         ],
         // The agent is actively working a turn — a follow-up typed now should stage rather than send.
         isBusy: [(s) => [s.isThinking], (isThinking): boolean => isThinking],
@@ -319,7 +334,10 @@ export const runInteractionLogic = kea<runInteractionLogicType>([
                     actions.setSentEffort(values.selectedEffort)
                 }
                 const activeMode =
-                    values.sentMode ?? (values.currentMode as PermissionMode | null) ?? DEFAULT_COMPOSER_MODE
+                    values.sentMode ??
+                    getModeOption(values.currentMode)?.value ??
+                    getModeOption(props.currentMode)?.value ??
+                    DEFAULT_COMPOSER_MODE
                 if (values.selectedMode !== activeMode) {
                     await tasksRunsCommandCreate(String(values.currentProjectId), props.taskId, props.runId, {
                         jsonrpc: '2.0',
