@@ -29,7 +29,7 @@ from products.warehouse_sources.backend.temporal.data_imports.sources.common.reg
 from products.warehouse_sources.backend.temporal.data_imports.sources.common.sql.base import SQLSource
 from products.warehouse_sources.backend.temporal.data_imports.sources.generated_configs import RedshiftSourceConfig
 from products.warehouse_sources.backend.temporal.data_imports.sources.redshift.redshift import RedshiftImplementation
-from products.warehouse_sources.backend.types import ExternalDataSourceType, IndexWarningCopy
+from products.warehouse_sources.backend.types import ExternalDataSourceType, IndexMechanism
 
 _REDSHIFT_IMPLEMENTATION = RedshiftImplementation()
 
@@ -48,10 +48,7 @@ RedshiftErrors = {
 @SourceRegistry.register
 class RedshiftSource(SQLSource[RedshiftSourceConfig], SSHTunnelMixin, ValidateDatabaseHostMixin):
     # Redshift has no secondary indexes; `is_indexed` reflects the table's sort key.
-    index_warning_copy: IndexWarningCopy = {
-        "mechanism": "sort key",
-        "suggestion": "Consider making this field the table's sort key (the leading column of a compound SORTKEY)",
-    }
+    index_mechanism = IndexMechanism.SORT_KEY
 
     def __init__(self, source_name: str = "Redshift"):
         super().__init__()
