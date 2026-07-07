@@ -9,8 +9,8 @@ import { RunSurface } from 'products/posthog_ai/frontend/api/runSurface'
 import { cycleMode } from 'products/posthog_ai/frontend/utils/composerModes'
 
 import { ComposerModelEffortPickers } from '../../../components/composer/ComposerModelEffortPickers'
+import { ComposerModePicker } from '../../../components/composer/ComposerModePicker'
 import { taskDetailSceneLogic } from '../taskDetailSceneLogic'
-import { ComposerModePicker } from './ComposerModePicker'
 
 export interface TaskRunChatProps {
     taskId: string
@@ -68,6 +68,7 @@ function TaskRunChatContent({ logicProps }: { logicProps: RunInteractionLogicPro
         selectedModel,
         selectedEffort,
         selectedMode,
+        planApprovalOpen,
     } = useValues(runInteractionLogic(logicProps))
     const {
         setComposerFormValues,
@@ -91,7 +92,14 @@ function TaskRunChatContent({ logicProps }: { logicProps: RunInteractionLogicPro
             interaction="live"
         >
             <div className="@container/thread flex flex-col h-full -mx-4">
-                <RunSurface.Thread className="flex-1 min-h-0" listClassName="py-4" rowClassName="px-4" />
+                {/* While a plan approval's plan view is open, the input region grows over the whole thread
+                area so the user reviews the plan full-screen; the thread returns once the plan is closed
+                or resolved. */}
+                <RunSurface.Thread
+                    className={planApprovalOpen ? 'hidden' : 'flex-1 min-h-0'}
+                    listClassName="py-4"
+                    rowClassName="px-4"
+                />
                 <RunSurface.Composer>
                     <RunSurface.Resources />
                     <Composer.Root
@@ -128,7 +136,7 @@ function TaskRunChatContent({ logicProps }: { logicProps: RunInteractionLogicPro
                                     }}
                                 />
                             </Composer.Field>
-                            <Composer.Footer>
+                            <Composer.Footer className="flex items-center gap-1 pl-2">
                                 {/* Mode + model/effort pickers: selection lives in the bound runInteractionLogic and
                                 is applied when the message is sent — synced to the running agent on a follow-up,
                                 or used to seed the next run once terminal. */}

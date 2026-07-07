@@ -41,6 +41,7 @@ jest.mock('./runStreamLogic', () => {
                 },
             ],
             pendingPermissionRequest: [null, {}],
+            planApprovalOpen: [false, {}],
             respondingToPermission: [false, {}],
             currentMode: [null, {}],
         }),

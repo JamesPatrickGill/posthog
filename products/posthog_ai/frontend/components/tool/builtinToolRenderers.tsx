@@ -6,7 +6,7 @@ import { IconDocument, IconGlobe, IconMagicWand, IconSearch, IconTerminal, IconW
 import { IconRobot } from 'lib/lemon-ui/icons'
 
 import { MarkdownMessage } from '../../messages/MarkdownMessage'
-import { getPlanText } from '../PlanPreview'
+import { getPlanPayload } from '../PlanPreview'
 import { EditorSkeleton } from './EditorSkeleton'
 import { FilePath } from './FilePath'
 import { GenericMcpToolRenderer } from './GenericMcpToolRenderer'
@@ -114,13 +114,15 @@ const ReadToolRenderer = memo(function ReadToolRenderer(props: ToolRendererProps
 /** ExitPlanMode — the agent's proposed plan; markdown in the body (auto-expands while running, collapses after). */
 const ExitPlanModeRenderer = memo(function ExitPlanModeRenderer(props: ToolRendererProps): JSX.Element {
     const { message, icon, turnComplete, turnCancelled } = props
-    const plan = getPlanText(message.rawInput) ?? getContentText(message.content)
+    const { plan: planFromInput, planFilePath } = getPlanPayload(message.rawInput)
+    const plan = planFromInput ?? getContentText(message.content)
 
     return (
         <ToolActivity
             message={message}
             icon={icon ?? <IconDocument />}
             title={message.title || 'Plan'}
+            subtitle={planFilePath ? <FilePath path={planFilePath} /> : undefined}
             body={plan ? <MarkdownMessage content={plan} id={`plan-${message.id}`} /> : undefined}
             turnComplete={turnComplete}
             turnCancelled={turnCancelled}

@@ -58,11 +58,12 @@ function makeRequest(overrides: Partial<PermissionRequestRecord> = {}): Permissi
 
 describe('Sandbox approval input area', () => {
     const respondToPermission = jest.fn()
+    const setPlanApprovalExpanded = jest.fn()
 
     beforeEach(() => {
         jest.clearAllMocks()
-        ;(useActions as jest.Mock).mockReturnValue({ respondToPermission })
-        ;(useValues as jest.Mock).mockReturnValue({ respondingToPermission: false, currentMode: null })
+        ;(useActions as jest.Mock).mockReturnValue({ respondToPermission, setPlanApprovalExpanded })
+        ;(useValues as jest.Mock).mockReturnValue({ respondingToPermission: false, planApprovalExpanded: true })
     })
 
     afterEach(() => {
@@ -168,23 +169,91 @@ describe('Sandbox approval input area', () => {
         })
 
         it.each([
+            ['the request is for ExitPlanMode', makeRequest({ toolName: 'ExitPlanMode' })],
+            ['the tool call is tagged as a plan', makeRequest({ rawToolCall: { ...rawToolCall, kind: 'plan' } })],
             [
-                'the agent is in plan mode',
-                (): void => {
-                    ;(useValues as jest.Mock).mockReturnValue({ respondingToPermission: false, currentMode: 'plan' })
-                },
-                makeRequest(),
+                // The real agent-server wire shape: no top-level tool name, `kind: 'switch_mode'`, and the
+                // tool name embedded in the input payload alongside the plan.
+                'the tool input carries the ExitPlanMode tool name',
+                makeRequest({
+                    toolName: '',
+                    title: 'Ready to code?',
+                    description: undefined,
+                    rawToolCall: {
+                        ...rawToolCall,
+                        kind: 'switch_mode',
+                        title: 'Ready to code?',
+                        input: { plan: '# The plan', planFilePath: '/tmp/plan.md', toolName: 'ExitPlanMode' },
+                    },
+                }),
             ],
-            [
-                'the tool call is tagged as a plan',
-                (): void => {},
-                makeRequest({ rawToolCall: { ...rawToolCall, kind: 'plan' } }),
-            ],
-        ])('shows plan copy when %s', (_case, arrange, request) => {
-            arrange()
+        ])('shows plan copy when %s', (_case, request) => {
             render(<PermissionInput streamKey="conv-1" request={request} />)
 
             expect(screen.getByText('Approve this plan?')).toBeInTheDocument()
+        })
+
+        // The real wire options for a plan approval — the accept-with-mode choices arrive as
+        // `allow_always`, which the generic card would hide as "remembered" options.
+        function makePlanRequest(): PermissionRequestRecord {
+            return makeRequest({
+                toolName: '',
+                title: 'Ready to code?',
+                description: undefined,
+                options: [
+                    { optionId: 'auto', name: 'Yes, and use "auto" mode', kind: 'allow_always' },
+                    { optionId: 'acceptEdits', name: 'Yes, and auto-accept edits', kind: 'allow_always' },
+                    { optionId: 'default', name: 'Yes, and manually approve edits', kind: 'allow_once' },
+                    {
+                        optionId: 'reject_with_feedback',
+                        name: 'No, and tell the agent what to do differently',
+                        kind: 'reject_once',
+                        customInput: true,
+                    },
+                ],
+                rawToolCall: {
+                    ...rawToolCall,
+                    kind: 'switch_mode',
+                    title: 'Ready to code?',
+                    input: { plan: '# The plan', planFilePath: '/tmp/plan.md', toolName: 'ExitPlanMode' },
+                },
+            })
+        }
+
+        it('keeps the allow_always plan modes and approves with the pre-selected auto mode', () => {
+            render(<PermissionInput streamKey="conv-1" request={makePlanRequest()} />)
+
+            // The mode dropdown pre-selects "auto"; approving posts that mode's wire optionId.
+            expect(screen.getByText('Auto')).toBeInTheDocument()
+            fireEvent.click(screen.getByText('Approve and proceed'))
+
+            expect(respondToPermission).toHaveBeenCalledWith({ requestId: 'req-1', optionId: 'auto' })
+        })
+
+        it('opens the mode dropdown with the wire-offered modes', () => {
+            render(<PermissionInput streamKey="conv-1" request={makePlanRequest()} />)
+
+            fireEvent.click(screen.getByRole('button', { name: 'Mode' }))
+
+            expect(screen.getByRole('menuitem', { name: 'Accept edits' })).toBeInTheDocument()
+            expect(screen.getByRole('menuitem', { name: 'Default' })).toBeInTheDocument()
+            // The wire offered no plan/bypass options, so the menu must not list them.
+            expect(screen.queryByRole('menuitem', { name: 'Plan' })).not.toBeInTheDocument()
+            expect(screen.queryByRole('menuitem', { name: 'Bypass permissions' })).not.toBeInTheDocument()
+        })
+
+        it('sends plan rejection feedback through the reject option', () => {
+            render(<PermissionInput streamKey="conv-1" request={makePlanRequest()} />)
+
+            const input = screen.getByPlaceholderText('No — type here to tell the agent what to do differently')
+            fireEvent.change(input, { target: { value: 'Use a different approach' } })
+            fireEvent.click(screen.getByRole('button', { name: 'Send' }))
+
+            expect(respondToPermission).toHaveBeenCalledWith({
+                requestId: 'req-1',
+                optionId: 'reject_with_feedback',
+                customInput: 'Use a different approach',
+            })
         })
 
         it('does not show plan copy just because the title mentions a plan', () => {

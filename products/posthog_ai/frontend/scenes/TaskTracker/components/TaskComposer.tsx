@@ -13,8 +13,8 @@ import { resolveEffortForModel } from 'products/posthog_ai/frontend/utils/compos
 import { cycleMode } from 'products/posthog_ai/frontend/utils/composerModes'
 
 import { ComposerModelEffortPickers } from '../../../components/composer/ComposerModelEffortPickers'
+import { ComposerModePicker } from '../../../components/composer/ComposerModePicker'
 import { taskTrackerSceneLogic } from '../taskTrackerSceneLogic'
-import { ComposerModePicker } from './ComposerModePicker'
 import { RepositorySelector } from './RepositorySelector'
 
 export function TaskComposer(): JSX.Element {
@@ -75,7 +75,7 @@ export function TaskComposer(): JSX.Element {
                                         }}
                                     />
                                 </Composer.Field>
-                                <Composer.Footer>
+                                <Composer.Footer className="flex items-center gap-1 pl-2">
                                     <ComposerModePicker
                                         selectedMode={newTaskData.permissionMode}
                                         onModeChange={(permissionMode) => setNewTaskData({ permissionMode })}

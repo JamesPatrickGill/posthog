@@ -14,6 +14,7 @@ import { tasksRunsCommandCreate, tasksRunsStreamTokenRetrieve } from 'products/t
 import type { TaskRunBootstrapCreateRequestInitialPermissionModeEnumApi } from 'products/tasks/frontend/generated/api.schemas'
 
 import { getClaudeCodeMeta, resolveToolCall } from '../components/tool/toolResolver'
+import { isPlanPermissionRequest } from '../policy/permissionUtils'
 import { parseSandboxQuestions } from '../policy/questionUtils'
 import { defaultPermissionDecision, findAllowOptionId } from '../policy/toolPolicy'
 import type {
@@ -1330,6 +1331,8 @@ export const runStreamLogic = kea<runStreamLogicType>([
          * buttons re-enable for retry) without coupling that reset to unrelated stream errors.
          */
         permissionResponseFailed: true,
+        /** Open/close the pending plan approval's full-screen plan view (open by default per request). */
+        setPlanApprovalExpanded: (expanded: boolean) => ({ expanded }),
         handleTerminalStatus: (status: {
             status: RunStatus
             errorMessage?: string | null
@@ -1528,6 +1531,16 @@ export const runStreamLogic = kea<runStreamLogicType>([
                 reset: () => null,
             },
         ],
+        // Whether the pending plan approval shows the full-screen plan view. Opens by default and
+        // re-opens for every newly ingested request, so each plan starts expanded.
+        planApprovalExpanded: [
+            true,
+            {
+                setPlanApprovalExpanded: (_, { expanded }) => expanded,
+                ingestPermissionRequest: () => true,
+                reset: () => true,
+            },
+        ],
         // requestIds ever surfaced, so a reconnect's full replay can't double-fire telemetry or
         // re-ingest a request this client already knows about.
         seenPermissionRequestIds: [
@@ -1655,6 +1668,22 @@ export const runStreamLogic = kea<runStreamLogicType>([
         ],
     }),
     selectors({
+        /**
+         * A pending `ExitPlanMode` approval — the plan-review state. Layout consumers key off this to
+         * grow the input region over the thread while the user reviews the plan.
+         */
+        pendingPlanApproval: [
+            (s) => [s.pendingPermissionRequest],
+            (request): boolean => !!request && isPlanPermissionRequest(request),
+        ],
+        /**
+         * A pending plan approval whose plan view is open — the full-screen state. Only then does the
+         * input region grow over the thread; a closed plan shrinks back to the compact approval bar.
+         */
+        planApprovalOpen: [
+            (s) => [s.pendingPlanApproval, s.planApprovalExpanded],
+            (pending, expanded): boolean => pending && expanded,
+        ],
         /**
          * Pure projection of the ordered log into the rendered thread plus the tool-invocation map.
          * Memoized on `log` identity, so it recomputes only when a frame is actually appended.

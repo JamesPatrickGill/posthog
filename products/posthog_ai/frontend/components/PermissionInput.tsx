@@ -4,15 +4,17 @@ import { IconWarning } from '@posthog/icons'
 import { LemonTag, Spinner } from '@posthog/lemon-ui'
 
 import { CodeSnippet, Language } from 'lib/components/CodeSnippet'
+import { cn } from 'lib/utils/css-classes'
 
 import type { MultiQuestionFormQuestion } from '~/queries/schema/schema-assistant-messages'
 
 import { runStreamLogic } from '../logics/runStreamLogic'
 import { MarkdownMessage } from '../messages/MarkdownMessage'
 import { getPermissionDisplay } from '../policy/permissionDisplayUtils'
-import { mapPermissionOptions, type ApprovalCardOption } from '../policy/permissionUtils'
+import { isPlanPermissionRequest, mapPermissionOptions, type ApprovalCardOption } from '../policy/permissionUtils'
 import type { PermissionRequestRecord } from '../types/streamTypes'
-import { getPlanText, PlanPreview } from './PlanPreview'
+import { PlanApprovalActions } from './PlanApprovalActions'
+import { getPlanPayload, PlanPreview } from './PlanPreview'
 import { QuestionField } from './QuestionField'
 
 interface PermissionInputProps {
@@ -40,8 +42,9 @@ function toPermissionQuestion(
 
 /**
  * Self-contained input-area renderer for an ACP `permission_request` on a sandbox conversation.
- * Reuses the same `QuestionField` surface as sandbox questions while preserving the ACP option ids
- * sent back to the runtime. `allow_always` stays hidden unless filtering would leave no choices.
+ * A plan approval (`ExitPlanMode`) renders as the plan document sheet + the approve/reject action row;
+ * every other request reuses the `QuestionField` surface as sandbox questions do, preserving the ACP
+ * option ids sent back to the runtime. `allow_always` stays hidden unless filtering would leave no choices.
  *
  * Submitting POSTs through `runStreamLogic.respondToPermission`; the logic's
  * `respondingToPermission` drives the loading/double-submit guard and re-enables the controls when the
@@ -49,8 +52,36 @@ function toPermissionQuestion(
  */
 export function PermissionInput({ streamKey, request }: PermissionInputProps): JSX.Element {
     const boundLogic = runStreamLogic({ streamKey })
-    const { respondToPermission } = useActions(boundLogic)
-    const { respondingToPermission, currentMode } = useValues(boundLogic)
+    const { respondToPermission, setPlanApprovalExpanded } = useActions(boundLogic)
+    const { respondingToPermission, planApprovalExpanded } = useValues(boundLogic)
+
+    if (isPlanPermissionRequest(request)) {
+        // A plan approval keeps every wire option: the accept-with-mode choices arrive as
+        // `allow_always` (which the generic card hides as "remembered") and must all stay offered.
+        const planOptions = mapPermissionOptions(request.options, true)
+        const planPayload = getPlanPayload(request.rawToolCall.input)
+        const planText = planPayload.plan ?? request.description ?? request.title ?? ''
+        return (
+            <div className={cn('flex flex-col gap-3 p-3', planApprovalExpanded && 'h-full min-h-0')}>
+                <PlanPreview
+                    plan={planText}
+                    planFilePath={planPayload.planFilePath}
+                    id={`permission-${request.requestId}`}
+                    expanded={planApprovalExpanded}
+                    onExpandedChange={setPlanApprovalExpanded}
+                />
+                <PlanApprovalActions
+                    approveOptions={planOptions.filter((option) => option.decision === 'approved')}
+                    rejectOption={planOptions.find((option) => option.decision === 'declined')}
+                    responding={respondingToPermission}
+                    onApprove={(optionId) => respondToPermission({ requestId: request.requestId, optionId })}
+                    onReject={(optionId, feedback) =>
+                        respondToPermission({ requestId: request.requestId, optionId, customInput: feedback })
+                    }
+                />
+            </div>
+        )
+    }
 
     // A request whose every option was filtered out (e.g. only `allow_always` without a rememberable
     // preview) must still be answerable — fall back to showing everything.
@@ -64,23 +95,13 @@ export function PermissionInput({ streamKey, request }: PermissionInputProps): J
     const hasOneClickDecline = buttonOptions.some((option) => option.decision === 'declined')
     const allowFeedback = !!feedbackOption && !hasOneClickDecline
 
-    // Plan approvals are raised while the agent is in plan mode — the mode is the grounded signal;
-    // `toolCall.kind === 'plan'` covers adapters that tag the request directly.
-    const isPlan = currentMode === 'plan' || request.rawToolCall.kind === 'plan'
-    const prompt = isPlan ? 'Approve this plan?' : 'Approval required'
-    // For a plan approval, prefer the plan payload from the tool input over the generic request description.
-    const planText = isPlan
-        ? (getPlanText(request.rawToolCall.input) ?? request.description ?? request.title)
-        : undefined
+    const prompt = 'Approval required'
     const display = getPermissionDisplay(request)
     const payloadLanguage = display.payload?.trim().match(/^[{[]/) ? Language.JSON : Language.Text
-
-    const respond = (optionId: string): void => {
-        if (respondingToPermission) {
-            return
-        }
-        respondToPermission({ requestId: request.requestId, optionId })
-    }
+    // The description often just repeats the tool title — render the body only when it adds anything
+    // beyond the title line.
+    const requestBody = request.description ?? request.title
+    const showRequestBody = !!requestBody && requestBody !== display.title
 
     const handleAnswer = (value: string | string[] | null): void => {
         if (respondingToPermission || value === null || Array.isArray(value)) {
@@ -88,7 +109,7 @@ export function PermissionInput({ streamKey, request }: PermissionInputProps): J
         }
         const selectedOption = buttonOptions.find((option) => option.label === value)
         if (selectedOption) {
-            respond(selectedOption.optionId)
+            respondToPermission({ requestId: request.requestId, optionId: selectedOption.optionId })
             return
         }
         if (allowFeedback && feedbackOption) {
@@ -102,26 +123,20 @@ export function PermissionInput({ streamKey, request }: PermissionInputProps): J
 
     return (
         <div className="flex flex-col gap-2 p-3">
+            {showRequestBody && (
+                <div className="max-h-60 overflow-y-auto text-sm">
+                    <MarkdownMessage content={requestBody ?? ''} id={`permission-${request.requestId}`} />
+                </div>
+            )}
+
             <div className="flex items-center gap-2 text-sm">
                 <IconWarning className="text-warning size-4" />
                 <LemonTag size="small" type="warning">
-                    {isPlan ? 'Plan approval' : 'Approval'}
+                    Approval
                 </LemonTag>
             </div>
             <div className="font-medium text-sm">{prompt}</div>
             {display.title && <div className="text-xs text-secondary">{display.title}</div>}
-            {isPlan && planText ? (
-                <PlanPreview plan={planText} id={`permission-${request.requestId}`} defaultExpanded />
-            ) : (
-                (request.title || request.description) && (
-                    <div className="max-h-60 overflow-y-auto text-sm">
-                        <MarkdownMessage
-                            content={request.description ?? request.title ?? ''}
-                            id={`permission-${request.requestId}`}
-                        />
-                    </div>
-                )
-            )}
             {display.payload && (
                 <div className="max-h-60 overflow-y-auto">
                     <CodeSnippet language={payloadLanguage} className="text-xs" compact>
