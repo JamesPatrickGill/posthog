@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 
-import { Spinner } from '@posthog/lemon-ui'
+import { Spinner } from '@posthog/quill-primitives'
 
 import { cn } from 'lib/utils/css-classes'
 
@@ -161,7 +161,8 @@ export interface PlanApprovalSelectorProps {
  * Plan-approval selector — a port of `/code`'s `PlanApprovalSelector`: an "Approve and proceed" line
  * with the per-mode "Yes, and…" wire options collapsed into the shared mode dropdown beside it, and
  * the inline reject-with-feedback line below. Window-level keyboard nav (works regardless of where
- * focus sits): ↑↓ move between the two rows, Enter approves, digits act on rows, Esc cancels. Approve
+ * focus sits): ↑↓ move between the two rows, Enter approves, Tab/Shift+Tab cycles the permission mode,
+ * digits act on rows, Esc cancels. Approve
  * → `onApprove(<modeOptionId>)`; reject requires
  * feedback text → `onReject(<rejectOptionId>, feedback)` (empty Enter is a no-op). The approved mode
  * is remembered and pre-selected on the next plan.
@@ -233,12 +234,21 @@ export function PlanApprovalSelector({
         selectRow((selectedIndex + delta + rowCount) % rowCount)
     }
 
+    // Tab cycles the permission mode in place (`/code` parity) — no focus juggling with the dropdown.
+    const cycleMode = (delta: number): void => {
+        if (!selectedMode || modes.length < 2) {
+            return
+        }
+        const idx = modes.indexOf(selectedMode)
+        setSelectedMode(modes[(idx + delta + modes.length) % modes.length])
+    }
+
     // Window-level shortcuts, so keyboard nav works wherever focus sits (thread, page body) — not
     // just while the selector itself is focused. Typing contexts keep their keys: the reject
     // textarea owns the keyboard while its row is selected, and any other form field is left alone.
     useEffect(() => {
         const handleKeyDown = (e: KeyboardEvent): void => {
-            if (rejectSelected) {
+            if (rejectSelected || e.defaultPrevented) {
                 return
             }
             const target = e.target
@@ -247,7 +257,10 @@ export function PlanApprovalSelector({
                 (target.tagName === 'INPUT' ||
                     target.tagName === 'TEXTAREA' ||
                     target.tagName === 'SELECT' ||
-                    target.isContentEditable)
+                    target.isContentEditable ||
+                    // While the mode dropdown is open its menu owns the keyboard — Enter there picks a
+                    // mode, it must not approve the plan.
+                    target.closest('[role="menu"]') !== null)
             ) {
                 return
             }
@@ -259,6 +272,10 @@ export function PlanApprovalSelector({
                 case 'ArrowDown':
                     e.preventDefault()
                     moveSelection(1)
+                    break
+                case 'Tab':
+                    e.preventDefault()
+                    cycleMode(e.shiftKey ? -1 : 1)
                     break
                 case 'Enter':
                     e.preventDefault()
@@ -399,7 +416,9 @@ export function PlanApprovalSelector({
                         )}
                     </div>
 
-                    <p className="mt-2 mb-0 text-[13px] text-muted">Enter to select · ↑↓ to navigate · Esc to cancel</p>
+                    <p className="mt-2 mb-0 text-[13px] text-muted">
+                        Enter to select · Tab to change mode · ↑↓ to navigate · Esc to cancel
+                    </p>
                 </div>
             </div>
         </div>
