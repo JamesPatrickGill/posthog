@@ -2,7 +2,7 @@ import { type Dayjs, parseDateInTimezone } from './dayjs'
 
 /** Bucket size for a date-based X axis. Mirrors `IntervalType` from product code without
  * coupling hog-charts to it. */
-export type TimeInterval = 'second' | 'minute' | 'hour' | 'day' | 'week' | 'month'
+export type TimeInterval = 'second' | 'minute' | 'hour' | 'day' | 'week' | 'month' | 'quarter' | 'year'
 
 interface CreateXAxisTickCallbackArgs {
     interval?: TimeInterval
@@ -54,8 +54,9 @@ export function createXAxisTickCallback({
 export const parseDateForAxis = parseDateInTimezone
 
 /** Full date label for a tooltip header. Unlike the sparse, abbreviated axis ticks, every point
- *  gets a complete, unambiguous label ("Jun 6, 2026", "Jun 6, 14:00"). Non-date labels pass
- *  through unchanged. */
+ *  gets a complete, unambiguous label, with the weekday when the bucket names a single day
+ *  ("Sat, Jun 6, 2026", "Sat, Jun 6, 14:00" — but week/month buckets span days, so no weekday).
+ *  Non-date labels pass through unchanged. */
 export function createTooltipDateFormatter({
     interval,
     timezone,
@@ -70,14 +71,17 @@ export function createTooltipDateFormatter({
         }
         switch (interval) {
             case 'second':
-                return date.format('MMM D, HH:mm:ss')
+                return date.format('ddd, MMM D, HH:mm:ss')
             case 'minute':
             case 'hour':
-                return date.format('MMM D, HH:mm')
+                return date.format('ddd, MMM D, HH:mm')
             case 'month':
                 return date.format('MMM YYYY')
-            default:
+            case 'week':
                 return date.format('MMM D, YYYY')
+            case 'day':
+            default:
+                return date.format('ddd, MMM D, YYYY')
         }
     }
 }
@@ -86,7 +90,7 @@ function pickMode(interval: TimeInterval, parsedDates: Dayjs[], first: Dayjs, la
     const spanMonths = (last.year() - first.year()) * 12 + last.month() - first.month()
     const spanDays = last.diff(first, 'day')
 
-    if (interval === 'month') {
+    if (interval === 'month' || interval === 'quarter' || interval === 'year') {
         return { type: 'month' }
     }
     if ((interval === 'day' || interval === 'week') && spanMonths >= 3) {
