@@ -1,7 +1,8 @@
-import { actions, kea, listeners, path, reducers } from 'kea'
+import { actions, afterMount, connect, kea, listeners, path, reducers } from 'kea'
 import posthog from 'posthog-js'
 
-import type { ToolStreamEvent } from '../types/streamTypes'
+import type { RunLifecycleEvent, ToolStreamEvent } from '../types/streamTypes'
+import { foregroundStreamLogic } from './foregroundStreamLogic'
 import type { toolStreamEventsLogicType } from './toolStreamEventsLogicType'
 
 export interface ToolStreamSubscription {
@@ -10,10 +11,39 @@ export interface ToolStreamSubscription {
     onEvent: (event: ToolStreamEvent) => void
     /** When true, replay-sourced events are delivered too. Defaults to false (live only). */
     includeReplay?: boolean
+    /**
+     * When true, an event (tool or run-lifecycle) is delivered only if its `streamKey` matches the
+     * current `foregroundStreamLogic` value at delivery time — the run rendered in the side panel the
+     * user is watching. Defaults to false (every stream).
+     */
+    foregroundOnly?: boolean
+    /** Optional: called when the run this event streamed under reaches a terminal status (once per run). */
+    onRunTerminal?: (event: RunLifecycleEvent) => void
+    /**
+     * Optional: called when the foreground stream actually changes (a different key, or null when the
+     * side panel stops rendering a run) — the kea-native way to react to foreground updates without
+     * subscribing a component to `foregroundStreamLogic`. Not called for same-value re-registrations.
+     */
+    onForegroundChange?: (foregroundStreamKey: string | null) => void
 }
 
-function subscriptionMatches(subscription: ToolStreamSubscription, event: ToolStreamEvent): boolean {
+function passesForegroundGate(
+    subscription: ToolStreamSubscription,
+    streamKey: string,
+    foregroundStreamKey: string | null
+): boolean {
+    return !subscription.foregroundOnly || streamKey === foregroundStreamKey
+}
+
+function subscriptionMatches(
+    subscription: ToolStreamSubscription,
+    event: ToolStreamEvent,
+    foregroundStreamKey: string | null
+): boolean {
     if (event.source === 'replay' && !subscription.includeReplay) {
+        return false
+    }
+    if (!passesForegroundGate(subscription, event.streamKey, foregroundStreamKey)) {
         return false
     }
     if (subscription.tools === '*') {
@@ -22,11 +52,35 @@ function subscriptionMatches(subscription: ToolStreamSubscription, event: ToolSt
     return subscription.tools.includes(event.toolName)
 }
 
+/** Notifies opted-in subscriptions when the foreground key actually changed since the last notification. */
+function notifyForegroundChange(
+    values: { foregroundStreamKey: string | null; toolListeners: Record<string, ToolStreamSubscription> },
+    cache: Record<string, unknown>
+): void {
+    const next = values.foregroundStreamKey
+    if (next === cache.notifiedForegroundKey) {
+        return
+    }
+    cache.notifiedForegroundKey = next
+    for (const subscription of Object.values(values.toolListeners)) {
+        if (!subscription.onForegroundChange) {
+            continue
+        }
+        try {
+            subscription.onForegroundChange(next)
+        } catch (error) {
+            posthog.captureException(error, { feature: 'posthog_ai_tool_stream_listener' })
+        }
+    }
+}
+
 /**
  * Global, unkeyed event bus for tool-call lifecycle events. `runStreamLogic` emits `ToolStreamEvent`s
- * (with resolved tool names); consumers register a listener that fires their `onEvent` for matching
- * tools. Callbacks live in reducer state — the same precedent as `maxGlobalLogic.toolMap`. Replay
- * events are suppressed unless a subscription opts in via `includeReplay`.
+ * (with resolved tool names) plus a `RunLifecycleEvent` when a run terminates; consumers register a
+ * listener that fires their `onEvent` for matching tools and (optionally) `onRunTerminal` when the run
+ * finishes. Callbacks live in reducer state — the same precedent as `maxGlobalLogic.toolMap`. Replay
+ * events are suppressed unless a subscription opts in via `includeReplay`; a `foregroundOnly`
+ * subscription only sees events for the stream currently rendered in the side panel.
  *
  * Kea-native alternative: `connect` to this bus and add
  * `listeners({ [toolStreamEventsLogic.actionTypes.emitToolEvent]: ({ event }) => ... })`.
@@ -34,8 +88,13 @@ function subscriptionMatches(subscription: ToolStreamSubscription, event: ToolSt
 export const toolStreamEventsLogic = kea<toolStreamEventsLogicType>([
     path(['products', 'posthog_ai', 'frontend', 'logics', 'toolStreamEventsLogic']),
 
+    connect(() => ({
+        values: [foregroundStreamLogic, ['foregroundStreamKey']],
+    })),
+
     actions({
         emitToolEvent: (event: ToolStreamEvent) => ({ event }),
+        emitRunLifecycleEvent: (event: RunLifecycleEvent) => ({ event }),
         registerToolListener: (listenerId: string, subscription: ToolStreamSubscription) => ({
             listenerId,
             subscription,
@@ -62,10 +121,17 @@ export const toolStreamEventsLogic = kea<toolStreamEventsLogicType>([
         ],
     }),
 
-    listeners(({ values }) => ({
+    listeners(({ values, cache }) => ({
+        // The bus is connected to `foregroundStreamLogic`, so listening to its actions here is what lets
+        // subscriptions react to foreground updates kea-natively (no component-level `useValues`). Both
+        // actions funnel through one change-detector: registrations renew with the same key (no-op) and a
+        // key-checked clear can leave the value untouched, so compare against the last notified value
+        // rather than trusting the action.
+        [foregroundStreamLogic.actionTypes.setForegroundStream]: () => notifyForegroundChange(values, cache),
+        [foregroundStreamLogic.actionTypes.clearForegroundStream]: () => notifyForegroundChange(values, cache),
         emitToolEvent: ({ event }) => {
             for (const subscription of Object.values(values.toolListeners)) {
-                if (!subscriptionMatches(subscription, event)) {
+                if (!subscriptionMatches(subscription, event, values.foregroundStreamKey)) {
                     continue
                 }
                 // The emit is dispatched synchronously from `runStreamLogic`'s frame ingestion — one
@@ -77,7 +143,28 @@ export const toolStreamEventsLogic = kea<toolStreamEventsLogicType>([
                 }
             }
         },
+        emitRunLifecycleEvent: ({ event }) => {
+            for (const subscription of Object.values(values.toolListeners)) {
+                if (!subscription.onRunTerminal) {
+                    continue
+                }
+                if (!passesForegroundGate(subscription, event.streamKey, values.foregroundStreamKey)) {
+                    continue
+                }
+                try {
+                    subscription.onRunTerminal(event)
+                } catch (error) {
+                    posthog.captureException(error, { feature: 'posthog_ai_tool_stream_listener' })
+                }
+            }
+        },
     })),
+
+    afterMount(({ values, cache }) => {
+        // Baseline for the change detector: a subscriber registering later must not get a spurious
+        // notification for a foreground key that was already set before this bus mounted.
+        cache.notifiedForegroundKey = values.foregroundStreamKey
+    }),
 ])
 
 /** Whether any registered listener wants replay events — a cheap guard so `runStreamLogic` skips

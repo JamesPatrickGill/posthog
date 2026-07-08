@@ -91,6 +91,20 @@ export interface ToolStreamEvent {
     source: 'live' | 'replay' | 'client'
 }
 
+/** The terminal run statuses a run can settle into (the subset of `RunStatus` that ends the stream). */
+export type RunTerminalStatus = 'completed' | 'failed' | 'cancelled'
+
+/**
+ * A run-lifecycle event published on the `toolStreamEventsLogic` bus when a run reaches a terminal
+ * status. Emitted once per run for live terminals only (suppressed on history replay), so a consumer
+ * like `useMcpToolApplyBack` can flush a buffered reaction when the foreground run finishes.
+ */
+export interface RunLifecycleEvent {
+    /** The `runStreamLogic` key the run streamed under (conversation id or run/task id). */
+    streamKey: string
+    status: RunTerminalStatus
+}
+
 export type ThreadItemType =
     | 'human_message'
     | 'assistant_message'

@@ -13,7 +13,6 @@ import { userLogic } from 'scenes/userLogic'
 import { tasksRunsCommandCreate, tasksRunsStreamTokenRetrieve } from 'products/tasks/frontend/generated/api'
 import type { TaskRunBootstrapCreateRequestInitialPermissionModeEnumApi } from 'products/tasks/frontend/generated/api.schemas'
 
-import { getClaudeCodeMeta, resolveToolCall } from '../components/tool/toolResolver'
 import { parseSandboxQuestions } from '../policy/questionUtils'
 import { defaultPermissionDecision, findAllowOptionId } from '../policy/toolPolicy'
 import type {
@@ -21,6 +20,7 @@ import type {
     PermissionRequestRecord,
     ResourceProduct,
     RunArtifacts,
+    RunTerminalStatus,
     ProgressStatus,
     ProgressStep,
     RunConnectionState,
@@ -49,6 +49,7 @@ import {
     isSessionUpdateUserMessage,
     isTaskRunStateFrame,
 } from '../types/wireTypes'
+import { getClaudeCodeMeta, resolveToolCall } from '../utils/toolResolver'
 import type { runStreamLogicType } from './runStreamLogicType'
 import { hasReplayListener, toolStreamEventsLogic } from './toolStreamEventsLogic'
 
@@ -1234,7 +1235,7 @@ export const runStreamLogic = kea<runStreamLogicType>([
             toolStreamEventsLogic,
             ['toolListeners'],
         ],
-        actions: [toolStreamEventsLogic, ['emitToolEvent']],
+        actions: [toolStreamEventsLogic, ['emitToolEvent', 'emitRunLifecycleEvent']],
     })),
     actions({
         /**
@@ -2437,6 +2438,18 @@ export const runStreamLogic = kea<runStreamLogicType>([
                 return
             }
 
+            // Run-lifecycle signal for apply-back consumers: publish once per run when a live run
+            // reaches a terminal status. `handleTerminalStatus` can fire more than once for the same
+            // run (a task_run_state frame, then a post-drop refetch), so guard on the run id — a
+            // reconnect double-transition must not re-fire the reaction. Replay is already excluded
+            // by the early return above.
+            const lifecycleRun = cache.activeRun as { taskId: string; runId: string } | undefined
+            const emittedRunIds = (cache.emittedTerminalRunIds ??= new Set<string>()) as Set<string>
+            if (lifecycleRun && !emittedRunIds.has(lifecycleRun.runId)) {
+                emittedRunIds.add(lifecycleRun.runId)
+                actions.emitRunLifecycleEvent({ streamKey: props.streamKey, status: status as RunTerminalStatus })
+            }
+
             // Crash/failure affordance: a failed run carrying an error_message otherwise just blanks
             // the thinking indicator. Push a visible error item so the user sees why it stopped. The
             // in-sandbox agent server writes "Agent server crashed: …" on a fatal exception — render
@@ -2500,6 +2513,7 @@ export const runStreamLogic = kea<runStreamLogicType>([
             cache.sseConnectedAtMs = undefined
             cache.streamEnded = false
             cache.streamTokenRefreshes = 0
+            cache.emittedTerminalRunIds = undefined
             // Drop the resume cursor so the next bootstrap opens fresh (start=latest) instead of
             // resuming a prior run's stream.
             cache.lastEventId = undefined
