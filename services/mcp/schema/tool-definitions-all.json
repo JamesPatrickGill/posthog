@@ -7931,6 +7931,20 @@
             "readOnlyHint": false
         }
     },
+    "suggest-ai-trace-parser": {
+        "description": "Propose a custom parser recipe for the raw-JSON LLM trace event the user has open in the PostHog AI side panel. Only call this while the user is viewing the raw-JSON trace event: its sample input/output and the team's existing recipes arrive as attached context, so read them before writing the recipe. Nothing is compiled or saved server-side (the recipe DSL compiler only exists in the browser). The PostHog AI browser client compiles the proposed recipe against that open event and saves it on success. If it fails to compile, a single follow-up message carrying the compiler error arrives: fix the YAML and call this tool again. If no follow-up arrives, the recipe compiled and was saved, so do not call the tool again. Expect at most that one corrective follow-up loop.",
+        "category": "AI observability",
+        "feature": "llm_analytics",
+        "summary": "Propose a custom parser recipe for the user's open raw-JSON trace event.",
+        "title": "Suggest AI trace parser",
+        "required_scopes": ["posthog_ai_frontend:read"],
+        "annotations": {
+            "destructiveHint": false,
+            "idempotentHint": true,
+            "openWorldHint": false,
+            "readOnlyHint": true
+        }
+    },
     "suggest-error-tracking-filters": {
         "description": "Apply error tracking issue filters to the error tracking page the user has open in the PostHog AI side panel. Only call this while the user is viewing the error tracking issues page. The PostHog AI browser client applies the returned filters to that open scene and nothing is saved server-side. This is an incremental patch: only the fields you provide (new/removed filters, date range, ordering, status, search) are applied. Returns the applied patch.",
         "category": "Error tracking",

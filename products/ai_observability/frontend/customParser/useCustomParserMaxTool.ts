@@ -4,13 +4,15 @@ import { useCallback, useMemo } from 'react'
 import { lemonToast } from '@posthog/lemon-ui'
 
 import { useFeatureFlag } from 'lib/hooks/useFeatureFlag'
+import { MAX_SIDE_PANEL_ID } from 'scenes/max/components/PhaiSidePanelChat'
 import { useMaxTool } from 'scenes/max/useMaxTool'
 import { teamLogic } from 'scenes/teamLogic'
 
-import { useAttachedContext } from 'products/posthog_ai/frontend/api/logics'
+import { composerSeedLogic, useAttachedContext, useMcpToolApplyBack } from 'products/posthog_ai/frontend/api/logics'
 
 import { llmAnalyticsParserRecipesCreate } from '../generated/api'
 import { parserRecipesLogic } from '../settings/parserRecipesLogic'
+import { formatParserRecipeCorrection, type ParserRecipeVerdict } from './parserRecipeCorrection'
 import { sampleForContext } from './sampleForContext'
 import { handleCreateParserRecipeCall } from './validateRecipe'
 
@@ -121,6 +123,48 @@ export function useCustomParserMaxTool({
               ]
             : null
     )
+
+    // Sandbox-runtime counterpart of the legacy `create_ai_trace_parser` MaxTool below: the agent proposes a
+    // recipe via the `suggest-ai-trace-parser` MCP echo tool, and the browser validates + saves it here
+    // through the same `validateAndSave` path. On success the existing success toast is the confirmation and
+    // the agent hears nothing; on failure we surface the compiler error so the user can send a corrective
+    // follow-up and the agent retries. There is no single follow-up dispatch that reaches both the task-based
+    // side panel and the legacy-chrome sandbox conversation from here, so this is the graceful fallback: a
+    // toast plus a best-effort composer seed (no auto-submit) into the task-based side panel when it is open.
+    useMcpToolApplyBack({
+        tools: ['suggest-ai-trace-parser'],
+        applyOn: 'completed',
+        onApply: (_event, { innerInput }): void => {
+            if (!active || !innerInput) {
+                return
+            }
+            void validateAndSave(innerInput)
+                .then((verdict) => {
+                    const corrective = formatParserRecipeCorrection(verdict as ParserRecipeVerdict)
+                    if (!corrective) {
+                        return
+                    }
+                    // Only seeds when the new task-based side panel is mounted, so a stale corrective never
+                    // lingers to prefill the composer on the legacy-chrome surface (or a later session). The
+                    // corrective text is written for the agent; the toast speaks to the user, so it points at
+                    // the prepared correction when one was seeded and carries the detail only when it wasn't.
+                    const panelSeed = composerSeedLogic.findMounted({ panelId: MAX_SIDE_PANEL_ID })
+                    if (panelSeed) {
+                        panelSeed.actions.setSeed({ prompt: corrective, autoSubmit: false })
+                        lemonToast.error(
+                            'The generated custom parser did not apply. A correction is ready in the PostHog AI composer, send it to let the agent retry.'
+                        )
+                    } else {
+                        lemonToast.error(corrective)
+                    }
+                })
+                .catch(() => {
+                    // `handleCreateParserRecipeCall` folds its own errors into a verdict, so this only fires on
+                    // an unexpected throw. Surface it rather than dropping the failure silently.
+                    lemonToast.error('Could not validate the parser recipe. Please try again.')
+                })
+        },
+    })
 
     const { openMax } = useMaxTool({
         identifier: 'create_ai_trace_parser',

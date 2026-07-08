@@ -673,3 +673,23 @@ export const SuggestSessionRecordingFiltersSchema = z.object({
         'The complete session recordings universal filter set to apply to the open recordings list.'
     ),
 })
+
+// Echo schema for the PostHog AI surface's frontend-validated custom parser recipe tool
+// (suggest-ai-trace-parser). The DSL compiler that validates the recipe only exists in the browser,
+// so this tool carries the proposal and the browser side panel is the real consumer: it compiles the
+// recipe against the open trace event and saves it on success.
+export const SuggestAiTraceParserSchema = z.object({
+    yaml_source: z
+        .string()
+        .describe(
+            'The full custom parser recipe as a YAML source string, in the recipe DSL. Write rules that match ' +
+                'the shapes in the sample input/output that arrived as attached context.'
+        ),
+    name: z.string().describe('A short human-readable name for the recipe (e.g. "Anthropic tool calls").'),
+    event_uuid: z
+        .string()
+        .describe(
+            'The UUID of the trace event this recipe is written for (the one whose sample arrived as attached ' +
+                'context). The browser refuses to apply the recipe if the user has since opened a different event.'
+        ),
+})

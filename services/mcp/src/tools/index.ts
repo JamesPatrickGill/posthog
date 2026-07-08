@@ -30,6 +30,7 @@ import {
     externalDataSyncLogs,
     readDataSchema,
     readDataWarehouseSchema,
+    suggestAiTraceParser,
     suggestErrorTrackingFilters,
     suggestRevenueAnalyticsFilters,
     suggestSessionRecordingFilters,
@@ -104,6 +105,10 @@ export const TOOL_MAP: Record<string, () => ToolBase<ZodObjectAny>> = {
     'suggest-revenue-analytics-filters': suggestRevenueAnalyticsFilters,
     'suggest-error-tracking-filters': suggestErrorTrackingFilters,
     'suggest-session-recording-filters': suggestSessionRecordingFilters,
+
+    // PostHog AI surface parser tool: schema-echo, same reserved scope. The browser side panel
+    // compiles the proposed recipe against the open trace event and saves it on success.
+    'suggest-ai-trace-parser': suggestAiTraceParser,
 
     // Replay
     'session-recording-summarize': sessionRecordingSummarize,

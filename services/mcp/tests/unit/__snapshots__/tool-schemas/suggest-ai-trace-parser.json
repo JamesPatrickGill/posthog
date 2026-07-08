@@ -1,0 +1,19 @@
+{
+    "$schema": "https://json-schema.org/draft/2020-12/schema",
+    "properties": {
+        "event_uuid": {
+            "description": "The UUID of the trace event this recipe is written for (the one whose sample arrived as attached context). The browser refuses to apply the recipe if the user has since opened a different event.",
+            "type": "string"
+        },
+        "name": {
+            "description": "A short human-readable name for the recipe (e.g. \"Anthropic tool calls\").",
+            "type": "string"
+        },
+        "yaml_source": {
+            "description": "The full custom parser recipe as a YAML source string, in the recipe DSL. Write rules that match the shapes in the sample input/output that arrived as attached context.",
+            "type": "string"
+        }
+    },
+    "required": ["yaml_source", "name", "event_uuid"],
+    "type": "object"
+}

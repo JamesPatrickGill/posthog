@@ -5,6 +5,7 @@ export { default as externalDataSourcesPreview } from './externalDataSourcesPrev
 export { default as externalDataSyncLogs } from './externalDataSyncLogs'
 export { default as readDataSchema } from './readDataSchema'
 export { default as readDataWarehouseSchema } from './readDataWarehouseSchema'
+export { suggestAiTraceParser } from './suggestAiTraceParser'
 export {
     suggestErrorTrackingFilters,
     suggestRevenueAnalyticsFilters,

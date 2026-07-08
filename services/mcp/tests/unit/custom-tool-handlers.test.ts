@@ -3,6 +3,7 @@ import { describe, expect, it, vi } from 'vitest'
 import externalDataSourcesDbSchema from '@/tools/posthogAiTools/externalDataSourcesDbSchema'
 import externalDataSourcesJobs from '@/tools/posthogAiTools/externalDataSourcesJobs'
 import externalDataSourcesPreview from '@/tools/posthogAiTools/externalDataSourcesPreview'
+import { suggestAiTraceParser } from '@/tools/posthogAiTools/suggestAiTraceParser'
 import {
     suggestErrorTrackingFilters,
     suggestRevenueAnalyticsFilters,
@@ -167,13 +168,15 @@ describe('externalDataSourcesJobs', () => {
     })
 })
 
-describe('suggest-*-filters echo tools', () => {
+describe('PostHog AI surface echo tools', () => {
     const context = createMockContext(vi.fn())
 
-    // Each payload mirrors what the legacy langgraph filter tools produced for that scene. The suite
-    // guards two regressions: a schema tightened past the loose floor (rejecting a valid legacy filter
-    // payload, silently breaking the browser apply-back) and a handler that stops echoing the input.
-    const cases: Array<[string, () => any, Record<string, unknown>]> = [
+    // Each payload mirrors what the surface's browser consumer expects to receive back untouched (the
+    // legacy langgraph filter shapes for the filter tools, the recipe proposal for the parser). The
+    // fourth tuple element is the result field the handler echoes into. The suite guards two regressions:
+    // a schema tightened past the floor (rejecting a valid payload, silently breaking the browser
+    // apply-back) and a handler that stops echoing the input.
+    const cases: Array<[string, () => any, Record<string, unknown>, string]> = [
         [
             'suggest-web-analytics-filters',
             suggestWebAnalyticsFilters,
@@ -184,6 +187,7 @@ describe('suggest-*-filters echo tools', () => {
                 doPathCleaning: true,
                 compareFilter: { compare: true },
             },
+            'filters',
         ],
         [
             'suggest-revenue-analytics-filters',
@@ -194,6 +198,7 @@ describe('suggest-*-filters echo tools', () => {
                 date_from: '-30d',
                 date_to: null,
             },
+            'filters',
         ],
         [
             'suggest-error-tracking-filters',
@@ -208,6 +213,7 @@ describe('suggest-*-filters echo tools', () => {
                 status: 'active',
                 searchQuery: 'timeout',
             },
+            'filters',
         ],
         [
             'suggest-session-recording-filters',
@@ -223,10 +229,21 @@ describe('suggest-*-filters echo tools', () => {
                     order_direction: 'DESC',
                 },
             },
+            'filters',
+        ],
+        [
+            'suggest-ai-trace-parser',
+            suggestAiTraceParser,
+            {
+                yaml_source: 'rules:\n  - match: {}\n',
+                name: 'Anthropic tool calls',
+                event_uuid: '0192a1b2-c3d4-7e5f-8a9b-0c1d2e3f4a5b',
+            },
+            'recipe',
         ],
     ]
 
-    it.each(cases)('%s validates a legacy filter payload and echoes it back', async (name, factory, payload) => {
+    it.each(cases)('%s validates its payload and echoes it back', async (name, factory, payload, echoField) => {
         const tool = factory()
         expect(tool.name).toBe(name)
 
@@ -237,7 +254,7 @@ describe('suggest-*-filters echo tools', () => {
         }
 
         const result = await tool.handler(context, parsed.data)
-        expect(result.filters).toEqual(payload)
+        expect(result[echoField]).toEqual(payload)
         expect(result.status).toBe('sent_to_open_page')
     })
 
