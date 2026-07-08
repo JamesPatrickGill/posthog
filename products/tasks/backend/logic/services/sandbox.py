@@ -146,6 +146,7 @@ def redact_sandbox_command(command: str) -> str:
 RUST_AGENT_SERVER_BINARY = "/usr/local/bin/agent-server-rs"
 NODE_AGENT_SERVER_BINARY = "./node_modules/.bin/agent-server"
 RUST_CLAUDE_DRIVER_BINARY = "/usr/local/bin/claude-acp-driver"
+RUST_CODEX_DRIVER_BINARY = "/usr/local/bin/codex-acp-driver"
 
 
 def rust_claude_driver_adapter_cmd() -> str | None:
@@ -158,6 +159,15 @@ def rust_claude_driver_adapter_cmd() -> str | None:
     """
     if getattr(settings, "SANDBOX_RUST_CLAUDE_DRIVER", False):
         return RUST_CLAUDE_DRIVER_BINARY
+    return None
+
+
+def rust_codex_driver_adapter_cmd() -> str | None:
+    """Same switch for codex runs: the Rust server applies
+    POSTHOG_CODEX_ADAPTER_CMD to codex runs only.
+    """
+    if getattr(settings, "SANDBOX_RUST_CODEX_DRIVER", False):
+        return RUST_CODEX_DRIVER_BINARY
     return None
 
 
@@ -195,6 +205,7 @@ def build_agent_runtime_env_prefix(
         "POSTHOG_TASK_RUN_EVENT_INGEST_URL": event_ingest_url,
         "POSTHOG_TASK_RUN_EVENT_INGEST_KEEP_STREAM_OPEN": "true" if event_ingest_keep_stream_open else None,
         "POSTHOG_CLAUDE_ADAPTER_CMD": rust_claude_driver_adapter_cmd(),
+        "POSTHOG_CODEX_ADAPTER_CMD": rust_codex_driver_adapter_cmd(),
     }
     assignments = " ".join(
         f"{name}={shlex.quote(value)}" for name, value in env_vars.items() if value is not None and value != ""
