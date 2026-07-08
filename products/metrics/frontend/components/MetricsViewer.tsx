@@ -39,6 +39,7 @@ import {
     MetricsViewMode,
     RECOMMENDED_AGGREGATION_BY_TYPE,
 } from './metricsViewerLogic'
+import { SavedViewsButton } from './MetricsViews/SavedViewsButton'
 
 const VIEW_MODE_OPTIONS: { value: MetricsViewMode; label: string; 'data-attr': string }[] = [
     { value: 'chart', label: 'Chart', 'data-attr': 'metrics-viewer-view-mode-chart' },
@@ -297,6 +298,7 @@ export const MetricsViewer = (): JSX.Element => {
                 >
                     Save as insight
                 </LemonButton>
+                <SavedViewsButton />
             </div>
             <div className="flex flex-col xl:flex-row gap-3 items-stretch">
                 <div className="flex-1 min-w-0">
