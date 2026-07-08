@@ -14,6 +14,7 @@ import { featureFlagLogic as enabledFeaturesLogic } from 'lib/logic/featureFlagL
 import { AccessControlLevel, AccessControlResourceType, FeatureFlagEvaluationRuntime, FeatureFlagType } from '~/types'
 
 import { EditableOverviewSection } from './EditableOverviewSection'
+import { openFeatureFlagDisableDialog, reportFeatureFlagDisableDialogOptionSelected } from './featureFlagDisableDialog'
 import { FeatureFlagEvaluationContexts } from './FeatureFlagEvaluationContexts'
 import { FeatureFlagInstructions } from './FeatureFlagInstructions'
 import { featureFlagLogic } from './featureFlagLogic'
@@ -58,7 +59,7 @@ function TagsDisplay({ tags, evaluationContexts, flagId, hasEvaluationContexts }
 export function FeatureFlagOverview({ featureFlag }: FeatureFlagOverviewProps): JSX.Element {
     const { featureFlags } = useValues(enabledFeaturesLogic)
     const { recordingFilterForFlag, featureFlagActiveUpdateLoading } = useValues(featureFlagLogic)
-    const { toggleFeatureFlagActive } = useActions(featureFlagLogic)
+    const { toggleFeatureFlagActive, updateFeatureFlagArchived } = useActions(featureFlagLogic)
 
     const hasEvaluationContexts = !!featureFlags[FEATURE_FLAGS.FLAG_EVALUATION_TAGS] // NB: the tag was named "flag-evaluation-tags" before we renamed the concept – i.e. this powers evaluation contexts even though the name implies tags
 
@@ -67,19 +68,42 @@ export function FeatureFlagOverview({ featureFlag }: FeatureFlagOverviewProps): 
     const hasPayload = !!featureFlag.filters?.payloads?.['true']
 
     const handleToggleClick = (): void => {
-        LemonDialog.open({
-            title: featureFlag.active ? 'Disable feature flag?' : 'Enable feature flag?',
-            description: featureFlag.active
-                ? 'This will immediately disable the flag for all users. Are you sure?'
-                : 'This will immediately enable the flag according to its release conditions. Are you sure?',
-            primaryButton: {
-                children: featureFlag.active ? 'Disable' : 'Enable',
-                status: featureFlag.active ? 'danger' : 'default',
-                onClick: () => toggleFeatureFlagActive(!featureFlag.active),
-            },
-            secondaryButton: {
-                children: 'Cancel',
-            },
+        const isDisabling = featureFlag.active
+        const openControlDialog = (): void => {
+            LemonDialog.open({
+                title: isDisabling ? 'Disable feature flag?' : 'Enable feature flag?',
+                description: isDisabling
+                    ? 'This will immediately disable the flag for all users. Are you sure?'
+                    : 'This will immediately enable the flag according to its release conditions. Are you sure?',
+                primaryButton: {
+                    children: isDisabling ? 'Disable' : 'Enable',
+                    status: isDisabling ? 'danger' : 'default',
+                    onClick: () => {
+                        if (isDisabling) {
+                            reportFeatureFlagDisableDialogOptionSelected('feature-flag-detail', 'disable')
+                        }
+                        toggleFeatureFlagActive(!featureFlag.active)
+                    },
+                },
+                secondaryButton: {
+                    children: 'Cancel',
+                    onClick: () => {
+                        if (isDisabling) {
+                            reportFeatureFlagDisableDialogOptionSelected('feature-flag-detail', 'cancel')
+                        }
+                    },
+                },
+            })
+        }
+        if (!isDisabling) {
+            openControlDialog()
+            return
+        }
+        openFeatureFlagDisableDialog({
+            source: 'feature-flag-detail',
+            onDisable: () => toggleFeatureFlagActive(false),
+            onDisableAndArchive: () => updateFeatureFlagArchived(true),
+            openControlDialog,
         })
     }
 
