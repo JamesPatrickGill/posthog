@@ -23,7 +23,7 @@ import { AccessControlLevel, AccessControlResourceType } from '~/types'
 
 import { heatmapLogic } from './heatmapLogic'
 
-export const scene: SceneExport = {
+export const scene: SceneExport<{ id: string }> = {
     component: HeatmapScene,
     logic: heatmapLogic,
     paramsToProps: ({ params: { id } }) => ({ id }),
