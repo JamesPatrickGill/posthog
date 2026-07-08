@@ -2,13 +2,14 @@ import clsx from 'clsx'
 import { BindLogic, useActions, useValues } from 'kea'
 
 import { IconCalendar } from '@posthog/icons'
-import { LemonCheckbox, LemonSelect, Link } from '@posthog/lemon-ui'
+import { LemonSelect } from '@posthog/lemon-ui'
 
 import { DateFilter } from 'lib/components/DateFilter/DateFilter'
 import { PropertyFilters } from 'lib/components/PropertyFilters/PropertyFilters'
 import { Shortcut } from 'lib/components/Shortcuts/Shortcut'
 import { keyBinds } from 'lib/components/Shortcuts/shortcuts'
 import { TaxonomicFilterGroupType } from 'lib/components/TaxonomicFilter/types'
+import { TestAccountFilterSwitch } from 'lib/components/TestAccountFiltersSwitch'
 import { DashboardEventSource } from 'lib/utils/eventUsageLogic'
 import { getProjectEventExistence } from 'lib/utils/getAppContext'
 import { dashboardLogic } from 'scenes/dashboard/dashboardLogic'
@@ -179,37 +180,21 @@ export function DashboardEditBar({ showDateFilter = true, className }: Dashboard
                 </BindLogic>
             </div>
             <div className={clsx('content-end', { 'h-[61px]': hasVariables })}>
-                <LemonCheckbox
+                <TestAccountFilterSwitch
                     size="small"
-                    bordered
                     checked={effectiveEditBarFilters.filterTestAccounts ?? 'indeterminate'}
-                    onChange={() => {
+                    onChange={(checked) => {
                         if (dashboardMode !== DashboardMode.Edit) {
                             setDashboardMode(DashboardMode.Edit, DashboardEventSource.DashboardFilters)
                         }
-                        // Indeterminate = no override; first click forces filtering on, then toggles.
-                        setFilterTestAccounts(!(effectiveEditBarFilters.filterTestAccounts ?? false))
+                        setFilterTestAccounts(checked)
                     }}
-                    label={
-                        <span className="flex items-center gap-1">
-                            Filter out internal and test users
-                            {effectiveEditBarFilters.filterTestAccounts != null && (
-                                <Link
-                                    className="text-xs"
-                                    onClick={(e) => {
-                                        e.preventDefault()
-                                        e.stopPropagation()
-                                        if (dashboardMode !== DashboardMode.Edit) {
-                                            setDashboardMode(DashboardMode.Edit, DashboardEventSource.DashboardFilters)
-                                        }
-                                        setFilterTestAccounts(null)
-                                    }}
-                                >
-                                    reset
-                                </Link>
-                            )}
-                        </span>
-                    }
+                    onReset={() => {
+                        if (dashboardMode !== DashboardMode.Edit) {
+                            setDashboardMode(DashboardMode.Edit, DashboardEventSource.DashboardFilters)
+                        }
+                        setFilterTestAccounts(null)
+                    }}
                 />
             </div>
 
