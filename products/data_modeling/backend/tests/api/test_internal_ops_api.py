@@ -78,7 +78,8 @@ class TestInternalDataModelingOpsAPI(InternalOpsAPITestCase):
         self.assertEqual(data["failing_saved_query_count"], 1)
         self.assertEqual(data["saved_queries_with_sync_frequency_count"], 1)
 
-    def test_saved_query_detail_surfaces_duplicate_backing_tables_and_dag_context(self):
+    @patch("products.data_modeling.backend.presentation.internal_views.describe_schedules", return_value={})
+    def test_saved_query_detail_surfaces_duplicate_backing_tables_and_dag_context(self, _mock_describe):
         saved_query = DataWarehouseSavedQuery.objects.create(
             team=self.team, name="my_view", query={"query": "select * from events"}
         )
@@ -246,6 +247,20 @@ class TestInternalSchedulesAPI(InternalOpsAPITestCase):
         self.assertEqual(truth["covered_by"], "v2")
         self.assertIsNone(truth["v1_schedule"])
         self.assertEqual(truth["dag_schedules"][0]["schedule"]["kind"], "v2_dag")
+
+    @patch("products.data_modeling.backend.presentation.internal_views.describe_schedules")
+    def test_schedules_list_survives_temporal_outage(self, mock_describe):
+        mock_describe.side_effect = RuntimeError("temporal unreachable")
+        DataWarehouseSavedQuery.objects.create(
+            team=self.team, name="my_view", query={"query": "select 1"}, is_materialized=True
+        )
+
+        response = self._get("/schedules", self._token())
+
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        data = response.json()
+        self.assertEqual(data["temporal_error"], "temporal unreachable")
+        self.assertIsNone(data["results"][0]["schedule"])
 
     @patch("products.data_modeling.backend.presentation.internal_views.describe_schedules")
     def test_detail_survives_temporal_outage(self, mock_describe):

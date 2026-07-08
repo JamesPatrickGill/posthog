@@ -230,12 +230,20 @@ class InternalDataModelingOpsViewSet(
         truncated = len(entities) > SCHEDULE_CANDIDATE_CAP
         entities = entities[:SCHEDULE_CANDIDATE_CAP]
 
-        descriptions = describe_schedules([entity["entity_id"] for entity in entities])
+        temporal_error: str | None = None
+        try:
+            descriptions = describe_schedules([entity["entity_id"] for entity in entities])
+        except Exception as error:
+            # Same degradation as the detail route: the entity list is DB-derived, so a
+            # Temporal outage nulls the schedule column instead of 500ing the view.
+            descriptions = {}
+            temporal_error = str(error)
         results = [{**entity, "schedule": descriptions.get(entity["entity_id"])} for entity in entities]
         return Response(
             {
                 "results": InternalEntityScheduleSerializer(results, many=True).data,
                 "truncated": truncated,
+                "temporal_error": temporal_error,
             }
         )
 
