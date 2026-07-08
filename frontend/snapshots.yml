@@ -5989,9 +5989,9 @@ snapshots:
     scenes-app-insights-side-panel-actions--saved-hog-ql-data-table--light:
         hash: v1.k794b7964.a5c990eb24f7c6b1604ce80b2862d5d775743da574766533880f333e894cdd1e.PGxY8ztW21A8vlf__DrtqJtkcoD2TvLSXJOQ5DCKAHs
     scenes-app-insights-side-panel-actions--saved-trends-insight--dark:
-        hash: v1.k794b7964.94610529ffcfac74747552c489e4036dcd8c6d0500774e8124efcfd5a4463327.oyrvpL3IB-ppGGB4PasYmQUS-6kmsRqihi2M3DfGrcM
+        hash: v1.k794b7964.e0a161ed92fffde5a945d0589eaeb58baf9673963428e9f88d48aec2e372d456.EM31bE3ykNsah7UIVq8DqW_ALCD4Ei8LaViqnusEUM4
     scenes-app-insights-side-panel-actions--saved-trends-insight--light:
-        hash: v1.k794b7964.b9be42f576df85410f5c790e630ab24f37ce1ba4aeb248b0df6bc25baba5ce2b.pXH2kBI7b0iB_DChHRAvq5XBTDc7UDeljOMqpC2rC6g
+        hash: v1.k794b7964.b29028a858652a15b13dc67b8f387dc845e2a19af2e2f63df92845468b748fcf.tY_clbMZN2LEn5hhrL6BDzIC68M23p7j9-vuDEMB0RY
     scenes-app-insights-side-panel-actions--unsaved-insight--dark:
         hash: v1.k794b7964.d4921e1d896775d1f98056f5bc1c57c9b7ca0be8951e14a0f3229e7b77dc2472.W3I3GvNATojXlZJp04S-XFH3DfLBUNb7lJ1-lr-rW9g
     scenes-app-insights-side-panel-actions--unsaved-insight--light:
@@ -6009,9 +6009,9 @@ snapshots:
     scenes-app-insights-sqllinechart--sql-line-chart-trend-line-quill--light:
         hash: v1.k794b7964.c446ceed66b1a6056048603e17712a321d2689665867604245510d335c5fc547.aEjCQVGwfNkQ49GMID3RZuoXhA8T_hAD2xalr1WcXIE
     scenes-app-insights-trendsboxplot--trends-box-plot--dark:
-        hash: v1.k794b7964.c24b5bb1c11ff80d9fabf43a9c5a4bf0095524f5555a5b9d3dcd7df6bf4a6127.yOYo0E_LQSNEqTaqscRCb9yjyzTZB4sgGJCsrEWR6-k
+        hash: v1.k794b7964.bf7ee83485a174eb66bda31af904671924eb165945fba09bc7f248f1ae3f48c3.0YDJ6oyznWsbBgZySppsru4cvWTWD7DwZXEtEeffLaM
     scenes-app-insights-trendsboxplot--trends-box-plot--light:
-        hash: v1.k794b7964.137aee24dc0261c218244b09827830168ae20a093683dd88ef9ebbae034b272f.oE4gmYpkCyCDr8mVtWZRXNFBFpSubDwUm2X5ElSpCrc
+        hash: v1.k794b7964.3c1be6bcc39ebec3c79604fafaa914fea9f8bad9b42153c64df4ba0e31bb1622.mDQ1U2zO_O8CgiggpV1tIK8_ted2yDcA0OkeGw5Qvrk
     scenes-app-insights-trendsboxplot--trends-box-plot-edit--dark:
         hash: v1.k794b7964.0d5650fa7cdb38d2a01674905bd9a60340e3f7ef63dcd597bb646b94ce38e560.MY_rjVTwm3cPuiMxziZf_60zH4nj_L6-kq05SkR_xKA
     scenes-app-insights-trendsboxplot--trends-box-plot-edit--light:
