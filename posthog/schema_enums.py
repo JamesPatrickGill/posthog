@@ -1830,6 +1830,8 @@ class ExternalDataSourceType(StrEnum):
     PEEC_AI = "PeecAI"
     HEALTHCHECKS = "Healthchecks"
     IMPACT = "Impact"
+    DODO_PAYMENTS = "DodoPayments"
+    SALESTRICS = "Salestrics"
 
 
 class ExternalQueryErrorCode(StrEnum):

@@ -7257,6 +7257,8 @@ export const externalDataSources = [
     'PeecAI',
     'Healthchecks',
     'Impact',
+    'DodoPayments',
+    'Salestrics',
 ] as const
 
 export type ExternalDataSourceType = (typeof externalDataSources)[number]
