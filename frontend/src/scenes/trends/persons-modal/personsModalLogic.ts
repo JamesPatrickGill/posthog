@@ -14,7 +14,7 @@ import { urls } from 'scenes/urls'
 
 import { cohortsModel } from '~/models/cohortsModel'
 import { groupsModel } from '~/models/groupsModel'
-import { extractValidationError } from '~/queries/nodes/InsightViz/utils'
+import { extractValidationError, extractValidationErrorCode } from '~/queries/nodes/InsightViz/utils'
 import { performQuery } from '~/queries/query'
 import {
     ActorsQuery,
@@ -420,6 +420,12 @@ export const personsModalLogic = kea<personsModalLogicType>([
             (s) => [s.errorObject],
             (errorObject): string | null => {
                 return extractValidationError(errorObject)
+            },
+        ],
+        validationErrorCode: [
+            (s) => [s.errorObject],
+            (errorObject): string | null => {
+                return extractValidationErrorCode(errorObject)
             },
         ],
         propertiesTimelineFilterFromUrl: [

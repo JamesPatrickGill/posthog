@@ -99,6 +99,7 @@ export function PersonsModal({
         actorsResponse,
         errorObject,
         validationError,
+        validationErrorCode,
         insightActorsQueryOptions,
         searchTerm,
         actorLabel,
@@ -306,7 +307,11 @@ export function PersonsModal({
                     <div className="relative min-h-20 p-2 deprecated-space-y-2 rounded bg-border-light overflow-y-auto mb-2">
                         {errorObject ? (
                             validationError ? (
-                                <InsightValidationError query={query} detail={validationError} />
+                                <InsightValidationError
+                                    query={query}
+                                    detail={validationError}
+                                    code={validationErrorCode}
+                                />
                             ) : (
                                 <InsightErrorState query={query} />
                             )

@@ -566,7 +566,7 @@ export function InsightValidationError({
 
             {cta ?? (onRetry ? <RetryButton onRetry={onRetry} query={query} /> : <QueryDebuggerButton query={query} />)}
 
-            {detail.includes('Exclusion') && (
+            {code === 'funnel_exclusions_invalid' && (
                 <div className="mt-4">
                     <Link
                         data-attr="insight-funnels-emptystate-help"

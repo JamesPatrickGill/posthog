@@ -43,7 +43,7 @@ import { TrendInsight } from 'scenes/trends/Trends'
 import { WebAnalyticsInsight } from 'scenes/web-analytics/WebAnalyticsInsight'
 
 import { SceneSection } from '~/layout/scenes/components/SceneSection'
-import { InsightVizNode, TrendsQuery } from '~/queries/schema/schema-general'
+import { FunnelsQuery, InsightVizNode, TrendsQuery } from '~/queries/schema/schema-general'
 import { QueryContext } from '~/queries/types'
 import { shouldQueryBeAsync } from '~/queries/utils'
 import { ChartDisplayType, ExporterFormat, FunnelVizType, InsightLogicProps, InsightType } from '~/types'
@@ -198,36 +198,73 @@ export function InsightVizDisplay({
         }
 
         if (validationError) {
-            const isUnsupportedDataWarehouseSettings =
-                validationErrorCode === 'data_warehouse_series_unsupported_settings'
-            const resetCta = isUnsupportedDataWarehouseSettings ? (
-                <LemonButton
-                    type="primary"
-                    loading={insightDataLoading}
-                    onClick={() =>
-                        updateQuerySource({
-                            filterTestAccounts: false,
-                            properties: undefined,
-                            samplingFactor: undefined,
-                        })
-                    }
-                >
-                    Reset unsupported settings
-                </LemonButton>
-            ) : undefined
+            const fixCta = ((): JSX.Element | undefined => {
+                if (validationErrorCode === 'data_warehouse_series_unsupported_settings') {
+                    return (
+                        <LemonButton
+                            type="primary"
+                            loading={insightDataLoading}
+                            onClick={() =>
+                                updateQuerySource({
+                                    filterTestAccounts: false,
+                                    properties: undefined,
+                                    samplingFactor: undefined,
+                                })
+                            }
+                        >
+                            Reset unsupported settings
+                        </LemonButton>
+                    )
+                }
+                if (validationErrorCode === 'funnel_exclusions_invalid') {
+                    return (
+                        <LemonButton
+                            type="primary"
+                            loading={insightDataLoading}
+                            onClick={() =>
+                                updateQuerySource({
+                                    funnelsFilter: { ...funnelsFilter, exclusions: undefined },
+                                } as Partial<FunnelsQuery>)
+                            }
+                        >
+                            Remove exclusion steps
+                        </LemonButton>
+                    )
+                }
+                if (validationErrorCode === 'funnel_step_range_invalid') {
+                    return (
+                        <LemonButton
+                            type="primary"
+                            loading={insightDataLoading}
+                            onClick={() =>
+                                updateQuerySource({
+                                    funnelsFilter: {
+                                        ...funnelsFilter,
+                                        funnelFromStep: undefined,
+                                        funnelToStep: undefined,
+                                    },
+                                } as Partial<FunnelsQuery>)
+                            }
+                        >
+                            Reset step range
+                        </LemonButton>
+                    )
+                }
+                return undefined
+            })()
             return (
                 <InsightValidationError
                     query={query}
                     detail={validationError}
                     code={validationErrorCode}
                     onRetry={
-                        resetCta
+                        fixCta
                             ? undefined
                             : () => {
                                   loadData(query && shouldQueryBeAsync(query) ? 'force_async' : 'force_blocking')
                               }
                     }
-                    cta={resetCta}
+                    cta={fixCta}
                 />
             )
         }
