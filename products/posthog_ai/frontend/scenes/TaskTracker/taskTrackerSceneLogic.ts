@@ -16,6 +16,7 @@ import {
 import { attachedContextLogic, runStreamLogic } from '../../api/logics'
 import type { SuggestionGroup, SuggestionItem } from '../../api/primitives'
 import { DEFAULT_HEADLINES, pickHeadline } from '../../api/primitives'
+import { composerSeedLogic } from '../../logics/composerSeedLogic'
 import { runnerPanelLogic } from '../../logics/runnerPanelLogic'
 import { tasksLogic } from '../../logics/tasksLogic'
 import type { RepositoryConfig, Task } from '../../types/taskTypes'
@@ -75,6 +76,8 @@ export const taskTrackerSceneLogic = kea<taskTrackerSceneLogicType>([
             ['integrations'],
             attachedContextLogic,
             ['contextItems'],
+            composerSeedLogic(props),
+            ['seed'],
         ],
         actions: [
             runnerPanelLogic(props),
@@ -83,6 +86,8 @@ export const taskTrackerSceneLogic = kea<taskTrackerSceneLogicType>([
             ['loadTasks', 'loadRepositories', 'deleteTask'],
             integrationsLogic,
             ['loadIntegrationsSuccess'],
+            composerSeedLogic(props),
+            ['consumeSeed'],
         ],
     })),
 
@@ -101,6 +106,8 @@ export const taskTrackerSceneLogic = kea<taskTrackerSceneLogicType>([
         // Re-points the panel at a fresh run started from the composer on a reopened terminal task
         // (the run surface's own re-pointing targets the detail scene, which the panel doesn't render).
         updateActiveCreationRun: (runId: string) => ({ runId }),
+        // Pulls any pending `composerSeedLogic` seed into the composer (prefill + optional auto-submit).
+        applyComposerSeed: true,
     }),
 
     reducers({
@@ -301,6 +308,24 @@ export const taskTrackerSceneLogic = kea<taskTrackerSceneLogicType>([
             }
             actions.setActiveCreation({ streamKey: runId, taskId: values.activeCreation.taskId, runId })
         },
+        // A seed arriving while this composer is already mounted (the panel was open when the host set it).
+        // The action type is shared across keys, so each instance re-checks its own keyed `seed` and no-ops
+        // when it isn't the target.
+        [composerSeedLogic.actionTypes.setSeed]: () => {
+            actions.applyComposerSeed()
+        },
+        applyComposerSeed: () => {
+            const seed = values.seed
+            if (!seed) {
+                return
+            }
+            // Consume-once: clear before applying so a re-entrant dispatch can't double-apply/submit.
+            actions.consumeSeed()
+            actions.setNewTaskData({ description: seed.prompt })
+            if (seed.autoSubmit) {
+                actions.submitNewTask()
+            }
+        },
     })),
 
     events(({ actions, values, cache }) => ({
@@ -313,6 +338,9 @@ export const taskTrackerSceneLogic = kea<taskTrackerSceneLogicType>([
             // loadIntegrations ourselves. loadIntegrationsSuccess covers that first load; this call covers
             // integrations already cached by an earlier mount.
             actions.maybeAutoSelectIntegration()
+            // A host commonly seeds the composer before this logic mounts (a CTA opens the panel, then the
+            // panel mounts us), so pick up any pending seed now; the `setSeed` listener covers the reverse order.
+            actions.applyComposerSeed()
         },
         beforeUnmount: () => {
             // Release the manually-mounted optimistic stream if the whole scene unmounts mid-create — the

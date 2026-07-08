@@ -4,6 +4,7 @@ import { expectLogic } from 'kea-test-utils'
 import { useMocks } from '~/mocks/jest'
 import { initKeaTests } from '~/test/init'
 
+import { composerSeedLogic } from '../../logics/composerSeedLogic'
 import { OriginProduct, Task, TaskRunEnvironment, TaskRunStatus } from '../../types/taskTypes'
 import { taskTrackerSceneLogic } from './taskTrackerSceneLogic'
 
@@ -174,5 +175,59 @@ describe('taskTrackerSceneLogic', () => {
         expect(logic.values.activeCreation).toEqual(expectedActiveCreation)
         expect(logic.values.historyExpanded).toBe(false)
         expect(router.values.location.pathname).toContain(expectedPath ?? initialPath)
+    })
+
+    // A CTA opens the panel and stamps its prompt onto composerSeedLogic BEFORE the composer mounts, so the
+    // seed must be picked up on mount — this is the live breakage the seam fixes (the prompt was dropped).
+    // autoSubmit=false must only prefill, never send. Guards the afterMount pickup, the consume-once clear,
+    // and that a non-auto seed doesn't submit.
+    it('picks up a seed set before mount and prefills without submitting when autoSubmit is false', async () => {
+        const seedLogic = composerSeedLogic()
+        seedLogic.mount()
+        seedLogic.actions.setSeed({ prompt: 'analyze churn', autoSubmit: false })
+
+        logic.mount()
+        await expectLogic(logic).toFinishAllListeners()
+
+        expect(logic.values.newTaskData.description).toBe('analyze churn')
+        expect(seedLogic.values.seed).toBeNull()
+        // No submit: submitting opens an optimistic activeCreation, prefill-only leaves it null.
+        expect(logic.values.activeCreation).toBeNull()
+
+        seedLogic.unmount()
+    })
+
+    // A seed arriving while the composer is already mounted (the panel was open when another CTA fired) must
+    // apply immediately via the setSeed listener, and autoSubmit=true must send it. Re-applying afterwards must
+    // not re-submit — a reopened panel must never resend a stale prompt. Guards the listener path, the
+    // auto-submit wiring, and consume-once.
+    it('applies a seed that arrives while mounted, auto-submits it, and does not resubmit once consumed', async () => {
+        let createCount = 0
+        useMocks({
+            post: {
+                '/api/projects/:team/tasks/': async ({ request }) => {
+                    createCount++
+                    createBody = (await request.json()) as Record<string, any>
+                    return [200, { id: 'new-task', ...createBody }]
+                },
+                '/api/projects/:team/tasks/:id/run/': () => [200, { id: 'new-task' }],
+            },
+        })
+
+        logic.mount()
+        await expectLogic(logic).toFinishAllListeners()
+
+        composerSeedLogic().actions.setSeed({ prompt: 'summarize experiment', autoSubmit: true })
+        await expectLogic(logic).toFinishAllListeners()
+
+        expect(createBody).toMatchObject({ description: 'summarize experiment', repository: null })
+        expect(logic.values.activeCreation).toMatchObject({ taskId: 'new-task' })
+        expect(composerSeedLogic().values.seed).toBeNull()
+        expect(createCount).toBe(1)
+
+        // Consumed seed is inert: re-triggering must not create a second task.
+        logic.actions.applyComposerSeed()
+        await expectLogic(logic).toFinishAllListeners()
+        expect(createCount).toBe(1)
     })
 })

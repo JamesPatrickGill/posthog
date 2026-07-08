@@ -88,7 +88,7 @@ interface ParsedCommand {
     question: string
 }
 
-function parseCommandString(options: string): ParsedCommand {
+export function parseCommandString(options: string): ParsedCommand {
     let remaining = options
 
     // Check for mode parameter (format: mode=<value>:rest), remove it if present
@@ -116,7 +116,12 @@ function handleCommandString(options: string, actions: maxLogicType['actions']):
     // to ensure the correct logic instance sets its own mode
 
     if (parsed.autoRun) {
-        actions.setAutoRun(true)
+        // In the new panel view the prompt is consumed by `phaiSidePanelComposerSeedLogic` instead; setting
+        // autoRun here too would make the (mounted but hidden) legacy thread fire `askMax` on top of the new
+        // composer's submit, so one CTA would start two agent runs.
+        if (maxGlobalLogic.findMounted()?.values.effectivePhaiView !== 'new') {
+            actions.setAutoRun(true)
+        }
     }
 
     if (parsed.question !== '') {
