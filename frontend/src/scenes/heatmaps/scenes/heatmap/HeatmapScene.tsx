@@ -1,11 +1,12 @@
 import { BindLogic, useActions, useValues } from 'kea'
 import { useEffect, useRef } from 'react'
 
-import { HedgehogDirector } from '@posthog/brand/hoggies'
+import * as directorPng from '@posthog/brand/hoggies/png/director'
 import { IconBrowser, IconDownload } from '@posthog/icons'
 import { LemonTag, Spinner } from '@posthog/lemon-ui'
 
 import { AccessControlAction } from 'lib/components/AccessControlAction'
+import { pngHoggie } from 'lib/brand/hoggies'
 import { appEditorUrl } from 'lib/components/AuthorizedUrlList/authorizedUrlListLogic'
 import { HeatmapCanvas } from 'lib/components/heatmaps/HeatmapCanvas'
 import { LemonBanner } from 'lib/lemon-ui/LemonBanner/LemonBanner'
@@ -28,6 +29,8 @@ export const scene: SceneExport<{ id: string }> = {
     logic: heatmapLogic,
     paramsToProps: ({ params: { id } }) => ({ id }),
 }
+
+const HedgehogDirector = pngHoggie(directorPng)
 
 export function HeatmapScene({ id }: { id: string }): JSX.Element {
     const logicProps = { id: id }

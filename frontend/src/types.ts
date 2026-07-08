@@ -7650,6 +7650,7 @@ export interface LLMPrompt {
     name: string
     prompt: string
     version: number
+    version_description?: string | null
     created_by: UserBasicType
     created_at: string
     updated_at: string
@@ -7677,6 +7678,7 @@ export interface LLMPromptPublic {
 export interface LLMPromptVersionSummary {
     id: string
     version: number
+    version_description?: string | null
     created_by: UserBasicType
     created_at: string
     is_latest: boolean
