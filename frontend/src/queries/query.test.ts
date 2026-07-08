@@ -124,7 +124,12 @@ describe('query', () => {
 
         const queryFailedCalls = captureSpy.mock.calls.filter((call) => call[0] === 'query failed')
         expect(queryFailedCalls).toHaveLength(1)
-        expect(queryFailedCalls[0][1]).toMatchObject({ query: q, duration: expect.any(Number) })
+        expect(queryFailedCalls[0][1]).toMatchObject({
+            query: q,
+            duration: expect.any(Number),
+            error_status: 500,
+            error_message: 'error',
+        })
     })
 
     describe('waitForPageVisible', () => {

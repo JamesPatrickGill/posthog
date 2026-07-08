@@ -263,10 +263,14 @@ export async function performQuery<N extends DataNode>(
         })
         return response
     } catch (e) {
+        const error = e as (Error & { status?: number; code?: string | null; detail?: string | null }) | null
         posthog.capture('query failed', {
             query: queryNode,
             queryId,
             duration: performance.now() - startTime,
+            error_status: error?.status ?? null,
+            error_code: error?.code ?? null,
+            error_message: error?.detail || error?.message || null,
             ...logParams,
         })
         throw e
