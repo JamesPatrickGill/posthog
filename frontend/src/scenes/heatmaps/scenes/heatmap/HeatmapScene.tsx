@@ -5,8 +5,8 @@ import * as directorPng from '@posthog/brand/hoggies/png/director'
 import { IconBrowser, IconDownload } from '@posthog/icons'
 import { LemonTag, Spinner } from '@posthog/lemon-ui'
 
-import { AccessControlAction } from 'lib/components/AccessControlAction'
 import { pngHoggie } from 'lib/brand/hoggies'
+import { AccessControlAction } from 'lib/components/AccessControlAction'
 import { appEditorUrl } from 'lib/components/AuthorizedUrlList/authorizedUrlListLogic'
 import { HeatmapCanvas } from 'lib/components/heatmaps/HeatmapCanvas'
 import { LemonBanner } from 'lib/lemon-ui/LemonBanner/LemonBanner'
@@ -110,7 +110,7 @@ export function HeatmapScene({ id }: { id: string }): JSX.Element {
                             <AccessControlAction
                                 resourceType={AccessControlResourceType.Heatmap}
                                 minAccessLevel={AccessControlLevel.Editor}
-                                userAccessLevel={userAccessLevel}
+                                userAccessLevel={userAccessLevel ?? undefined}
                             >
                                 <LemonButton type="primary" onClick={updateHeatmap} size="small">
                                     Save
