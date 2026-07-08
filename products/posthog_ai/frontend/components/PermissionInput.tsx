@@ -1,4 +1,6 @@
 import { useActions, useValues } from 'kea'
+import posthog from 'posthog-js'
+import type { ReactNode } from 'react'
 
 import { IconWarning } from '@posthog/icons'
 import { LemonTag, Spinner } from '@posthog/lemon-ui'
@@ -12,7 +14,9 @@ import { MarkdownMessage } from '../messages/MarkdownMessage'
 import { getPermissionDisplay } from '../policy/permissionDisplayUtils'
 import { mapPermissionOptions, type ApprovalCardOption } from '../policy/permissionUtils'
 import type { PermissionRequestRecord } from '../types/streamTypes'
+import { resolveToolCall } from '../utils/toolResolver'
 import { QuestionField } from './QuestionField'
+import { lookupToolRenderer } from './tool/toolRegistry'
 
 interface PermissionInputProps {
     streamKey: string
@@ -21,6 +25,21 @@ interface PermissionInputProps {
 
 const ignoreMultiSelectChange = (_value: string[]): void => undefined
 const ignoreMultiSelectSubmit = (): void => undefined
+
+/**
+ * Resolves the request's inner sub-tool and, if a registered entry provides a `renderPermissionPreview`,
+ * returns its node (else null). Isolated + guarded so a throwing product preview can never break the
+ * approval card — the card falls back to the raw JSON payload.
+ */
+function renderRegisteredPermissionPreview(request: PermissionRequestRecord): ReactNode | null {
+    try {
+        const { resolvedKey } = resolveToolCall(request.rawToolCall)
+        return lookupToolRenderer(resolvedKey).renderPermissionPreview?.(request) ?? null
+    } catch (error) {
+        posthog.captureException(error, { feature: 'posthog_ai_permission_preview' })
+        return null
+    }
+}
 
 function toPermissionQuestion(
     prompt: string,
@@ -70,6 +89,11 @@ export function PermissionInput({ streamKey, request }: PermissionInputProps): J
     const display = getPermissionDisplay(request)
     const payloadLanguage = display.payload?.trim().match(/^[{[]/) ? Language.JSON : Language.Text
 
+    // A product may register a richer approval preview (e.g. a config diff) for the resolved sub-tool
+    // via the tool registry. When it returns a node, it replaces the raw JSON payload; a null return
+    // (or a throwing preview, or no registered preview) falls back to today's JSON block.
+    const previewNode = renderRegisteredPermissionPreview(request)
+
     const respond = (optionId: string): void => {
         if (respondingToPermission) {
             return
@@ -113,13 +137,15 @@ export function PermissionInput({ streamKey, request }: PermissionInputProps): J
                     />
                 </div>
             )}
-            {display.payload && (
+            {previewNode ? (
+                <div className="max-h-80 overflow-y-auto">{previewNode}</div>
+            ) : display.payload ? (
                 <div className="max-h-60 overflow-y-auto">
                     <CodeSnippet language={payloadLanguage} className="text-xs" compact>
                         {display.payload}
                     </CodeSnippet>
                 </div>
-            )}
+            ) : null}
             {respondingToPermission ? (
                 <div className="flex items-center gap-2 text-muted pt-1">
                     <Spinner className="size-4" />

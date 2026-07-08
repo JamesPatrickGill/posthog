@@ -6,6 +6,7 @@ import { LemonButton, LemonDivider } from '@posthog/lemon-ui'
 import { RunSurface } from 'products/posthog_ai/frontend/api/runSurface'
 
 import { useForegroundStream } from '../../../hooks/useForegroundStream'
+import { usePersistCreateToasts } from '../../../hooks/usePersistCreateToasts'
 import { taskTrackerSceneLogic } from '../taskTrackerSceneLogic'
 import { TaskComposer } from './TaskComposer'
 import { TaskHistoryList, TaskHistoryPreview } from './TaskHistory'
@@ -40,6 +41,8 @@ function SidePanelRunnerContent(): JSX.Element {
     // re-pointed when it switches runs). The `/tasks` full-page scene and `EmbeddedRunner` render the
     // run through their own components, never this one, so they never register.
     useForegroundStream(activeCreation?.streamKey ?? null)
+    // React to this foreground run's create-family persist tools with an "Open …" toast.
+    usePersistCreateToasts()
 
     if (!activeCreation && historyExpanded) {
         return (

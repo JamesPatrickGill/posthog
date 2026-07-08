@@ -1,6 +1,7 @@
 import '@testing-library/jest-dom'
 
 import { render, screen } from '@testing-library/react'
+import type { ReactNode } from 'react'
 
 import type { ToolCallMessage } from 'products/posthog_ai/frontend/types/toolTypes'
 
@@ -35,6 +36,25 @@ describe('toolRegistry', () => {
         ])
         expect(toolRegistry.lookup('__test_alpha__')?.displayName).toEqual('Alpha')
         expect(toolRegistry.lookup('__test_beta__')?.displayName).toEqual('Beta')
+    })
+
+    // The permission-preview seam: a preview-only entry (no Renderer) still resolves a card renderer,
+    // and its `renderPermissionPreview` survives `lookupToolRenderer` so `PermissionInput` can call it;
+    // an unregistered tool exposes none, so the approval card falls back to the raw JSON payload.
+    it('preserves a registered renderPermissionPreview through lookupToolRenderer and defaults its Renderer', () => {
+        const preview = jest.fn((): ReactNode => 'PREVIEW_NODE')
+        registerToolRenderers([
+            {
+                key: '__test_preview__',
+                displayName: 'Preview tool',
+                icon: null as unknown as JSX.Element,
+                renderPermissionPreview: preview,
+            },
+        ])
+        const resolved = lookupToolRenderer('__test_preview__')
+        expect(resolved.Renderer).not.toBeUndefined()
+        expect(resolved.renderPermissionPreview).toBe(preview)
+        expect(lookupToolRenderer('__unregistered_preview__').renderPermissionPreview).toBeUndefined()
     })
 
     it('leaves product-specific and unknown tool names unregistered, resolving to the key as displayName', () => {

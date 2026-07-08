@@ -72,6 +72,7 @@ import {
     getThinkingMessageFromResponse,
     runStreamLogic,
     useForegroundStream,
+    usePersistCreateToasts,
 } from 'products/posthog_ai/frontend/api/logics'
 import {
     AssistantFailureMessage,
@@ -134,6 +135,9 @@ export function Thread({ className }: { className?: string }): JSX.Element | nul
     // panelId) never registers. Cleared on unmount / conversation change via the streamKey dependency.
     const rendersSandboxThread = isSandboxRuntime || isConvertedConversation
     useForegroundStream(panelId === SIDE_PANEL_PANEL_ID && rendersSandboxThread ? sandboxConversationKey : null)
+    // Toast an "Open …" link when the foreground run finishes a create-family persist tool (self-gated
+    // to the foreground stream, so the full-page /ai scene — which never registers foreground — is inert).
+    usePersistCreateToasts()
 
     const containerClassName = cn(
         '@container/thread flex flex-col items-stretch w-full max-w-180 self-center gap-1.5 grow mx-auto',
