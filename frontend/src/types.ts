@@ -7058,6 +7058,8 @@ export type HogFunctionConfigurationContextId =
 export type HogFunctionSubTemplateIdType =
     | 'early-access-feature-enrollment'
     | 'survey-response'
+    | 'mcp-missing-capability'
+    | 'mcp-tool-error'
     | 'activity-log'
     | 'feature-flag-change'
     | 'error-tracking-issue-created'

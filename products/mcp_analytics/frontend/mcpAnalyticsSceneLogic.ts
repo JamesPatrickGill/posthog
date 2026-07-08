@@ -11,7 +11,13 @@ import { OnboardingStepKey } from '~/types'
 import { mcpAnalyticsOnboardingLogic } from './mcpAnalyticsOnboardingLogic'
 import type { mcpAnalyticsSceneLogicType } from './mcpAnalyticsSceneLogicType'
 
-export type MCPAnalyticsTab = 'activity' | 'dashboard' | 'sessions' | 'tool-quality' | 'intent-clustering'
+export type MCPAnalyticsTab =
+    | 'activity'
+    | 'dashboard'
+    | 'sessions'
+    | 'tool-quality'
+    | 'intent-clustering'
+    | 'notifications'
 
 export const TAB_DESCRIPTIONS: Record<MCPAnalyticsTab, string> = {
     activity: 'Live feed of tool calls and what agents are trying to do with your MCP server.',
@@ -20,6 +26,8 @@ export const TAB_DESCRIPTIONS: Record<MCPAnalyticsTab, string> = {
     'tool-quality': 'Understand how reliably your MCP tools support user workflows.',
     'intent-clustering':
         'Cluster semantically similar user intents and see which tools each cluster routes to. Highlights inconsistent routing.',
+    notifications:
+        'Get notified in Slack, Teams, Discord, or a webhook when agents hit a missing capability or a tool call fails.',
 }
 
 // Per-tab question seeded into PostHog AI so the answer is grounded in what the user is looking at.
@@ -34,6 +42,8 @@ export const TAB_AI_PROMPTS: Record<MCPAnalyticsTab, string> = {
         'Which of my MCP tools are least reliable? Break down $mcp_tool_call error rate and p95 $mcp_duration_ms by $mcp_tool_name.',
     'intent-clustering':
         "What's the biggest unmet need agents have that my MCP tools don't cover? Look at $mcp_missing_capability and $mcp_intent.",
+    notifications:
+        'What MCP events should I be notified about? Summarize recent $mcp_missing_capability reports and failing $mcp_tool_call events.',
 }
 
 const SCENE_KEY_TO_TAB: Record<string, MCPAnalyticsTab> = {
@@ -42,6 +52,7 @@ const SCENE_KEY_TO_TAB: Record<string, MCPAnalyticsTab> = {
     mcpAnalyticsSessions: 'sessions',
     mcpAnalyticsToolQuality: 'tool-quality',
     mcpAnalyticsIntentClustering: 'intent-clustering',
+    mcpAnalyticsNotifications: 'notifications',
 }
 
 export const mcpAnalyticsSceneLogic = kea<mcpAnalyticsSceneLogicType>([
