@@ -636,6 +636,62 @@
             "readOnlyHint": true
         }
     },
+    "suggest-web-analytics-filters": {
+        "description": "Apply web analytics filters to the web analytics page the user has open in the PostHog AI side panel. Only call this while the user is viewing the web analytics page. The PostHog AI browser client applies the returned filters to that open scene and nothing is saved server-side. Send the complete filter set the page should end up with (property filters, date range, path cleaning, comparison), not a delta. Returns the applied filter set.",
+        "category": "Web analytics",
+        "feature": "web_analytics",
+        "summary": "Apply web analytics filters to the user's open web analytics page.",
+        "title": "Suggest web analytics filters",
+        "required_scopes": ["posthog_ai_frontend:read"],
+        "annotations": {
+            "destructiveHint": false,
+            "idempotentHint": true,
+            "openWorldHint": false,
+            "readOnlyHint": true
+        }
+    },
+    "suggest-revenue-analytics-filters": {
+        "description": "Apply revenue analytics filters to the revenue analytics page the user has open in the PostHog AI side panel. Only call this while the user is viewing the revenue analytics page. The PostHog AI browser client applies the returned filters to that open scene and nothing is saved server-side. Send the complete filter set the page should end up with (property filters, breakdowns, date range), not a delta. Returns the applied filter set.",
+        "category": "Revenue analytics",
+        "feature": "revenue_analytics",
+        "summary": "Apply revenue analytics filters to the user's open revenue analytics page.",
+        "title": "Suggest revenue analytics filters",
+        "required_scopes": ["posthog_ai_frontend:read"],
+        "annotations": {
+            "destructiveHint": false,
+            "idempotentHint": true,
+            "openWorldHint": false,
+            "readOnlyHint": true
+        }
+    },
+    "suggest-error-tracking-filters": {
+        "description": "Apply error tracking issue filters to the error tracking page the user has open in the PostHog AI side panel. Only call this while the user is viewing the error tracking issues page. The PostHog AI browser client applies the returned filters to that open scene and nothing is saved server-side. This is an incremental patch: only the fields you provide (new/removed filters, date range, ordering, status, search) are applied. Returns the applied patch.",
+        "category": "Error tracking",
+        "feature": "error_tracking",
+        "summary": "Apply error tracking issue filters to the user's open error tracking page.",
+        "title": "Suggest error tracking filters",
+        "required_scopes": ["posthog_ai_frontend:read"],
+        "annotations": {
+            "destructiveHint": false,
+            "idempotentHint": true,
+            "openWorldHint": false,
+            "readOnlyHint": true
+        }
+    },
+    "suggest-session-recording-filters": {
+        "description": "Apply session recording filters to the session replay page the user has open in the PostHog AI side panel. Only call this while the user is viewing the session recordings list. The PostHog AI browser client applies the returned filters to that open scene and nothing is saved server-side. Send the complete universal recordings filter set the page should end up with under `recordings_filters`, not a delta. Returns the applied filter set.",
+        "category": "Session replay",
+        "feature": "session_recording",
+        "summary": "Apply session recording filters to the user's open session replay page.",
+        "title": "Suggest session recording filters",
+        "required_scopes": ["posthog_ai_frontend:read"],
+        "annotations": {
+            "destructiveHint": false,
+            "idempotentHint": true,
+            "openWorldHint": false,
+            "readOnlyHint": true
+        }
+    },
     "workflows-enable": {
         "description": "Enable / activate a draft workflow and start processing events. One-way door: a live workflow can't be edited over MCP (to change it you recreate it as a new draft), so test it first and get the user's explicit approval before invoking. Don't enable on your own initiative.",
         "category": "Workflows",

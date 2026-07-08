@@ -393,6 +393,7 @@ describe('OAUTH_SCOPES_SUPPORTED completeness', () => {
         'signal_scout_internal:write',
         'signal_scout_report:read',
         'signal_scout_report:write',
+        'posthog_ai_frontend:read',
     ])
 
     it('should include every scope referenced in tool definitions', () => {
