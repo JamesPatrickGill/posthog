@@ -182,6 +182,7 @@ the row lists both.
 | gridly                  | HTTP                        | requests                                                        | ✅                          |
 | guardian                | HTTP                        | requests                                                        | ✅                          |
 | guru                    | HTTP                        | requests                                                        | ✅                          |
+| harvey                  | HTTP                        | requests                                                        | ✅                          |
 | height                  | HTTP                        | requests                                                        | ✅                          |
 | hellobaton              | HTTP                        | requests                                                        | ✅                          |
 | hibob                   | HTTP                        | requests                                                        | ✅                          |
@@ -529,7 +530,6 @@ doesn't conflict with concurrent PRs.
 - greythr
 - gusto
 - harness
-- harvey
 - healthchecks
 - heap
 - helpscout
