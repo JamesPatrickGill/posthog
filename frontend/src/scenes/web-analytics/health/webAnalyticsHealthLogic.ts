@@ -106,6 +106,22 @@ const WEB_HEALTH_CHECKS: WebHealthCheckConfig[] = [
         urgent: true,
     },
     {
+        id: HealthCheckId.PATH_CLEANING_SUGGESTIONS,
+        kind: 'path_cleaning_suggestions',
+        category: 'configuration',
+        title: 'Path cleaning',
+        passingDescription:
+            'No pending path cleaning suggestions. Path cleaning rules group similar pages (like /users/123 and /users/456) in your breakdowns.',
+        failingDescription:
+            'AI-suggested path cleaning rules are ready to review. Applying them groups similar pages (like /users/123 and /users/456) in your Paths and Web analytics breakdowns.',
+        passingAction: { label: 'Manage rules', to: urls.settings('environment-product-analytics', 'path-cleaning') },
+        failingAction: {
+            label: 'Review suggestions',
+            to: urls.settings('environment-product-analytics', 'path-cleaning'),
+        },
+        docsUrl: 'https://posthog.com/docs/product-analytics/paths#path-cleaning-rules',
+    },
+    {
         id: HealthCheckId.WEB_VITALS,
         kind: 'web_vitals',
         category: 'performance',

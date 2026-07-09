@@ -41,8 +41,8 @@ class PathCleaningSuggestionsCheck(HealthCheck):
     schedule = "23 6 * * 1"  # weekly, Monday 06:23 UTC
     remediation = Remediation(
         human="""
-            Open Settings → Web analytics → Path cleaning. Review the suggested rules — each one
-            shows the regex, the replacement alias, and how many of your real paths it matched —
+            Open Settings → Product analytics → Path cleaning rules. Review the suggested rules —
+            each one shows the regex, the replacement alias, and how many of your real paths it matched —
             then apply them all or add the ones you want by hand. Rules collapse dynamic URL segments
             (IDs, slugs, tokens) so the Paths table groups equivalent pages together.
         """,
@@ -114,5 +114,5 @@ class PathCleaningSuggestionsCheck(HealthCheck):
             title="Path cleaning suggestions available",
             summary=f"{rule_count} suggested path-cleaning rule{'s' if rule_count != 1 else ''} "
             "ready to review, generated from your real page paths",
-            link="/settings/environment-web-analytics",
+            link="/settings/environment-product-analytics#path-cleaning",
         )
