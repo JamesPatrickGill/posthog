@@ -1,1 +1,1 @@
-0032_alter_visionaction_alert_config
+0033_alter_visionaction_alert_config
