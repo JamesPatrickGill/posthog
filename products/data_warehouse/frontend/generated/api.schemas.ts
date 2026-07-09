@@ -1736,6 +1736,9 @@ export interface CredentialApi {
  * * `Vapi` - Vapi
  * * `Vespa` - Vespa
  * * `Writesonic` - Writesonic
+ * * `Autumn` - Autumn
+ * * `GetStream` - GetStream
+ * * `Octolens` - Octolens
  */
 export type ExternalDataSourceTypeEnumApi =
     (typeof ExternalDataSourceTypeEnumApi)[keyof typeof ExternalDataSourceTypeEnumApi]
@@ -2428,6 +2431,9 @@ export const ExternalDataSourceTypeEnumApi = {
     Vapi: 'Vapi',
     Vespa: 'Vespa',
     Writesonic: 'Writesonic',
+    Autumn: 'Autumn',
+    GetStream: 'GetStream',
+    Octolens: 'Octolens',
 } as const
 
 export interface SimpleExternalDataSourceSerializersApi {
