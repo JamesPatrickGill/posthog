@@ -109,18 +109,21 @@ def evaluate_alert_check(
             error_message=None,
         )
 
-    if snapshot.state == AlertState.SNOOZED:
-        if snapshot.snooze_until is not None and snapshot.snooze_until > now:
-            return AlertCheckOutcome(
-                new_state=AlertState.SNOOZED,
-                notification=NotificationAction.NONE,
-                consecutive_failures=snapshot.consecutive_failures,
-                update_last_notified_at=False,
-                error_message=None,
-            )
-        effective_state = AlertState.NOT_FIRING
-    else:
-        effective_state = snapshot.state
+    # Honor an active snooze regardless of state: the worker's bulk save can
+    # overwrite a concurrent user snooze with a stale non-SNOOZED state, but
+    # snooze_until survives (it's not in the worker's field list) and unsnooze
+    # nulls it, so a future value always means "user snoozed". Returning SNOOZED
+    # repairs the clobbered row.
+    if snapshot.snooze_until is not None and snapshot.snooze_until > now:
+        return AlertCheckOutcome(
+            new_state=AlertState.SNOOZED,
+            notification=NotificationAction.NONE,
+            consecutive_failures=snapshot.consecutive_failures,
+            update_last_notified_at=False,
+            error_message=None,
+        )
+
+    effective_state = AlertState.NOT_FIRING if snapshot.state == AlertState.SNOOZED else snapshot.state
 
     if check.error_message is not None:
         # Errors never move firing state — only threshold checks do (CloudWatch's
