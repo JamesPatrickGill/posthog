@@ -14,6 +14,7 @@ import {
     LemonTag,
     LemonTextArea,
     Link,
+    SpinnerOverlay,
 } from '@posthog/lemon-ui'
 
 import { pngHoggie } from 'lib/brand/hoggies'
@@ -58,9 +59,13 @@ export function ScannerEditorSceneComponent(): JSX.Element {
     const { scanner, scannerLoading, isScannerSubmitting, scannerValidationErrors, showScannerErrors } =
         useValues(scannerLogic)
     const { submitScanner, setSubmitIntent } = useActions(scannerLogic)
-    const { featureFlags } = useValues(featureFlagLogic)
+    const { featureFlags, receivedFeatureFlags } = useValues(featureFlagLogic)
 
     if (!featureFlags[FEATURE_FLAGS.REPLAY_VISION]) {
+        // Flags load asynchronously, so wait for them before deciding the page doesn't exist.
+        if (!receivedFeatureFlags) {
+            return <SpinnerOverlay sceneLevel />
+        }
         return <NotFound object="page" />
     }
 

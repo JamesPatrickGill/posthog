@@ -2,7 +2,7 @@ import { useActions, useValues } from 'kea'
 import { Form } from 'kea-forms'
 import { useMemo } from 'react'
 
-import { LemonButton, LemonInput, LemonInputSelect, LemonSegmentedButton } from '@posthog/lemon-ui'
+import { LemonButton, LemonInput, LemonInputSelect, LemonSegmentedButton, SpinnerOverlay } from '@posthog/lemon-ui'
 
 import { IntegrationChoice } from 'lib/components/CyclotronJob/integrations/IntegrationChoice'
 import { NotFound } from 'lib/components/NotFound'
@@ -320,9 +320,13 @@ function DeliverySection(): JSX.Element {
 export function ActionEditorSceneComponent(): JSX.Element {
     const { isNew, actionLoading, loadedAction, actionForm, isActionFormSubmitting, effectiveScannerId, scannerName } =
         useValues(actionEditorSceneLogic)
-    const { featureFlags } = useValues(featureFlagLogic)
+    const { featureFlags, receivedFeatureFlags } = useValues(featureFlagLogic)
 
     if (!featureFlags[FEATURE_FLAGS.REPLAY_VISION] || !featureFlags[FEATURE_FLAGS.REPLAY_VISION_ACTIONS]) {
+        // Flags load asynchronously, so wait for them before deciding the page doesn't exist.
+        if (!receivedFeatureFlags) {
+            return <SpinnerOverlay sceneLevel />
+        }
         return <NotFound object="page" />
     }
 
