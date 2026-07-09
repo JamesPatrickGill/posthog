@@ -12,6 +12,7 @@ from rest_framework.response import Response
 from posthog.api.routing import TeamAndOrgViewSetMixin
 from posthog.models.health_issue import HealthIssue
 from posthog.models.organization import OrganizationMembership
+from posthog.rate_limit import AIBurstRateThrottle, AISustainedRateThrottle
 
 from products.web_analytics.backend.path_cleaning_suggestions.service import (
     AnnotatedRule,
@@ -96,6 +97,13 @@ class WebAnalyticsPathCleaningSuggestionViewSet(TeamAndOrgViewSetMixin, viewsets
     web-analytics-specific verbs: on-demand generation and applying rules to the team."""
 
     scope_object = "web_analytics"
+
+    def get_throttles(self):
+        if self.action == "generate":
+            # generation runs a ClickHouse path sample plus an LLM call — cap it for
+            # session-authenticated users the same way token-based AI callers are capped
+            return [AIBurstRateThrottle(), AISustainedRateThrottle()]
+        return super().get_throttles()
 
     @extend_schema(
         operation_id="web_analytics_path_cleaning_suggestions_generate",
