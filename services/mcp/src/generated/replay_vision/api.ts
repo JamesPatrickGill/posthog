@@ -105,74 +105,78 @@ export const visionScannersCreateBodyDescriptionMax = 1000
 export const visionScannersCreateBodySamplingRateMin = 0
 export const visionScannersCreateBodySamplingRateMax = 1
 
-export const VisionScannersCreateBody = /* @__PURE__ */ zod.object({
-    name: zod
-        .string()
-        .max(visionScannersCreateBodyNameMax)
-        .describe('Human-readable scanner name. Unique within the team.'),
-    description: zod
-        .string()
-        .max(visionScannersCreateBodyDescriptionMax)
-        .optional()
-        .describe('Free-form description shown in the scanner management UI.'),
-    scanner_type: zod
-        .enum(['monitor', 'classifier', 'scorer', 'summarizer'])
-        .describe(
-            '* `monitor` - Monitor\n* `classifier` - Classifier\n* `scorer` - Scorer\n* `summarizer` - Summarizer'
-        )
-        .describe(
-            'What the scanner does: monitor, classifier, scorer, or summarizer.\n\n* `monitor` - Monitor\n* `classifier` - Classifier\n* `scorer` - Scorer\n* `summarizer` - Summarizer'
-        ),
-    scanner_config: zod
-        .unknown()
-        .describe(
-            'Type-specific configuration. All scanner types require `prompt`; monitors add optional `allow_inconclusive`, classifiers add `tags`, scorers add `scale`, summarizers add optional `length`.'
-        ),
-    query: zod
-        .unknown()
-        .optional()
-        .describe(
-            'Persisted `RecordingsQuery` shape used to pick candidate sessions. `date_from`/`date_to` are stripped on save — the schedule controls time, not the user.'
-        ),
-    sampling_rate: zod
-        .number()
-        .min(visionScannersCreateBodySamplingRateMin)
-        .max(visionScannersCreateBodySamplingRateMax)
-        .optional()
-        .describe(
-            '0..1 random downsample applied after the query matches. Defaults to 1.0 (no downsampling). Use exactly 0 to pause scanning; non-zero rates below 0.0001 (0.01%) are rejected as below the sampling precision.'
-        ),
-    sampling_mode: zod
-        .enum(['focused', 'balanced', 'comprehensive'])
-        .describe('* `focused` - Focused\n* `balanced` - Balanced\n* `comprehensive` - Comprehensive')
-        .optional()
-        .describe(
-            'Quality pre-filter applied before random sampling. focused = top sessions only, balanced = drops the lowest-quality, comprehensive = no filter (default).\n\n* `focused` - Focused\n* `balanced` - Balanced\n* `comprehensive` - Comprehensive'
-        ),
-    provider: zod
-        .enum(['google'])
-        .describe('* `google` - Google')
-        .optional()
-        .describe('LLM provider. v1 is Google-only.\n\n* `google` - Google'),
-    model: zod
-        .enum(['gemini-3-flash-preview', 'gemini-3.1-flash-lite-preview'])
-        .describe(
-            '* `gemini-3-flash-preview` - Gemini 3 Flash\n* `gemini-3.1-flash-lite-preview` - Gemini 3 Flash Lite'
-        )
-        .describe(
-            'Concrete model to use for this scanner.\n\n* `gemini-3-flash-preview` - Gemini 3 Flash\n* `gemini-3.1-flash-lite-preview` - Gemini 3 Flash Lite'
-        ),
-    enabled: zod
-        .boolean()
-        .optional()
-        .describe("When false, the reconciler removes the scanner's Temporal schedule. On-demand triggers still work."),
-    emits_signals: zod
-        .boolean()
-        .optional()
-        .describe(
-            'When true, the prompt is augmented with the Signal side mission and the scanner emits PostHog Signals.'
-        ),
-})
+export const VisionScannersCreateBody = /* @__PURE__ */ zod
+    .object({
+        name: zod
+            .string()
+            .max(visionScannersCreateBodyNameMax)
+            .describe('Human-readable scanner name. Unique within the team.'),
+        description: zod
+            .string()
+            .max(visionScannersCreateBodyDescriptionMax)
+            .optional()
+            .describe('Free-form description shown in the scanner management UI.'),
+        scanner_type: zod
+            .enum(['monitor', 'classifier', 'scorer', 'summarizer'])
+            .describe(
+                '* `monitor` - Monitor\n* `classifier` - Classifier\n* `scorer` - Scorer\n* `summarizer` - Summarizer'
+            )
+            .describe(
+                'What the scanner does: monitor, classifier, scorer, or summarizer.\n\n* `monitor` - Monitor\n* `classifier` - Classifier\n* `scorer` - Scorer\n* `summarizer` - Summarizer'
+            ),
+        scanner_config: zod
+            .unknown()
+            .describe(
+                'Type-specific configuration. All scanner types require `prompt`; monitors add optional `allow_inconclusive`, classifiers add `tags`, scorers add `scale`, summarizers add optional `length`.'
+            ),
+        query: zod
+            .unknown()
+            .optional()
+            .describe(
+                'Persisted `RecordingsQuery` shape used to pick candidate sessions. `date_from`/`date_to` are stripped on save — the schedule controls time, not the user.'
+            ),
+        sampling_rate: zod
+            .number()
+            .min(visionScannersCreateBodySamplingRateMin)
+            .max(visionScannersCreateBodySamplingRateMax)
+            .optional()
+            .describe(
+                '0..1 random downsample applied after the query matches. Defaults to 1.0 (no downsampling). Use exactly 0 to pause scanning; non-zero rates below 0.0001 (0.01%) are rejected as below the sampling precision.'
+            ),
+        sampling_mode: zod
+            .enum(['focused', 'balanced', 'comprehensive'])
+            .describe('* `focused` - Focused\n* `balanced` - Balanced\n* `comprehensive` - Comprehensive')
+            .optional()
+            .describe(
+                'Quality pre-filter applied before random sampling. focused = top sessions only, balanced = drops the lowest-quality, comprehensive = no filter (default).\n\n* `focused` - Focused\n* `balanced` - Balanced\n* `comprehensive` - Comprehensive'
+            ),
+        provider: zod
+            .enum(['google'])
+            .describe('* `google` - Google')
+            .optional()
+            .describe('LLM provider. v1 is Google-only.\n\n* `google` - Google'),
+        model: zod
+            .enum(['gemini-3-flash-preview', 'gemini-3.1-flash-lite-preview'])
+            .describe(
+                '* `gemini-3-flash-preview` - Gemini 3 Flash\n* `gemini-3.1-flash-lite-preview` - Gemini 3 Flash Lite'
+            )
+            .describe(
+                'Concrete model to use for this scanner.\n\n* `gemini-3-flash-preview` - Gemini 3 Flash\n* `gemini-3.1-flash-lite-preview` - Gemini 3 Flash Lite'
+            ),
+        enabled: zod
+            .boolean()
+            .optional()
+            .describe(
+                "When false, the reconciler removes the scanner's Temporal schedule. On-demand triggers still work."
+            ),
+        emits_signals: zod
+            .boolean()
+            .optional()
+            .describe(
+                'When true, the prompt is augmented with the Signal side mission and the scanner emits PostHog Signals.'
+            ),
+    })
+    .describe('Mixin for serializers to add user access control fields')
 
 /**
  * CRUD for Replay Vision scanners.
@@ -205,78 +209,82 @@ export const visionScannersPartialUpdateBodyDescriptionMax = 1000
 export const visionScannersPartialUpdateBodySamplingRateMin = 0
 export const visionScannersPartialUpdateBodySamplingRateMax = 1
 
-export const VisionScannersPartialUpdateBody = /* @__PURE__ */ zod.object({
-    name: zod
-        .string()
-        .max(visionScannersPartialUpdateBodyNameMax)
-        .optional()
-        .describe('Human-readable scanner name. Unique within the team.'),
-    description: zod
-        .string()
-        .max(visionScannersPartialUpdateBodyDescriptionMax)
-        .optional()
-        .describe('Free-form description shown in the scanner management UI.'),
-    scanner_type: zod
-        .enum(['monitor', 'classifier', 'scorer', 'summarizer'])
-        .describe(
-            '* `monitor` - Monitor\n* `classifier` - Classifier\n* `scorer` - Scorer\n* `summarizer` - Summarizer'
-        )
-        .optional()
-        .describe(
-            'What the scanner does: monitor, classifier, scorer, or summarizer.\n\n* `monitor` - Monitor\n* `classifier` - Classifier\n* `scorer` - Scorer\n* `summarizer` - Summarizer'
-        ),
-    scanner_config: zod
-        .unknown()
-        .optional()
-        .describe(
-            'Type-specific configuration. All scanner types require `prompt`; monitors add optional `allow_inconclusive`, classifiers add `tags`, scorers add `scale`, summarizers add optional `length`.'
-        ),
-    query: zod
-        .unknown()
-        .optional()
-        .describe(
-            'Persisted `RecordingsQuery` shape used to pick candidate sessions. `date_from`/`date_to` are stripped on save — the schedule controls time, not the user.'
-        ),
-    sampling_rate: zod
-        .number()
-        .min(visionScannersPartialUpdateBodySamplingRateMin)
-        .max(visionScannersPartialUpdateBodySamplingRateMax)
-        .optional()
-        .describe(
-            '0..1 random downsample applied after the query matches. Defaults to 1.0 (no downsampling). Use exactly 0 to pause scanning; non-zero rates below 0.0001 (0.01%) are rejected as below the sampling precision.'
-        ),
-    sampling_mode: zod
-        .enum(['focused', 'balanced', 'comprehensive'])
-        .describe('* `focused` - Focused\n* `balanced` - Balanced\n* `comprehensive` - Comprehensive')
-        .optional()
-        .describe(
-            'Quality pre-filter applied before random sampling. focused = top sessions only, balanced = drops the lowest-quality, comprehensive = no filter (default).\n\n* `focused` - Focused\n* `balanced` - Balanced\n* `comprehensive` - Comprehensive'
-        ),
-    provider: zod
-        .enum(['google'])
-        .describe('* `google` - Google')
-        .optional()
-        .describe('LLM provider. v1 is Google-only.\n\n* `google` - Google'),
-    model: zod
-        .enum(['gemini-3-flash-preview', 'gemini-3.1-flash-lite-preview'])
-        .describe(
-            '* `gemini-3-flash-preview` - Gemini 3 Flash\n* `gemini-3.1-flash-lite-preview` - Gemini 3 Flash Lite'
-        )
-        .optional()
-        .describe(
-            'Concrete model to use for this scanner.\n\n* `gemini-3-flash-preview` - Gemini 3 Flash\n* `gemini-3.1-flash-lite-preview` - Gemini 3 Flash Lite'
-        ),
-    enabled: zod
-        .boolean()
-        .optional()
-        .describe("When false, the reconciler removes the scanner's Temporal schedule. On-demand triggers still work."),
-    emits_signals: zod
-        .boolean()
-        .optional()
-        .describe(
-            'When true, the prompt is augmented with the Signal side mission and the scanner emits PostHog Signals.'
-        ),
-})
+export const VisionScannersPartialUpdateBody = /* @__PURE__ */ zod
+    .object({
+        name: zod
+            .string()
+            .max(visionScannersPartialUpdateBodyNameMax)
+            .optional()
+            .describe('Human-readable scanner name. Unique within the team.'),
+        description: zod
+            .string()
+            .max(visionScannersPartialUpdateBodyDescriptionMax)
+            .optional()
+            .describe('Free-form description shown in the scanner management UI.'),
+        scanner_type: zod
+            .enum(['monitor', 'classifier', 'scorer', 'summarizer'])
+            .describe(
+                '* `monitor` - Monitor\n* `classifier` - Classifier\n* `scorer` - Scorer\n* `summarizer` - Summarizer'
+            )
+            .optional()
+            .describe(
+                'What the scanner does: monitor, classifier, scorer, or summarizer.\n\n* `monitor` - Monitor\n* `classifier` - Classifier\n* `scorer` - Scorer\n* `summarizer` - Summarizer'
+            ),
+        scanner_config: zod
+            .unknown()
+            .optional()
+            .describe(
+                'Type-specific configuration. All scanner types require `prompt`; monitors add optional `allow_inconclusive`, classifiers add `tags`, scorers add `scale`, summarizers add optional `length`.'
+            ),
+        query: zod
+            .unknown()
+            .optional()
+            .describe(
+                'Persisted `RecordingsQuery` shape used to pick candidate sessions. `date_from`/`date_to` are stripped on save — the schedule controls time, not the user.'
+            ),
+        sampling_rate: zod
+            .number()
+            .min(visionScannersPartialUpdateBodySamplingRateMin)
+            .max(visionScannersPartialUpdateBodySamplingRateMax)
+            .optional()
+            .describe(
+                '0..1 random downsample applied after the query matches. Defaults to 1.0 (no downsampling). Use exactly 0 to pause scanning; non-zero rates below 0.0001 (0.01%) are rejected as below the sampling precision.'
+            ),
+        sampling_mode: zod
+            .enum(['focused', 'balanced', 'comprehensive'])
+            .describe('* `focused` - Focused\n* `balanced` - Balanced\n* `comprehensive` - Comprehensive')
+            .optional()
+            .describe(
+                'Quality pre-filter applied before random sampling. focused = top sessions only, balanced = drops the lowest-quality, comprehensive = no filter (default).\n\n* `focused` - Focused\n* `balanced` - Balanced\n* `comprehensive` - Comprehensive'
+            ),
+        provider: zod
+            .enum(['google'])
+            .describe('* `google` - Google')
+            .optional()
+            .describe('LLM provider. v1 is Google-only.\n\n* `google` - Google'),
+        model: zod
+            .enum(['gemini-3-flash-preview', 'gemini-3.1-flash-lite-preview'])
+            .describe(
+                '* `gemini-3-flash-preview` - Gemini 3 Flash\n* `gemini-3.1-flash-lite-preview` - Gemini 3 Flash Lite'
+            )
+            .optional()
+            .describe(
+                'Concrete model to use for this scanner.\n\n* `gemini-3-flash-preview` - Gemini 3 Flash\n* `gemini-3.1-flash-lite-preview` - Gemini 3 Flash Lite'
+            ),
+        enabled: zod
+            .boolean()
+            .optional()
+            .describe(
+                "When false, the reconciler removes the scanner's Temporal schedule. On-demand triggers still work."
+            ),
+        emits_signals: zod
+            .boolean()
+            .optional()
+            .describe(
+                'When true, the prompt is augmented with the Signal side mission and the scanner emits PostHog Signals.'
+            ),
+    })
+    .describe('Mixin for serializers to add user access control fields')
 
 /**
  * CRUD for Replay Vision scanners.

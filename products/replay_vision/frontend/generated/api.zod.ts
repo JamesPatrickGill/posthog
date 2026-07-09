@@ -17,110 +17,114 @@ export const visionActionsCreateBodyNameMax = 255
 export const visionActionsCreateBodyTriggerConfigOneTimezoneDefault = `UTC`
 export const visionActionsCreateBodySynthesisConfigOnePromptGuideMax = 500
 
-export const VisionActionsCreateBody = /* @__PURE__ */ zod.object({
-    name: zod
-        .string()
-        .max(visionActionsCreateBodyNameMax)
-        .describe('Human-readable action name. Unique within the team.'),
-    scanner: zod.uuid().describe('Scanner whose observations this action operates on. Must belong to the same team.'),
-    enabled: zod.boolean().optional().describe('When false, the scheduler skips this action.'),
-    is_scanner_digest: zod
-        .boolean()
-        .optional()
-        .describe(
-            "Marks this action as the scanner's built-in daily digest, the one summary surfaced on the scanner overview. At most one digest per scanner."
-        ),
-    trigger_type: zod
-        .enum(['schedule', 'threshold'])
-        .describe('\* `schedule` - Schedule\n\* `threshold` - Threshold')
-        .optional()
-        .describe(
-            "What fires the action. MVP supports 'schedule' only.\n\n\* `schedule` - Schedule\n\* `threshold` - Threshold"
-        ),
-    mode: zod
-        .enum(['group_summary', 'per_observation'])
-        .describe('\* `group_summary` - Group summary\n\* `per_observation` - Per observation')
-        .optional()
-        .describe(
-            "What the action produces. MVP supports 'group_summary' only.\n\n\* `group_summary` - Group summary\n\* `per_observation` - Per observation"
-        ),
-    trigger_config: zod
-        .object({
-            rrule: zod
-                .string()
-                .optional()
-                .describe(
-                    'iCal RRULE string controlling the schedule cadence (no DTSTART — the start is managed separately).'
-                ),
-            timezone: zod
-                .string()
-                .default(visionActionsCreateBodyTriggerConfigOneTimezoneDefault)
-                .describe("IANA timezone name the RRULE is expanded in, e.g. 'Europe\/Prague'. Defaults to 'UTC'."),
-        })
-        .describe('Schedule trigger parameters. Threshold triggers are reserved and rejected at the API for now.')
-        .optional()
-        .describe('Trigger parameters. For schedule triggers: {rrule, timezone}.'),
-    selection: zod
-        .object({
-            scanner_ids: zod
-                .array(zod.string())
-                .optional()
-                .describe('Restrict to observations produced by these scanner IDs. Defaults to the bound scanner.'),
-            verdict: zod
-                .array(
-                    zod
-                        .enum(['yes', 'no', 'inconclusive'])
-                        .describe('\* `yes` - yes\n\* `no` - no\n\* `inconclusive` - inconclusive')
-                )
-                .optional()
-                .describe('Only run on monitor observations with one of these verdicts (yes\/no\/inconclusive).'),
-            tags: zod
-                .array(zod.string())
-                .optional()
-                .describe('Only run on classifier observations carrying any of these tags (fixed or freeform).'),
-            min_score: zod
-                .number()
-                .optional()
-                .describe('Only run on scorer observations with a score at or above this value (inclusive).'),
-            max_score: zod
-                .number()
-                .optional()
-                .describe('Only run on scorer observations with a score at or below this value (inclusive).'),
-        })
-        .describe(
-            'The action\'s targeting predicate (\"run this on…\") applied when gathering observations. All keys\noptional; this typed shape is the allowlist, so unknown input keys are dropped rather than persisted.'
-        )
-        .optional()
-        .describe("Targeting predicate: which of the scanner's observations this action runs on."),
-    synthesis_config: zod
-        .object({
-            prompt_guide: zod
-                .string()
-                .max(visionActionsCreateBodySynthesisConfigOnePromptGuideMax)
-                .optional()
-                .describe('Free-form guidance steering how the group summary is written.'),
-        })
-        .describe('Options for the group-summary synthesis step.')
-        .optional()
-        .describe('Synthesis options for the group summary, e.g. {prompt_guide}.'),
-    delivery_config: zod
-        .array(
-            zod
-                .object({
-                    type: zod
-                        .enum(['slack'])
-                        .describe('\* `slack` - Slack')
-                        .describe("Destination channel type. MVP supports 'slack' only.\n\n\* `slack` - Slack"),
-                    integration_id: zod
-                        .number()
-                        .describe('ID of the Slack Integration on this team used to deliver the summary.'),
-                    channel: zod.string().describe('Slack channel ID or name the summary is posted to.'),
-                })
-                .describe('A single delivery destination. MVP supports Slack only.')
-        )
-        .optional()
-        .describe('List of delivery destinations the synthesized summary is sent to.'),
-})
+export const VisionActionsCreateBody = /* @__PURE__ */ zod
+    .object({
+        name: zod
+            .string()
+            .max(visionActionsCreateBodyNameMax)
+            .describe('Human-readable action name. Unique within the team.'),
+        scanner: zod
+            .uuid()
+            .describe('Scanner whose observations this action operates on. Must belong to the same team.'),
+        enabled: zod.boolean().optional().describe('When false, the scheduler skips this action.'),
+        is_scanner_digest: zod
+            .boolean()
+            .optional()
+            .describe(
+                "Marks this action as the scanner's built-in daily digest, the one summary surfaced on the scanner overview. At most one digest per scanner."
+            ),
+        trigger_type: zod
+            .enum(['schedule', 'threshold'])
+            .describe('\* `schedule` - Schedule\n\* `threshold` - Threshold')
+            .optional()
+            .describe(
+                "What fires the action. MVP supports 'schedule' only.\n\n\* `schedule` - Schedule\n\* `threshold` - Threshold"
+            ),
+        mode: zod
+            .enum(['group_summary', 'per_observation'])
+            .describe('\* `group_summary` - Group summary\n\* `per_observation` - Per observation')
+            .optional()
+            .describe(
+                "What the action produces. MVP supports 'group_summary' only.\n\n\* `group_summary` - Group summary\n\* `per_observation` - Per observation"
+            ),
+        trigger_config: zod
+            .object({
+                rrule: zod
+                    .string()
+                    .optional()
+                    .describe(
+                        'iCal RRULE string controlling the schedule cadence (no DTSTART — the start is managed separately).'
+                    ),
+                timezone: zod
+                    .string()
+                    .default(visionActionsCreateBodyTriggerConfigOneTimezoneDefault)
+                    .describe("IANA timezone name the RRULE is expanded in, e.g. 'Europe\/Prague'. Defaults to 'UTC'."),
+            })
+            .describe('Schedule trigger parameters. Threshold triggers are reserved and rejected at the API for now.')
+            .optional()
+            .describe('Trigger parameters. For schedule triggers: {rrule, timezone}.'),
+        selection: zod
+            .object({
+                scanner_ids: zod
+                    .array(zod.string())
+                    .optional()
+                    .describe('Restrict to observations produced by these scanner IDs. Defaults to the bound scanner.'),
+                verdict: zod
+                    .array(
+                        zod
+                            .enum(['yes', 'no', 'inconclusive'])
+                            .describe('\* `yes` - yes\n\* `no` - no\n\* `inconclusive` - inconclusive')
+                    )
+                    .optional()
+                    .describe('Only run on monitor observations with one of these verdicts (yes\/no\/inconclusive).'),
+                tags: zod
+                    .array(zod.string())
+                    .optional()
+                    .describe('Only run on classifier observations carrying any of these tags (fixed or freeform).'),
+                min_score: zod
+                    .number()
+                    .optional()
+                    .describe('Only run on scorer observations with a score at or above this value (inclusive).'),
+                max_score: zod
+                    .number()
+                    .optional()
+                    .describe('Only run on scorer observations with a score at or below this value (inclusive).'),
+            })
+            .describe(
+                'The action\'s targeting predicate (\"run this on…\") applied when gathering observations. All keys\noptional; this typed shape is the allowlist, so unknown input keys are dropped rather than persisted.'
+            )
+            .optional()
+            .describe("Targeting predicate: which of the scanner's observations this action runs on."),
+        synthesis_config: zod
+            .object({
+                prompt_guide: zod
+                    .string()
+                    .max(visionActionsCreateBodySynthesisConfigOnePromptGuideMax)
+                    .optional()
+                    .describe('Free-form guidance steering how the group summary is written.'),
+            })
+            .describe('Options for the group-summary synthesis step.')
+            .optional()
+            .describe('Synthesis options for the group summary, e.g. {prompt_guide}.'),
+        delivery_config: zod
+            .array(
+                zod
+                    .object({
+                        type: zod
+                            .enum(['slack'])
+                            .describe('\* `slack` - Slack')
+                            .describe("Destination channel type. MVP supports 'slack' only.\n\n\* `slack` - Slack"),
+                        integration_id: zod
+                            .number()
+                            .describe('ID of the Slack Integration on this team used to deliver the summary.'),
+                        channel: zod.string().describe('Slack channel ID or name the summary is posted to.'),
+                    })
+                    .describe('A single delivery destination. MVP supports Slack only.')
+            )
+            .optional()
+            .describe('List of delivery destinations the synthesized summary is sent to.'),
+    })
+    .describe('Mixin for serializers to add user access control fields')
 
 /**
  * CRUD for Replay Vision actions — scheduled "and then…" automations over a scanner's observations.
@@ -130,114 +134,116 @@ export const visionActionsPartialUpdateBodyNameMax = 255
 export const visionActionsPartialUpdateBodyTriggerConfigOneTimezoneDefault = `UTC`
 export const visionActionsPartialUpdateBodySynthesisConfigOnePromptGuideMax = 500
 
-export const VisionActionsPartialUpdateBody = /* @__PURE__ */ zod.object({
-    name: zod
-        .string()
-        .max(visionActionsPartialUpdateBodyNameMax)
-        .optional()
-        .describe('Human-readable action name. Unique within the team.'),
-    scanner: zod
-        .uuid()
-        .optional()
-        .describe('Scanner whose observations this action operates on. Must belong to the same team.'),
-    enabled: zod.boolean().optional().describe('When false, the scheduler skips this action.'),
-    is_scanner_digest: zod
-        .boolean()
-        .optional()
-        .describe(
-            "Marks this action as the scanner's built-in daily digest, the one summary surfaced on the scanner overview. At most one digest per scanner."
-        ),
-    trigger_type: zod
-        .enum(['schedule', 'threshold'])
-        .describe('\* `schedule` - Schedule\n\* `threshold` - Threshold')
-        .optional()
-        .describe(
-            "What fires the action. MVP supports 'schedule' only.\n\n\* `schedule` - Schedule\n\* `threshold` - Threshold"
-        ),
-    mode: zod
-        .enum(['group_summary', 'per_observation'])
-        .describe('\* `group_summary` - Group summary\n\* `per_observation` - Per observation')
-        .optional()
-        .describe(
-            "What the action produces. MVP supports 'group_summary' only.\n\n\* `group_summary` - Group summary\n\* `per_observation` - Per observation"
-        ),
-    trigger_config: zod
-        .object({
-            rrule: zod
-                .string()
-                .optional()
-                .describe(
-                    'iCal RRULE string controlling the schedule cadence (no DTSTART — the start is managed separately).'
-                ),
-            timezone: zod
-                .string()
-                .default(visionActionsPartialUpdateBodyTriggerConfigOneTimezoneDefault)
-                .describe("IANA timezone name the RRULE is expanded in, e.g. 'Europe\/Prague'. Defaults to 'UTC'."),
-        })
-        .describe('Schedule trigger parameters. Threshold triggers are reserved and rejected at the API for now.')
-        .optional()
-        .describe('Trigger parameters. For schedule triggers: {rrule, timezone}.'),
-    selection: zod
-        .object({
-            scanner_ids: zod
-                .array(zod.string())
-                .optional()
-                .describe('Restrict to observations produced by these scanner IDs. Defaults to the bound scanner.'),
-            verdict: zod
-                .array(
-                    zod
-                        .enum(['yes', 'no', 'inconclusive'])
-                        .describe('\* `yes` - yes\n\* `no` - no\n\* `inconclusive` - inconclusive')
-                )
-                .optional()
-                .describe('Only run on monitor observations with one of these verdicts (yes\/no\/inconclusive).'),
-            tags: zod
-                .array(zod.string())
-                .optional()
-                .describe('Only run on classifier observations carrying any of these tags (fixed or freeform).'),
-            min_score: zod
-                .number()
-                .optional()
-                .describe('Only run on scorer observations with a score at or above this value (inclusive).'),
-            max_score: zod
-                .number()
-                .optional()
-                .describe('Only run on scorer observations with a score at or below this value (inclusive).'),
-        })
-        .describe(
-            'The action\'s targeting predicate (\"run this on…\") applied when gathering observations. All keys\noptional; this typed shape is the allowlist, so unknown input keys are dropped rather than persisted.'
-        )
-        .optional()
-        .describe("Targeting predicate: which of the scanner's observations this action runs on."),
-    synthesis_config: zod
-        .object({
-            prompt_guide: zod
-                .string()
-                .max(visionActionsPartialUpdateBodySynthesisConfigOnePromptGuideMax)
-                .optional()
-                .describe('Free-form guidance steering how the group summary is written.'),
-        })
-        .describe('Options for the group-summary synthesis step.')
-        .optional()
-        .describe('Synthesis options for the group summary, e.g. {prompt_guide}.'),
-    delivery_config: zod
-        .array(
-            zod
-                .object({
-                    type: zod
-                        .enum(['slack'])
-                        .describe('\* `slack` - Slack')
-                        .describe("Destination channel type. MVP supports 'slack' only.\n\n\* `slack` - Slack"),
-                    integration_id: zod
-                        .number()
-                        .describe('ID of the Slack Integration on this team used to deliver the summary.'),
-                    channel: zod.string().describe('Slack channel ID or name the summary is posted to.'),
-                })
-                .describe('A single delivery destination. MVP supports Slack only.')
-        )
-        .optional()
-        .describe('List of delivery destinations the synthesized summary is sent to.'),
-})
+export const VisionActionsPartialUpdateBody = /* @__PURE__ */ zod
+    .object({
+        name: zod
+            .string()
+            .max(visionActionsPartialUpdateBodyNameMax)
+            .optional()
+            .describe('Human-readable action name. Unique within the team.'),
+        scanner: zod
+            .uuid()
+            .optional()
+            .describe('Scanner whose observations this action operates on. Must belong to the same team.'),
+        enabled: zod.boolean().optional().describe('When false, the scheduler skips this action.'),
+        is_scanner_digest: zod
+            .boolean()
+            .optional()
+            .describe(
+                "Marks this action as the scanner's built-in daily digest, the one summary surfaced on the scanner overview. At most one digest per scanner."
+            ),
+        trigger_type: zod
+            .enum(['schedule', 'threshold'])
+            .describe('\* `schedule` - Schedule\n\* `threshold` - Threshold')
+            .optional()
+            .describe(
+                "What fires the action. MVP supports 'schedule' only.\n\n\* `schedule` - Schedule\n\* `threshold` - Threshold"
+            ),
+        mode: zod
+            .enum(['group_summary', 'per_observation'])
+            .describe('\* `group_summary` - Group summary\n\* `per_observation` - Per observation')
+            .optional()
+            .describe(
+                "What the action produces. MVP supports 'group_summary' only.\n\n\* `group_summary` - Group summary\n\* `per_observation` - Per observation"
+            ),
+        trigger_config: zod
+            .object({
+                rrule: zod
+                    .string()
+                    .optional()
+                    .describe(
+                        'iCal RRULE string controlling the schedule cadence (no DTSTART — the start is managed separately).'
+                    ),
+                timezone: zod
+                    .string()
+                    .default(visionActionsPartialUpdateBodyTriggerConfigOneTimezoneDefault)
+                    .describe("IANA timezone name the RRULE is expanded in, e.g. 'Europe\/Prague'. Defaults to 'UTC'."),
+            })
+            .describe('Schedule trigger parameters. Threshold triggers are reserved and rejected at the API for now.')
+            .optional()
+            .describe('Trigger parameters. For schedule triggers: {rrule, timezone}.'),
+        selection: zod
+            .object({
+                scanner_ids: zod
+                    .array(zod.string())
+                    .optional()
+                    .describe('Restrict to observations produced by these scanner IDs. Defaults to the bound scanner.'),
+                verdict: zod
+                    .array(
+                        zod
+                            .enum(['yes', 'no', 'inconclusive'])
+                            .describe('\* `yes` - yes\n\* `no` - no\n\* `inconclusive` - inconclusive')
+                    )
+                    .optional()
+                    .describe('Only run on monitor observations with one of these verdicts (yes\/no\/inconclusive).'),
+                tags: zod
+                    .array(zod.string())
+                    .optional()
+                    .describe('Only run on classifier observations carrying any of these tags (fixed or freeform).'),
+                min_score: zod
+                    .number()
+                    .optional()
+                    .describe('Only run on scorer observations with a score at or above this value (inclusive).'),
+                max_score: zod
+                    .number()
+                    .optional()
+                    .describe('Only run on scorer observations with a score at or below this value (inclusive).'),
+            })
+            .describe(
+                'The action\'s targeting predicate (\"run this on…\") applied when gathering observations. All keys\noptional; this typed shape is the allowlist, so unknown input keys are dropped rather than persisted.'
+            )
+            .optional()
+            .describe("Targeting predicate: which of the scanner's observations this action runs on."),
+        synthesis_config: zod
+            .object({
+                prompt_guide: zod
+                    .string()
+                    .max(visionActionsPartialUpdateBodySynthesisConfigOnePromptGuideMax)
+                    .optional()
+                    .describe('Free-form guidance steering how the group summary is written.'),
+            })
+            .describe('Options for the group-summary synthesis step.')
+            .optional()
+            .describe('Synthesis options for the group summary, e.g. {prompt_guide}.'),
+        delivery_config: zod
+            .array(
+                zod
+                    .object({
+                        type: zod
+                            .enum(['slack'])
+                            .describe('\* `slack` - Slack')
+                            .describe("Destination channel type. MVP supports 'slack' only.\n\n\* `slack` - Slack"),
+                        integration_id: zod
+                            .number()
+                            .describe('ID of the Slack Integration on this team used to deliver the summary.'),
+                        channel: zod.string().describe('Slack channel ID or name the summary is posted to.'),
+                    })
+                    .describe('A single delivery destination. MVP supports Slack only.')
+            )
+            .optional()
+            .describe('List of delivery destinations the synthesized summary is sent to.'),
+    })
+    .describe('Mixin for serializers to add user access control fields')
 
 /**
  * Set or update the observation's shared label: whether the scanner scored the session correctly, plus optional feedback on what it got wrong. One label per observation, shared across the team; these labels feed prompt improvement. Requires session recording edit access.
@@ -268,74 +274,78 @@ export const visionScannersCreateBodyDescriptionMax = 1000
 export const visionScannersCreateBodySamplingRateMin = 0
 export const visionScannersCreateBodySamplingRateMax = 1
 
-export const VisionScannersCreateBody = /* @__PURE__ */ zod.object({
-    name: zod
-        .string()
-        .max(visionScannersCreateBodyNameMax)
-        .describe('Human-readable scanner name. Unique within the team.'),
-    description: zod
-        .string()
-        .max(visionScannersCreateBodyDescriptionMax)
-        .optional()
-        .describe('Free-form description shown in the scanner management UI.'),
-    scanner_type: zod
-        .enum(['monitor', 'classifier', 'scorer', 'summarizer'])
-        .describe(
-            '\* `monitor` - Monitor\n\* `classifier` - Classifier\n\* `scorer` - Scorer\n\* `summarizer` - Summarizer'
-        )
-        .describe(
-            'What the scanner does: monitor, classifier, scorer, or summarizer.\n\n\* `monitor` - Monitor\n\* `classifier` - Classifier\n\* `scorer` - Scorer\n\* `summarizer` - Summarizer'
-        ),
-    scanner_config: zod
-        .unknown()
-        .describe(
-            'Type-specific configuration. All scanner types require `prompt`; monitors add optional `allow_inconclusive`, classifiers add `tags`, scorers add `scale`, summarizers add optional `length`.'
-        ),
-    query: zod
-        .unknown()
-        .optional()
-        .describe(
-            'Persisted `RecordingsQuery` shape used to pick candidate sessions. `date_from`\/`date_to` are stripped on save — the schedule controls time, not the user.'
-        ),
-    sampling_rate: zod
-        .number()
-        .min(visionScannersCreateBodySamplingRateMin)
-        .max(visionScannersCreateBodySamplingRateMax)
-        .optional()
-        .describe(
-            '0..1 random downsample applied after the query matches. Defaults to 1.0 (no downsampling). Use exactly 0 to pause scanning; non-zero rates below 0.0001 (0.01%) are rejected as below the sampling precision.'
-        ),
-    sampling_mode: zod
-        .enum(['focused', 'balanced', 'comprehensive'])
-        .describe('\* `focused` - Focused\n\* `balanced` - Balanced\n\* `comprehensive` - Comprehensive')
-        .optional()
-        .describe(
-            'Quality pre-filter applied before random sampling. focused = top sessions only, balanced = drops the lowest-quality, comprehensive = no filter (default).\n\n\* `focused` - Focused\n\* `balanced` - Balanced\n\* `comprehensive` - Comprehensive'
-        ),
-    provider: zod
-        .enum(['google'])
-        .describe('\* `google` - Google')
-        .optional()
-        .describe('LLM provider. v1 is Google-only.\n\n\* `google` - Google'),
-    model: zod
-        .enum(['gemini-3-flash-preview', 'gemini-3.1-flash-lite-preview'])
-        .describe(
-            '\* `gemini-3-flash-preview` - Gemini 3 Flash\n\* `gemini-3.1-flash-lite-preview` - Gemini 3 Flash Lite'
-        )
-        .describe(
-            'Concrete model to use for this scanner.\n\n\* `gemini-3-flash-preview` - Gemini 3 Flash\n\* `gemini-3.1-flash-lite-preview` - Gemini 3 Flash Lite'
-        ),
-    enabled: zod
-        .boolean()
-        .optional()
-        .describe("When false, the reconciler removes the scanner's Temporal schedule. On-demand triggers still work."),
-    emits_signals: zod
-        .boolean()
-        .optional()
-        .describe(
-            'When true, the prompt is augmented with the Signal side mission and the scanner emits PostHog Signals.'
-        ),
-})
+export const VisionScannersCreateBody = /* @__PURE__ */ zod
+    .object({
+        name: zod
+            .string()
+            .max(visionScannersCreateBodyNameMax)
+            .describe('Human-readable scanner name. Unique within the team.'),
+        description: zod
+            .string()
+            .max(visionScannersCreateBodyDescriptionMax)
+            .optional()
+            .describe('Free-form description shown in the scanner management UI.'),
+        scanner_type: zod
+            .enum(['monitor', 'classifier', 'scorer', 'summarizer'])
+            .describe(
+                '\* `monitor` - Monitor\n\* `classifier` - Classifier\n\* `scorer` - Scorer\n\* `summarizer` - Summarizer'
+            )
+            .describe(
+                'What the scanner does: monitor, classifier, scorer, or summarizer.\n\n\* `monitor` - Monitor\n\* `classifier` - Classifier\n\* `scorer` - Scorer\n\* `summarizer` - Summarizer'
+            ),
+        scanner_config: zod
+            .unknown()
+            .describe(
+                'Type-specific configuration. All scanner types require `prompt`; monitors add optional `allow_inconclusive`, classifiers add `tags`, scorers add `scale`, summarizers add optional `length`.'
+            ),
+        query: zod
+            .unknown()
+            .optional()
+            .describe(
+                'Persisted `RecordingsQuery` shape used to pick candidate sessions. `date_from`\/`date_to` are stripped on save — the schedule controls time, not the user.'
+            ),
+        sampling_rate: zod
+            .number()
+            .min(visionScannersCreateBodySamplingRateMin)
+            .max(visionScannersCreateBodySamplingRateMax)
+            .optional()
+            .describe(
+                '0..1 random downsample applied after the query matches. Defaults to 1.0 (no downsampling). Use exactly 0 to pause scanning; non-zero rates below 0.0001 (0.01%) are rejected as below the sampling precision.'
+            ),
+        sampling_mode: zod
+            .enum(['focused', 'balanced', 'comprehensive'])
+            .describe('\* `focused` - Focused\n\* `balanced` - Balanced\n\* `comprehensive` - Comprehensive')
+            .optional()
+            .describe(
+                'Quality pre-filter applied before random sampling. focused = top sessions only, balanced = drops the lowest-quality, comprehensive = no filter (default).\n\n\* `focused` - Focused\n\* `balanced` - Balanced\n\* `comprehensive` - Comprehensive'
+            ),
+        provider: zod
+            .enum(['google'])
+            .describe('\* `google` - Google')
+            .optional()
+            .describe('LLM provider. v1 is Google-only.\n\n\* `google` - Google'),
+        model: zod
+            .enum(['gemini-3-flash-preview', 'gemini-3.1-flash-lite-preview'])
+            .describe(
+                '\* `gemini-3-flash-preview` - Gemini 3 Flash\n\* `gemini-3.1-flash-lite-preview` - Gemini 3 Flash Lite'
+            )
+            .describe(
+                'Concrete model to use for this scanner.\n\n\* `gemini-3-flash-preview` - Gemini 3 Flash\n\* `gemini-3.1-flash-lite-preview` - Gemini 3 Flash Lite'
+            ),
+        enabled: zod
+            .boolean()
+            .optional()
+            .describe(
+                "When false, the reconciler removes the scanner's Temporal schedule. On-demand triggers still work."
+            ),
+        emits_signals: zod
+            .boolean()
+            .optional()
+            .describe(
+                'When true, the prompt is augmented with the Signal side mission and the scanner emits PostHog Signals.'
+            ),
+    })
+    .describe('Mixin for serializers to add user access control fields')
 
 /**
  * CRUD for Replay Vision scanners.
@@ -347,78 +357,82 @@ export const visionScannersPartialUpdateBodyDescriptionMax = 1000
 export const visionScannersPartialUpdateBodySamplingRateMin = 0
 export const visionScannersPartialUpdateBodySamplingRateMax = 1
 
-export const VisionScannersPartialUpdateBody = /* @__PURE__ */ zod.object({
-    name: zod
-        .string()
-        .max(visionScannersPartialUpdateBodyNameMax)
-        .optional()
-        .describe('Human-readable scanner name. Unique within the team.'),
-    description: zod
-        .string()
-        .max(visionScannersPartialUpdateBodyDescriptionMax)
-        .optional()
-        .describe('Free-form description shown in the scanner management UI.'),
-    scanner_type: zod
-        .enum(['monitor', 'classifier', 'scorer', 'summarizer'])
-        .describe(
-            '\* `monitor` - Monitor\n\* `classifier` - Classifier\n\* `scorer` - Scorer\n\* `summarizer` - Summarizer'
-        )
-        .optional()
-        .describe(
-            'What the scanner does: monitor, classifier, scorer, or summarizer.\n\n\* `monitor` - Monitor\n\* `classifier` - Classifier\n\* `scorer` - Scorer\n\* `summarizer` - Summarizer'
-        ),
-    scanner_config: zod
-        .unknown()
-        .optional()
-        .describe(
-            'Type-specific configuration. All scanner types require `prompt`; monitors add optional `allow_inconclusive`, classifiers add `tags`, scorers add `scale`, summarizers add optional `length`.'
-        ),
-    query: zod
-        .unknown()
-        .optional()
-        .describe(
-            'Persisted `RecordingsQuery` shape used to pick candidate sessions. `date_from`\/`date_to` are stripped on save — the schedule controls time, not the user.'
-        ),
-    sampling_rate: zod
-        .number()
-        .min(visionScannersPartialUpdateBodySamplingRateMin)
-        .max(visionScannersPartialUpdateBodySamplingRateMax)
-        .optional()
-        .describe(
-            '0..1 random downsample applied after the query matches. Defaults to 1.0 (no downsampling). Use exactly 0 to pause scanning; non-zero rates below 0.0001 (0.01%) are rejected as below the sampling precision.'
-        ),
-    sampling_mode: zod
-        .enum(['focused', 'balanced', 'comprehensive'])
-        .describe('\* `focused` - Focused\n\* `balanced` - Balanced\n\* `comprehensive` - Comprehensive')
-        .optional()
-        .describe(
-            'Quality pre-filter applied before random sampling. focused = top sessions only, balanced = drops the lowest-quality, comprehensive = no filter (default).\n\n\* `focused` - Focused\n\* `balanced` - Balanced\n\* `comprehensive` - Comprehensive'
-        ),
-    provider: zod
-        .enum(['google'])
-        .describe('\* `google` - Google')
-        .optional()
-        .describe('LLM provider. v1 is Google-only.\n\n\* `google` - Google'),
-    model: zod
-        .enum(['gemini-3-flash-preview', 'gemini-3.1-flash-lite-preview'])
-        .describe(
-            '\* `gemini-3-flash-preview` - Gemini 3 Flash\n\* `gemini-3.1-flash-lite-preview` - Gemini 3 Flash Lite'
-        )
-        .optional()
-        .describe(
-            'Concrete model to use for this scanner.\n\n\* `gemini-3-flash-preview` - Gemini 3 Flash\n\* `gemini-3.1-flash-lite-preview` - Gemini 3 Flash Lite'
-        ),
-    enabled: zod
-        .boolean()
-        .optional()
-        .describe("When false, the reconciler removes the scanner's Temporal schedule. On-demand triggers still work."),
-    emits_signals: zod
-        .boolean()
-        .optional()
-        .describe(
-            'When true, the prompt is augmented with the Signal side mission and the scanner emits PostHog Signals.'
-        ),
-})
+export const VisionScannersPartialUpdateBody = /* @__PURE__ */ zod
+    .object({
+        name: zod
+            .string()
+            .max(visionScannersPartialUpdateBodyNameMax)
+            .optional()
+            .describe('Human-readable scanner name. Unique within the team.'),
+        description: zod
+            .string()
+            .max(visionScannersPartialUpdateBodyDescriptionMax)
+            .optional()
+            .describe('Free-form description shown in the scanner management UI.'),
+        scanner_type: zod
+            .enum(['monitor', 'classifier', 'scorer', 'summarizer'])
+            .describe(
+                '\* `monitor` - Monitor\n\* `classifier` - Classifier\n\* `scorer` - Scorer\n\* `summarizer` - Summarizer'
+            )
+            .optional()
+            .describe(
+                'What the scanner does: monitor, classifier, scorer, or summarizer.\n\n\* `monitor` - Monitor\n\* `classifier` - Classifier\n\* `scorer` - Scorer\n\* `summarizer` - Summarizer'
+            ),
+        scanner_config: zod
+            .unknown()
+            .optional()
+            .describe(
+                'Type-specific configuration. All scanner types require `prompt`; monitors add optional `allow_inconclusive`, classifiers add `tags`, scorers add `scale`, summarizers add optional `length`.'
+            ),
+        query: zod
+            .unknown()
+            .optional()
+            .describe(
+                'Persisted `RecordingsQuery` shape used to pick candidate sessions. `date_from`\/`date_to` are stripped on save — the schedule controls time, not the user.'
+            ),
+        sampling_rate: zod
+            .number()
+            .min(visionScannersPartialUpdateBodySamplingRateMin)
+            .max(visionScannersPartialUpdateBodySamplingRateMax)
+            .optional()
+            .describe(
+                '0..1 random downsample applied after the query matches. Defaults to 1.0 (no downsampling). Use exactly 0 to pause scanning; non-zero rates below 0.0001 (0.01%) are rejected as below the sampling precision.'
+            ),
+        sampling_mode: zod
+            .enum(['focused', 'balanced', 'comprehensive'])
+            .describe('\* `focused` - Focused\n\* `balanced` - Balanced\n\* `comprehensive` - Comprehensive')
+            .optional()
+            .describe(
+                'Quality pre-filter applied before random sampling. focused = top sessions only, balanced = drops the lowest-quality, comprehensive = no filter (default).\n\n\* `focused` - Focused\n\* `balanced` - Balanced\n\* `comprehensive` - Comprehensive'
+            ),
+        provider: zod
+            .enum(['google'])
+            .describe('\* `google` - Google')
+            .optional()
+            .describe('LLM provider. v1 is Google-only.\n\n\* `google` - Google'),
+        model: zod
+            .enum(['gemini-3-flash-preview', 'gemini-3.1-flash-lite-preview'])
+            .describe(
+                '\* `gemini-3-flash-preview` - Gemini 3 Flash\n\* `gemini-3.1-flash-lite-preview` - Gemini 3 Flash Lite'
+            )
+            .optional()
+            .describe(
+                'Concrete model to use for this scanner.\n\n\* `gemini-3-flash-preview` - Gemini 3 Flash\n\* `gemini-3.1-flash-lite-preview` - Gemini 3 Flash Lite'
+            ),
+        enabled: zod
+            .boolean()
+            .optional()
+            .describe(
+                "When false, the reconciler removes the scanner's Temporal schedule. On-demand triggers still work."
+            ),
+        emits_signals: zod
+            .boolean()
+            .optional()
+            .describe(
+                'When true, the prompt is augmented with the Signal side mission and the scanner emits PostHog Signals.'
+            ),
+    })
+    .describe('Mixin for serializers to add user access control fields')
 
 /**
  * Apply this scanner to one specific session, on demand. Returns 202 with the workflow handle.

@@ -34467,6 +34467,9 @@ export namespace Schemas {
       Gemini31FlashLitePreview: 'gemini-3.1-flash-lite-preview',
     } as const;
 
+    /**
+     * Mixin for serializers to add user access control fields
+     */
     export interface ReplayScanner {
       readonly id: string;
       /**
@@ -34528,6 +34531,11 @@ export namespace Schemas {
       /** User who created the scanner. */
       readonly created_by: UserBasic | null;
       readonly updated_at: string;
+      /**
+         * The effective access level the user has for this object
+         * @nullable
+         */
+      readonly user_access_level: string | null;
     }
 
     export interface PaginatedReplayScannerList {
@@ -37338,6 +37346,9 @@ export namespace Schemas {
       prompt_guide?: string;
     }
 
+    /**
+     * Mixin for serializers to add user access control fields
+     */
     export interface VisionAction {
       readonly id: string;
       /**
@@ -37388,6 +37399,11 @@ export namespace Schemas {
       /** User who created the action. */
       readonly created_by: UserBasic | null;
       readonly updated_at: string;
+      /**
+         * The effective access level the user has for this object
+         * @nullable
+         */
+      readonly user_access_level: string | null;
     }
 
     export interface PaginatedVisionActionList {
@@ -42294,6 +42310,9 @@ export namespace Schemas {
       person_id?: string;
     }
 
+    /**
+     * Mixin for serializers to add user access control fields
+     */
     export interface PatchedReplayScanner {
       readonly id?: string;
       /**
@@ -42355,6 +42374,11 @@ export namespace Schemas {
       /** User who created the scanner. */
       readonly created_by?: UserBasic | null;
       readonly updated_at?: string;
+      /**
+         * The effective access level the user has for this object
+         * @nullable
+         */
+      readonly user_access_level?: string | null;
     }
 
     export interface PatchedReviewQueueItemUpdate {
@@ -44488,6 +44512,9 @@ export namespace Schemas {
       configuration?: unknown;
     }
 
+    /**
+     * Mixin for serializers to add user access control fields
+     */
     export interface PatchedVisionAction {
       readonly id?: string;
       /**
@@ -44538,6 +44565,11 @@ export namespace Schemas {
       /** User who created the action. */
       readonly created_by?: UserBasic | null;
       readonly updated_at?: string;
+      /**
+         * The effective access level the user has for this object
+         * @nullable
+         */
+      readonly user_access_level?: string | null;
     }
 
     /**

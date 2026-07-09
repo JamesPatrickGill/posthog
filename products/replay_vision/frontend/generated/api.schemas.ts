@@ -158,6 +158,9 @@ export interface UserBasicApi {
     role_at_organization?: RoleAtOrganizationEnumApi | BlankEnumApi | null
 }
 
+/**
+ * Mixin for serializers to add user access control fields
+ */
 export interface VisionActionApi {
     readonly id: string
     /**
@@ -224,6 +227,9 @@ export interface PaginatedVisionActionListApi {
     results: VisionActionApi[]
 }
 
+/**
+ * Mixin for serializers to add user access control fields
+ */
 export interface PatchedVisionActionApi {
     readonly id?: string
     /**
@@ -609,6 +615,9 @@ export const ScannerModelEnumApi = {
     Gemini31FlashLitePreview: 'gemini-3.1-flash-lite-preview',
 } as const
 
+/**
+ * Mixin for serializers to add user access control fields
+ */
 export interface ReplayScannerApi {
     readonly id: string
     /**
@@ -686,6 +695,9 @@ export interface PaginatedReplayScannerListApi {
     results: ReplayScannerApi[]
 }
 
+/**
+ * Mixin for serializers to add user access control fields
+ */
 export interface PatchedReplayScannerApi {
     readonly id?: string
     /**
