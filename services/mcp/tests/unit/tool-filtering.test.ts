@@ -758,9 +758,10 @@ describe('Tool Filtering - Feature Flags', () => {
                 'metrics',
                 'endpoints-ai-materialization-fix',
                 'engineering-analytics',
+                'web-analytics-path-cleaning-suggestions',
             ])
         )
-        expect(flags).toHaveLength(21)
+        expect(flags).toHaveLength(22)
     })
 
     // Exercise the real predicate (toolPassesFlagGate) over hand-rolled entries

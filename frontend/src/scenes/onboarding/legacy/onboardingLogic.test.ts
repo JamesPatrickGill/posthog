@@ -65,7 +65,6 @@ describe('onboardingLogic — flow composition', () => {
                 [
                     'install:web_analytics',
                     'authorized_domains:web_analytics',
-                    'path_cleaning:web_analytics',
                     'configure:web_analytics',
                     'invite_teammates:web_analytics',
                 ],
@@ -101,6 +100,16 @@ describe('onboardingLogic — flow composition', () => {
         it('returns an empty flow when no product is selected', () => {
             expect(logic.values.flow).toEqual([])
             expect(logic.values.currentFlowStep).toBeNull()
+        })
+
+        it('includes the web analytics path cleaning step only when its flag is enabled', () => {
+            featureFlagLogic
+                .findMounted()
+                ?.actions.setFeatureFlags([FEATURE_FLAGS.WEB_ANALYTICS_PATH_CLEANING_SUGGESTIONS], {
+                    [FEATURE_FLAGS.WEB_ANALYTICS_PATH_CLEANING_SUGGESTIONS]: true,
+                })
+            logic.actions.setProductKey(ProductKey.WEB_ANALYTICS)
+            expect(flowIds()).toContain('path_cleaning:web_analytics')
         })
     })
 
