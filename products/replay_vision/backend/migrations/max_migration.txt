@@ -1,1 +1,1 @@
-0030_vision_action_unique_scanner_digest
+0031_visionaction_alert_config_alter_visionaction_mode
