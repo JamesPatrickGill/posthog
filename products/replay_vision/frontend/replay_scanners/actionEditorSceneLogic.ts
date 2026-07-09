@@ -15,7 +15,12 @@ import {
     visionActionsRetrieve,
     visionScannersRetrieve,
 } from '../generated/api'
-import { VisionActionModeEnumApi, VisionAlertMetricEnumApi, VisionAlertOperatorEnumApi } from '../generated/api.schemas'
+import {
+    AlertConfigFrequencyEnumApi,
+    VisionActionModeEnumApi,
+    VisionAlertMetricEnumApi,
+    VisionAlertOperatorEnumApi,
+} from '../generated/api.schemas'
 import type { VisionActionApi } from '../generated/api.schemas'
 import type { actionEditorSceneLogicType } from './actionEditorSceneLogicType'
 import { parseRruleToCadence } from './cadence'
@@ -143,6 +148,7 @@ export const actionEditorSceneLogic = kea<actionEditorSceneLogicType>([
                 min_score,
                 max_score,
                 mode,
+                alert_frequency,
                 alert_threshold,
             }: VisionActionForm) => ({
                 name: !name?.trim() ? 'Give this summary a name' : undefined,
@@ -159,7 +165,11 @@ export const actionEditorSceneLogic = kea<actionEditorSceneLogicType>([
                         ? "Min score can't exceed max score"
                         : undefined,
                 alert_threshold:
-                    mode === VisionActionModeEnumApi.Alert && alert_threshold == null ? 'Set a threshold' : undefined,
+                    mode === VisionActionModeEnumApi.Alert &&
+                    alert_frequency === AlertConfigFrequencyEnumApi.OnBreach &&
+                    alert_threshold == null
+                        ? 'Set a threshold'
+                        : undefined,
             }),
             submit: async (form: VisionActionForm) => {
                 const teamId = teamLogic.values.currentTeamId
@@ -254,6 +264,13 @@ export const actionEditorSceneLogic = kea<actionEditorSceneLogicType>([
                 integration_id: action.delivery_config?.[0]?.integration_id ?? null,
                 channel: action.delivery_config?.[0]?.channel ?? '',
                 mode: action.mode ?? VisionActionModeEnumApi.GroupSummary,
+                // Stored alerts without a frequency predate the field and behaved as on_breach; anything
+                // else gets the fresh-form default so flipping a summary to an alert starts at every_match.
+                alert_frequency:
+                    action.alert_config?.frequency ??
+                    (action.mode === VisionActionModeEnumApi.Alert
+                        ? AlertConfigFrequencyEnumApi.OnBreach
+                        : AlertConfigFrequencyEnumApi.EveryMatch),
                 alert_metric: action.alert_config?.metric ?? VisionAlertMetricEnumApi.Count,
                 alert_operator: action.alert_config?.operator ?? VisionAlertOperatorEnumApi.Gte,
                 alert_threshold: action.alert_config?.threshold ?? 1,
