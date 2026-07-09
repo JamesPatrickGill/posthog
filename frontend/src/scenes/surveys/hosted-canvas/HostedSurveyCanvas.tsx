@@ -6,12 +6,12 @@ import { CSS } from '@dnd-kit/utilities'
 import { useActions, useValues } from 'kea'
 import { type CSSProperties } from 'react'
 
-import { IconPlus, IconTrash } from '@posthog/icons'
+import { IconPlus, IconThumbsDown, IconThumbsUp, IconTrash } from '@posthog/icons'
 
 import { SortableDragIcon } from 'lib/lemon-ui/icons'
 import { defaultSurveyAppearance } from 'scenes/surveys/constants'
 import { surveyLogic } from 'scenes/surveys/surveyLogic'
-import { sanitizeHTML } from 'scenes/surveys/utils'
+import { isThumbQuestion, sanitizeHTML } from 'scenes/surveys/utils'
 
 import {
     type MultipleSurveyQuestion,
@@ -577,6 +577,10 @@ function RatingCanvas({
 }): JSX.Element {
     const scale = question.scale
     const length = scale === 10 ? 11 : scale
+    // A 2-point emoji rating is a binary thumbs up / thumbs down in the live survey
+    // (rendered by posthog-js), so mirror that here instead of the smiley array —
+    // and skip the bound-label row, exactly like the editor row does.
+    const isThumbs = isThumbQuestion(question)
     return (
         <div className="rating-section">
             <div className={question.display === 'emoji' ? 'rating-options-emoji' : 'rating-options-number'}>
@@ -590,27 +594,38 @@ function RatingCanvas({
                             tabIndex={-1}
                             aria-hidden
                         >
-                            {question.display === 'emoji'
-                                ? RATING_EMOJI_PREVIEW[idx] || RATING_EMOJI_PREVIEW[3]
-                                : value}
+                            {isThumbs ? (
+                                // value 1 renders thumbs up, value 2 thumbs down — matches the response mapping.
+                                idx === 0 ? (
+                                    <IconThumbsUp />
+                                ) : (
+                                    <IconThumbsDown />
+                                )
+                            ) : question.display === 'emoji' ? (
+                                RATING_EMOJI_PREVIEW[idx] || RATING_EMOJI_PREVIEW[3]
+                            ) : (
+                                value
+                            )}
                         </button>
                     )
                 })}
             </div>
-            <div className="rating-text">
-                <InlineEditable
-                    value={question.lowerBoundLabel || ''}
-                    onChange={onLowerBoundChange}
-                    placeholder="Low end label"
-                    ariaLabel="Lower bound label"
-                />
-                <InlineEditable
-                    value={question.upperBoundLabel || ''}
-                    onChange={onUpperBoundChange}
-                    placeholder="High end label"
-                    ariaLabel="Upper bound label"
-                />
-            </div>
+            {!isThumbs ? (
+                <div className="rating-text">
+                    <InlineEditable
+                        value={question.lowerBoundLabel || ''}
+                        onChange={onLowerBoundChange}
+                        placeholder="Low end label"
+                        ariaLabel="Lower bound label"
+                    />
+                    <InlineEditable
+                        value={question.upperBoundLabel || ''}
+                        onChange={onUpperBoundChange}
+                        placeholder="High end label"
+                        ariaLabel="Upper bound label"
+                    />
+                </div>
+            ) : null}
         </div>
     )
 }
