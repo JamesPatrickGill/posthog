@@ -2,6 +2,7 @@ from typing import Any
 
 from django.db import transaction
 
+import posthoganalytics
 from drf_spectacular.utils import extend_schema
 from rest_framework import serializers, viewsets
 from rest_framework.decorators import action
@@ -23,6 +24,7 @@ from products.web_analytics.backend.path_cleaning_suggestions.service import (
 )
 
 SUGGESTIONS_KIND = "path_cleaning_suggestions"
+FEATURE_FLAG_KEY = "web-analytics-path-cleaning-suggestions"
 
 
 class SuggestedRuleSerializer(serializers.Serializer):
@@ -117,6 +119,17 @@ class WebAnalyticsPathCleaningSuggestionViewSet(TeamAndOrgViewSetMixin, viewsets
     )
     @action(detail=False, methods=["post"], required_scopes=["web_analytics:write"])
     def generate(self, request: Request, **kwargs: Any) -> Response:
+        # Dogfooding gate on the one verb that spends money (ClickHouse sampling + an LLM call).
+        # preview/apply only operate on already-stored suggestions, so they stay scope/admin-gated.
+        distinct_id = getattr(request.user, "distinct_id", None)
+        if not distinct_id or not posthoganalytics.feature_enabled(
+            FEATURE_FLAG_KEY,
+            distinct_id,
+            groups={"organization": str(self.organization.id)},
+            group_properties={"organization": {"id": str(self.organization.id)}},
+        ):
+            raise PermissionDenied("This feature is not available.")
+
         result = generate_suggestions_for_team(self.team, visited_within_days=None, include_configured=True)
         if result.status != "generated" or not result.rules:
             return Response({"status": result.status, "suggestion": None})

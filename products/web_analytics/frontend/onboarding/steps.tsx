@@ -1,4 +1,6 @@
 import { SetupTaskId } from 'lib/components/ProductSetup'
+import { FEATURE_FLAGS } from 'lib/constants'
+import { featureFlagLogic } from 'lib/logic/featureFlagLogic'
 import { OnboardingProductConfiguration } from 'scenes/onboarding/legacy/OnboardingProductConfiguration'
 import { type ProductConfigOption } from 'scenes/onboarding/legacy/onboardingProductConfigurationLogic'
 import { OnboardingInstallStep } from 'scenes/onboarding/legacy/sdks/OnboardingInstallStep'
@@ -103,13 +105,20 @@ export const webAnalyticsOnboarding: ProductOnboardingProvider = {
                 setupTaskId: SetupTaskId.AddAuthorizedDomain,
                 render: () => <OnboardingWebAnalyticsAuthorizedDomainsStep />,
             },
-            {
-                id: `${OnboardingStepKey.PATH_CLEANING}:${ProductKey.WEB_ANALYTICS}`,
-                productKey: ProductKey.WEB_ANALYTICS,
-                stepKey: OnboardingStepKey.PATH_CLEANING,
-                role: ctx.role,
-                render: () => <OnboardingWebAnalyticsPathCleaningStep />,
-            },
+            // Dogfooding gate: suggestions (and this step surfacing them) stay flag-only for now.
+            ...(featureFlagLogic.findMounted()?.values.featureFlags[
+                FEATURE_FLAGS.WEB_ANALYTICS_PATH_CLEANING_SUGGESTIONS
+            ]
+                ? [
+                      {
+                          id: `${OnboardingStepKey.PATH_CLEANING}:${ProductKey.WEB_ANALYTICS}`,
+                          productKey: ProductKey.WEB_ANALYTICS,
+                          stepKey: OnboardingStepKey.PATH_CLEANING,
+                          role: ctx.role,
+                          render: () => <OnboardingWebAnalyticsPathCleaningStep />,
+                      },
+                  ]
+                : []),
             {
                 id: `${OnboardingStepKey.PRODUCT_CONFIGURATION}:${ProductKey.WEB_ANALYTICS}`,
                 productKey: ProductKey.WEB_ANALYTICS,

@@ -5,6 +5,7 @@ import { LemonBanner, LemonButton, LemonModal, Spinner } from '@posthog/lemon-ui
 
 import { RestrictionScope, useRestrictedArea } from 'lib/components/RestrictedArea'
 import { TeamMembershipLevel } from 'lib/constants'
+import { useFeatureFlag } from 'lib/hooks/useFeatureFlag'
 import { humanFriendlyLargeNumber } from 'lib/utils/numbers'
 
 import { pathCleaningSuggestionsLogic } from './pathCleaningSuggestionsLogic'
@@ -77,6 +78,7 @@ function PathCleaningPreviewModal({
 }
 
 export function PathCleaningSuggestionsBanner(): JSX.Element | null {
+    const flagEnabled = useFeatureFlag('WEB_ANALYTICS_PATH_CLEANING_SUGGESTIONS')
     const { latestSuggestion, suggestionsLoading } = useValues(pathCleaningSuggestionsLogic)
     const { applySuggestion, dismissSuggestion, openPreview } = useActions(pathCleaningSuggestionsLogic)
     // Applying writes path_cleaning_filters, an admin-gated team field — mirror the backend gate.
@@ -85,7 +87,7 @@ export function PathCleaningSuggestionsBanner(): JSX.Element | null {
         minimumAccessLevel: TeamMembershipLevel.Admin,
     })
 
-    if (suggestionsLoading || !latestSuggestion || latestSuggestion.rules.length === 0) {
+    if (!flagEnabled || suggestionsLoading || !latestSuggestion || latestSuggestion.rules.length === 0) {
         return null
     }
 

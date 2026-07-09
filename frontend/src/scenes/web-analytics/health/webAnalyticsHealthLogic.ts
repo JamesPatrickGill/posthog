@@ -2,7 +2,10 @@ import { actions, afterMount, connect, kea, listeners, path, reducers, selectors
 import { loaders } from 'kea-loaders'
 
 import api, { ApiError } from 'lib/api'
+import { FEATURE_FLAGS } from 'lib/constants'
 import { lemonToast } from 'lib/lemon-ui/LemonToast/LemonToast'
+import { featureFlagLogic } from 'lib/logic/featureFlagLogic'
+import type { FeatureFlagsSet } from 'lib/logic/featureFlagLogic'
 import { eventUsageLogic } from 'lib/utils/eventUsageLogic'
 import type { HealthIssuesResponse } from 'scenes/health/healthSceneLogic'
 import {
@@ -142,7 +145,7 @@ export const webAnalyticsHealthLogic = kea<webAnalyticsHealthLogicType>([
     path(['scenes', 'web-analytics', 'health', 'webAnalyticsHealthLogic']),
 
     connect(() => ({
-        values: [teamLogic, ['currentTeamIdStrict']],
+        values: [teamLogic, ['currentTeamIdStrict'], featureFlagLogic, ['featureFlags']],
         actions: [
             eventUsageLogic,
             [
@@ -207,13 +210,17 @@ export const webAnalyticsHealthLogic = kea<webAnalyticsHealthLogicType>([
         ],
 
         allChecks: [
-            (s) => [s.activeIssuesByKind, s.healthIssuesLoading, s.healthIssues],
+            (s) => [s.activeIssuesByKind, s.healthIssuesLoading, s.healthIssues, s.featureFlags],
             (
                 activeIssuesByKind: Record<string, HealthIssue>,
                 loading: boolean,
-                healthIssues: HealthIssuesResponse | null
+                healthIssues: HealthIssuesResponse | null,
+                featureFlags: FeatureFlagsSet
             ): HealthCheck[] => {
-                return WEB_HEALTH_CHECKS.map((config) => {
+                const enabledChecks = featureFlags[FEATURE_FLAGS.WEB_ANALYTICS_PATH_CLEANING_SUGGESTIONS]
+                    ? WEB_HEALTH_CHECKS
+                    : WEB_HEALTH_CHECKS.filter((config) => config.kind !== 'path_cleaning_suggestions')
+                return enabledChecks.map((config) => {
                     // Show loading only on the first load (no data yet), like the rest of the health UI.
                     if (loading && !healthIssues) {
                         return {

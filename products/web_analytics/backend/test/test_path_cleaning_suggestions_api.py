@@ -117,6 +117,7 @@ class TestPathCleaningSuggestionsAPI(APIBaseTest):
             rules=[SuggestedRule(regex=r"/users/\d+/profile", alias="/users/<id>/profile")]
         )
         with (
+            patch("posthoganalytics.feature_enabled", return_value=True),
             patch.object(service, "count_distinct_pathnames", return_value=500),
             patch.object(service, "sample_pathnames", return_value=[("/users/1/profile", 5), ("/users/2/profile", 3)]),
             patch.object(service, "call_llm_for_rules", return_value=llm_response),
@@ -140,6 +141,7 @@ class TestPathCleaningSuggestionsAPI(APIBaseTest):
         first = self._make_suggestion(self.team)
         llm_response = SuggestedRulesResponse(rules=[SuggestedRule(regex=r"/posts/\d+", alias="/posts/<id>")])
         with (
+            patch("posthoganalytics.feature_enabled", return_value=True),
             patch.object(service, "count_distinct_pathnames", return_value=500),
             patch.object(service, "sample_pathnames", return_value=[("/posts/1", 5), ("/posts/2", 3)]),
             patch.object(service, "call_llm_for_rules", return_value=llm_response),
@@ -150,6 +152,12 @@ class TestPathCleaningSuggestionsAPI(APIBaseTest):
         self.assertEqual(HealthIssue.objects.filter(team_id=self.team.id, kind=KIND).count(), 1)
         first.refresh_from_db()
         self.assertEqual(first.payload["rules"][0]["alias"], "/posts/<id>")
+
+    def test_generate_requires_feature_flag(self) -> None:
+        # Dogfooding gate: without the flag, generate must not spend a ClickHouse sample + LLM call.
+        with patch("posthoganalytics.feature_enabled", return_value=False):
+            response = self.client.post(self._url("generate/"))
+        self.assertEqual(response.status_code, status.HTTP_403_FORBIDDEN)
 
     def test_cannot_apply_another_teams_suggestion(self) -> None:
         other_team = Team.objects.create(organization=Organization.objects.create(name="other"))

@@ -194,6 +194,7 @@ tools:
             project admin (the same gate as editing path cleaning rules in team settings). Applying changes historical
             numbers in every Web analytics and Paths chart that has cleaning enabled, so confirm with the user before
             calling this.
+        feature_flag: web-analytics-path-cleaning-suggestions
     web-analytics-path-cleaning-suggestions-generate:
         operation: web_analytics_path_cleaning_suggestions_generate
         enabled: true
@@ -214,6 +215,7 @@ tools:
             flag. Use when the user asks to clean up or normalize their paths and no suggestion exists yet. This only
             proposes rules — apply them with `web-analytics-path-cleaning-suggestions-apply`; nothing changes until
             then.
+        feature_flag: web-analytics-path-cleaning-suggestions
     web-analytics-path-cleaning-suggestions-preview:
         operation: web_analytics_path_cleaning_suggestions_preview
         enabled: false
