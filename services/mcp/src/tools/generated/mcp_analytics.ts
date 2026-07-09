@@ -454,6 +454,17 @@ const RevenueAnalyticsPropertyFilter = z.object({
     value: PropertyFilterValue.optional(),
 })
 
+const AccountCustomPropertyFilter = z.object({
+    key: z.string(),
+    label: z.string().optional(),
+    operator: PropertyOperator,
+    type: z
+        .literal('account_custom_property')
+        .describe('Customer analytics account custom property — the key is the property definition id')
+        .default('account_custom_property'),
+    value: PropertyFilterValue.optional(),
+})
+
 const WorkflowVariablePropertyFilter = z.object({
     key: z.string(),
     label: z.string().optional(),
@@ -484,6 +495,7 @@ const AnyPropertyFilter = z.union([
     MetricPropertyFilter,
     SpanPropertyFilter,
     RevenueAnalyticsPropertyFilter,
+    AccountCustomPropertyFilter,
     WorkflowVariablePropertyFilter,
 ])
 
