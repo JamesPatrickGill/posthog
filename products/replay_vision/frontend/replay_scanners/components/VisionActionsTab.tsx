@@ -136,7 +136,7 @@ function VisionActionsTable({ scannerId }: { scannerId: string }): JSX.Element {
             key: 'enabled',
             render: (_, action) => (
                 <div className="flex items-center gap-2">
-                    <EditorGate userAccessLevel={action.user_access_level}>
+                    <EditorGate userAccessLevel={(action.user_access_level as AccessControlLevel | null) ?? undefined}>
                         <LemonSwitch
                             checked={!!action.enabled}
                             onChange={() => toggleActionEnabled(action.id)}
@@ -175,7 +175,7 @@ function VisionActionsTable({ scannerId }: { scannerId: string }): JSX.Element {
             width: 0, // shrink to content so the buttons hug the right instead of floating in a wide column
             render: (_, action) => (
                 <div className="flex gap-1">
-                    <EditorGate userAccessLevel={action.user_access_level}>
+                    <EditorGate userAccessLevel={(action.user_access_level as AccessControlLevel | null) ?? undefined}>
                         <LemonButton
                             size="small"
                             type="secondary"
@@ -185,7 +185,7 @@ function VisionActionsTable({ scannerId }: { scannerId: string }): JSX.Element {
                             to={urls.replayVisionActionEdit(action.id)}
                         />
                     </EditorGate>
-                    <EditorGate userAccessLevel={action.user_access_level}>
+                    <EditorGate userAccessLevel={(action.user_access_level as AccessControlLevel | null) ?? undefined}>
                         <LemonButton
                             size="small"
                             type="secondary"

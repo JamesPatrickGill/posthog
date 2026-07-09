@@ -48,7 +48,7 @@ function ActionOverview({
                     <AccessControlAction
                         resourceType={AccessControlResourceType.ReplayScanner}
                         minAccessLevel={AccessControlLevel.Editor}
-                        userAccessLevel={action.user_access_level}
+                        userAccessLevel={(action.user_access_level as AccessControlLevel | null) ?? undefined}
                     >
                         <LemonButton
                             type="secondary"
