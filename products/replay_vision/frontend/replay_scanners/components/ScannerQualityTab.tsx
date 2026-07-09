@@ -225,7 +225,7 @@ function PromptRecommendationPanel({ scannerId }: { scannerId: string }): JSX.El
     const { isDarkModeOn } = useValues(themeLogic)
     const [historyOpen, setHistoryOpen] = useState(false)
     const editDisabledReason = getAccessControlDisabledReason(
-        AccessControlResourceType.SessionRecording,
+        AccessControlResourceType.ReplayScanner,
         AccessControlLevel.Editor
     )
 

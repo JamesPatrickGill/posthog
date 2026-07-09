@@ -89,8 +89,9 @@ export function ReplayScannersScene(): JSX.Element {
             render: (_, scanner) => (
                 <div className="flex items-center gap-2">
                     <AccessControlAction
-                        resourceType={AccessControlResourceType.SessionRecording}
+                        resourceType={AccessControlResourceType.ReplayScanner}
                         minAccessLevel={AccessControlLevel.Editor}
+                        userAccessLevel={scanner.user_access_level}
                     >
                         <LemonSwitch
                             checked={scanner.enabled}
@@ -142,8 +143,9 @@ export function ReplayScannersScene(): JSX.Element {
             render: (_, scanner) => (
                 <div className="flex gap-1">
                     <AccessControlAction
-                        resourceType={AccessControlResourceType.SessionRecording}
+                        resourceType={AccessControlResourceType.ReplayScanner}
                         minAccessLevel={AccessControlLevel.Editor}
+                        userAccessLevel={scanner.user_access_level}
                     >
                         <LemonButton
                             size="small"
@@ -156,8 +158,9 @@ export function ReplayScannersScene(): JSX.Element {
                         />
                     </AccessControlAction>
                     <AccessControlAction
-                        resourceType={AccessControlResourceType.SessionRecording}
+                        resourceType={AccessControlResourceType.ReplayScanner}
                         minAccessLevel={AccessControlLevel.Editor}
+                        userAccessLevel={scanner.user_access_level}
                     >
                         <LemonButton
                             size="small"
@@ -198,7 +201,7 @@ export function ReplayScannersScene(): JSX.Element {
                     <>
                         <ReplayVisionFeedbackButton />
                         <AccessControlAction
-                            resourceType={AccessControlResourceType.SessionRecording}
+                            resourceType={AccessControlResourceType.ReplayScanner}
                             minAccessLevel={AccessControlLevel.Editor}
                         >
                             <LemonButton

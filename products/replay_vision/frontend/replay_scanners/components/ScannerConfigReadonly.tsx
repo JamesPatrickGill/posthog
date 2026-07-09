@@ -205,8 +205,9 @@ export function ScannerConfigReadonly({ scanner }: { scanner: ReplayScanner }): 
                         <LabeledRow label="Status">
                             <div className="flex items-center gap-2">
                                 <AccessControlAction
-                                    resourceType={AccessControlResourceType.SessionRecording}
+                                    resourceType={AccessControlResourceType.ReplayScanner}
                                     minAccessLevel={AccessControlLevel.Editor}
+                                    userAccessLevel={scanner.user_access_level}
                                 >
                                     <LemonSwitch
                                         checked={scanner.enabled}

@@ -201,7 +201,7 @@ export function ScannerObservationsTable({ scannerId }: { scannerId: string }): 
                 <div className="flex gap-1">
                     {obs.status === 'failed' && (
                         <AccessControlAction
-                            resourceType={AccessControlResourceType.SessionRecording}
+                            resourceType={AccessControlResourceType.ReplayScanner}
                             minAccessLevel={AccessControlLevel.Editor}
                         >
                             <LemonButton
