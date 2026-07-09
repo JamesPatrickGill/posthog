@@ -214,6 +214,9 @@ tools:
             flag. Use when the user asks to clean up or normalize their paths and no suggestion exists yet. This only
             proposes rules — apply them with `web-analytics-path-cleaning-suggestions-apply`; nothing changes until
             then.
+    web-analytics-path-cleaning-suggestions-preview:
+        operation: web_analytics_path_cleaning_suggestions_preview
+        enabled: false
     web-analytics-recap:
         operation: web_analytics_recap
         enabled: false
