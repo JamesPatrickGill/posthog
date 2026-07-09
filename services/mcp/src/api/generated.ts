@@ -13756,6 +13756,18 @@ export namespace Schemas {
     }
 
     /**
+     * * `conversation` - conversation
+     * * `review` - review
+     */
+    export type CommentTypeEnum = typeof CommentTypeEnum[keyof typeof CommentTypeEnum];
+
+
+    export const CommentTypeEnum = {
+      Conversation: 'conversation',
+      Review: 'review',
+    } as const;
+
+    /**
      * Response for the `commit` artefact diff endpoint — the commit's branch rendered against the
      * repository default branch.
      */
@@ -46781,6 +46793,84 @@ export namespace Schemas {
       results: ProxyRecord[];
       /** Maximum number of proxy records allowed for this organization's current plan. */
       max_proxy_records: number;
+    }
+
+    /**
+     * One CI check on a pull request's head commit — a GitHub Actions check run or a legacy commit
+     * status, normalized to a common shape.
+     */
+    export interface PullRequestCheck {
+      /** Check run name or status context. */
+      readonly name: string;
+      /**
+         * Lifecycle state: 'queued', 'in_progress', or 'completed'.
+         * @nullable
+         */
+      readonly status: string | null;
+      /**
+         * Outcome once completed: 'success', 'failure', 'neutral', 'cancelled', 'skipped', 'timed_out', or 'action_required'. Null while still running.
+         * @nullable
+         */
+      readonly conclusion: string | null;
+      /**
+         * Link to the check run / status detail on GitHub.
+         * @nullable
+         */
+      readonly url: string | null;
+    }
+
+    /**
+     * Response for the PR checks endpoint — the CI status of a report's implementation PR.
+     */
+    export interface PullRequestChecksResponse {
+      readonly checks: readonly PullRequestCheck[];
+    }
+
+    /**
+     * One comment on a pull request — a conversation comment or an inline review comment.
+     */
+    export interface PullRequestComment {
+      /** GitHub comment id. */
+      readonly id: string;
+      /**
+         * Comment author's GitHub login.
+         * @nullable
+         */
+      readonly author: string | null;
+      /**
+         * Author's GitHub avatar URL.
+         * @nullable
+         */
+      readonly author_avatar_url: string | null;
+      /** Comment body (GitHub-flavored markdown). */
+      readonly body: string;
+      /**
+         * ISO 8601 creation timestamp.
+         * @nullable
+         */
+      readonly created_at: string | null;
+      /**
+         * Link to the comment on GitHub.
+         * @nullable
+         */
+      readonly url: string | null;
+      /** 'conversation' for a PR discussion comment, 'review' for an inline code-review comment.
+       *
+       * * `conversation` - conversation
+       * * `review` - review */
+      readonly comment_type: CommentTypeEnum;
+      /**
+         * File path the review comment is anchored to (review comments only).
+         * @nullable
+         */
+      readonly path: string | null;
+    }
+
+    /**
+     * Response for the PR comments endpoint — conversation and review comments merged chronologically.
+     */
+    export interface PullRequestCommentsResponse {
+      readonly comments: readonly PullRequestComment[];
     }
 
     export interface PullRequestListItem {
