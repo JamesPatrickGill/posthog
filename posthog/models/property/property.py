@@ -48,6 +48,7 @@ PropertyType = Literal[
     "span_attribute",
     "span_resource_attribute",
     "revenue_analytics",
+    "account_custom_property",
     "flag",
     "workflow_variable",
 ]
@@ -118,6 +119,7 @@ VALIDATE_PROP_TYPES = {
     "span_resource_attribute": ["key", "value"],
     "flag": ["key", "value"],
     "revenue_analytics": ["key", "value"],
+    "account_custom_property": ["key", "value"],
     "behavioral": ["key", "value"],
     "session": ["key", "value"],
     "hogql": ["key"],
