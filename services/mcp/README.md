@@ -354,7 +354,7 @@ This repository is organized to support multiple language implementations:
 
 - `pnpm run dev` - Start development server
 - `pnpm run schema:build:json` - Generate JSON schema for other language implementations
-- `pnpm run lint && pnpm run format` - Format and lint code
+- `pnpm run fix` - Auto-fix lint issues and format code
 
 ### Adding New Tools
 
