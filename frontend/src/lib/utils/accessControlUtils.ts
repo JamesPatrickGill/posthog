@@ -284,8 +284,5 @@ export const getAccessControlTooltip = (resource: APIScopeObject): string | null
     if (resource === AccessControlResourceType.WarehouseObjects) {
         return 'Viewer is required to query a table or view via SQL. Editor and above also control creating, editing, and deleting tables, views (aka "models"), folders, and joins.'
     }
-    if (resource === AccessControlResourceType.ReplayScanner) {
-        return 'Covers both Replay vision scanners and their scheduled summary actions.'
-    }
     return null
 }
