@@ -160,6 +160,7 @@ the row lists both.
 | fleetio                 | HTTP                        | requests                                                        | ✅                          |
 | firehydrant             | HTTP                        | requests                                                        | ✅                          |
 | float_app               | HTTP                        | requests                                                        | ✅                          |
+| formbricks              | HTTP                        | requests                                                        | ✅                          |
 | front                   | HTTP                        | requests                                                        | ✅                          |
 | fulcrum                 | HTTP                        | requests                                                        | ✅                          |
 | fullstory               | HTTP                        | requests                                                        | ✅                          |
@@ -469,7 +470,6 @@ doesn't conflict with concurrent PRs.
 - flexmail
 - flexport
 - flowlu
-- formbricks
 - freeagent
 - freightview
 - freshbooks
