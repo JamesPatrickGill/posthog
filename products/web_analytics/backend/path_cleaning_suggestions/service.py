@@ -9,6 +9,7 @@ import structlog
 
 from posthog.hogql.query import execute_hogql_query
 
+from posthog.clickhouse.query_tagging import Feature, Product, tags_context
 from posthog.llm.gateway_client import get_llm_client
 from posthog.models import Team
 
@@ -216,19 +217,24 @@ def generate_suggestions_for_team(
         return _result("skipped_configured", [], 0, 0)
 
     try:
-        # The activity gate runs a ClickHouse query, so it lives inside the guard with the
-        # rest — a transient query failure must surface as this team's error result, not
-        # propagate out of a cohort sweep.
-        if visited_within_days is not None and not has_recent_pageviews(team, days=visited_within_days):
-            return _result("skipped_inactive", [], 0, 0)
+        # The whole suggestion pipeline rides the health-check framework, so its ClickHouse
+        # queries are tagged as such regardless of the caller (API, command, or scheduled check).
+        with tags_context(
+            product=Product.WEB_ANALYTICS, feature=Feature.HEALTH_CHECK, team_id=team.pk, org_id=team.organization_id
+        ):
+            # The activity gate runs a ClickHouse query, so it lives inside the guard with the
+            # rest — a transient query failure must surface as this team's error result, not
+            # propagate out of a cohort sweep.
+            if visited_within_days is not None and not has_recent_pageviews(team, days=visited_within_days):
+                return _result("skipped_inactive", [], 0, 0)
 
-        distinct = count_distinct_pathnames(team, days=days)
-        if distinct < min_distinct_paths:
-            return _result("skipped_low_cardinality", [], distinct, 0)
+            distinct = count_distinct_pathnames(team, days=days)
+            if distinct < min_distinct_paths:
+                return _result("skipped_low_cardinality", [], distinct, 0)
 
-        paths = sample_pathnames(team, days=days, limit=limit)
-        if not paths:
-            return _result("skipped_no_paths", [], distinct, 0)
+            paths = sample_pathnames(team, days=days, limit=limit)
+            if not paths:
+                return _result("skipped_no_paths", [], distinct, 0)
 
         response = call_llm_for_rules(team, paths, model=_resolve_model())
         annotated = validate_and_annotate_rules(response.rules, paths)
@@ -282,7 +288,10 @@ def preview_rules_on_team(
         except re2.error:
             logger.info("path_cleaning_preview_invalid_regex", regex=rule.regex)
 
-    sampled = sample_pathnames(team, days=days, limit=limit)
+    with tags_context(
+        product=Product.WEB_ANALYTICS, feature=Feature.HEALTH_CHECK, team_id=team.pk, org_id=team.organization_id
+    ):
+        sampled = sample_pathnames(team, days=days, limit=limit)
     examples: list[dict[str, Any]] = []
     changed = 0
     for path, views in sampled:
