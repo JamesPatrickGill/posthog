@@ -34,10 +34,9 @@ class AnnotatedRule:
     order: int
     reason: str
     match_count: int
-    examples: list[dict[str, str]]
-
-    def to_dict(self) -> dict[str, Any]:
-        return dataclasses.asdict(self)
+    # Real sampled paths; kept in memory for the management command's printout but never
+    # stored in the health-issue payload (see build_suggestion_payload).
+    examples: list[dict[str, str]] = dataclasses.field(default_factory=list)
 
 
 @dataclasses.dataclass
@@ -241,9 +240,21 @@ def generate_suggestions_for_team(
 
 def build_suggestion_payload(result: TeamSuggestionResult) -> dict[str, Any]:
     """The `HealthIssue.payload` shape for a generated suggestion. One place, so the health
-    check, the on-demand API, and the frontend banner all agree on the field names."""
+    check, the on-demand API, and the frontend banner all agree on the field names.
+
+    `examples` (real sampled paths) are deliberately excluded: health-issue payloads are
+    readable with just `health_issue:read`, which must not leak a team's event data."""
     return {
-        "rules": [rule.to_dict() for rule in result.rules],
+        "rules": [
+            {
+                "regex": rule.regex,
+                "alias": rule.alias,
+                "order": rule.order,
+                "reason": rule.reason,
+                "match_count": rule.match_count,
+            }
+            for rule in result.rules
+        ],
         "model": result.model,
         "sampled_path_count": result.sampled_path_count,
         "distinct_path_count": result.distinct_path_count,

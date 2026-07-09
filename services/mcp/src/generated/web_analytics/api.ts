@@ -417,7 +417,7 @@ export const WebAnalyticsWeeklyDigestQueryParams = /* @__PURE__ */ zod.object({
 })
 
 /**
- * Merges the suggestion's rules into the team's path_cleaning_filters (never overwrites existing rules) and resolves the underlying health issue.
+ * Merges the suggestion's rules into the team's path_cleaning_filters (never overwrites existing rules) and resolves the underlying health issue. Requires project admin, matching the team API's gate on path_cleaning_filters.
  * @summary Apply a path-cleaning suggestion
  */
 export const WebAnalyticsPathCleaningSuggestionsApplyParams = /* @__PURE__ */ zod.object({

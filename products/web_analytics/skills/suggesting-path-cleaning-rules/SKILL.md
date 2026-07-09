@@ -23,8 +23,10 @@ review). To hand-author or directly apply rules, use the `managing-path-cleaning
     `WEB_ANALYTICS_PATH_CLEANING_SUGGESTIONS_MODEL`, default `claude-haiku-4-5`).
   - `validate_and_annotate_rules` — compiles each regex with **re2** (the engine ClickHouse
     `replaceRegexpAll` uses) and test-applies it to the sampled paths. Rules that don't compile or
-    match nothing are dropped; survivors get a dense `order`, a `match_count`, and before/after
-    `examples`. This is the skill's "test before saving" step, automated.
+    match nothing are dropped; survivors get a dense `order`, a `match_count`, and in-memory
+    before/after `examples` (printed by the management command, never stored — health-issue
+    payloads are readable with just `health_issue:read` and must not leak real paths). This is
+    the skill's "test before saving" step, automated.
   - `generate_suggestions_for_team` — orchestrates the above with gating (see below); pure
     generation, no storage.
   - `apply_suggestions_to_team` — **merges** rules into `path_cleaning_filters`, never overwrites
@@ -58,13 +60,14 @@ review). To hand-author or directly apply rules, use the `managing-path-cleaning
 ## How users see and apply suggestions
 
 - **Settings banner**: `PathCleaningSuggestionsBanner` on `/settings/project#path_cleaning` shows the
-  latest `suggested` row with before/after previews; "Apply all" merges the rules, the close button
-  dismisses. Driven by `pathCleaningSuggestionsLogic`.
+  latest `suggested` row as regex → alias previews with match counts; "Apply all" (project admins
+  only) merges the rules, the close button dismisses. Driven by `pathCleaningSuggestionsLogic`.
 - **Onboarding step**: `OnboardingWebAnalyticsPathCleaningStep` (stepKey `path_cleaning`) surfaces the
   same banner during Web analytics onboarding.
 - **API** (`products/web_analytics/backend/api/web_analytics_path_cleaning_suggestions.py`):
   `POST /api/projects/:id/web_analytics_path_cleaning_suggestions/generate/` produces and stores a
-  fresh suggestion on demand; `POST .../{issue_id}/apply/` merges the rules and resolves the issue.
+  fresh suggestion on demand; `POST .../{issue_id}/apply/` merges the rules and resolves the issue
+  (project admin only — the same gate the team API puts on `path_cleaning_filters`).
   Listing and dismissing go through the generic health-issues API
   (`GET /api/projects/:id/health_issues/?kind=path_cleaning_suggestions&status=active&dismissed=false`,
   `PATCH .../health_issues/{id}/` with `{"dismissed": true}`).
@@ -102,8 +105,10 @@ Read a team's active suggestion:
 HealthIssue.objects.filter(team_id=team_id, kind="path_cleaning_suggestions", status="active").first()
 ```
 
-Each rule in `payload["rules"]` carries `match_count` and `examples` (before/after on the team's real
-paths) — that's what to show a human deciding whether to apply.
+Each rule in `payload["rules"]` carries `regex`, `alias`, `order`, `reason`, and `match_count` —
+that's what to show a human deciding whether to apply. Before/after examples on real paths are only
+printed by the management command at generation time; they are deliberately kept out of the stored
+payload.
 
 ## Extending
 

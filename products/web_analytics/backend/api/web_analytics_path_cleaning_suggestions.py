@@ -5,12 +5,13 @@ from django.db import transaction
 from drf_spectacular.utils import extend_schema
 from rest_framework import serializers, viewsets
 from rest_framework.decorators import action
-from rest_framework.exceptions import NotFound
+from rest_framework.exceptions import NotFound, PermissionDenied
 from rest_framework.request import Request
 from rest_framework.response import Response
 
 from posthog.api.routing import TeamAndOrgViewSetMixin
 from posthog.models.health_issue import HealthIssue
+from posthog.models.organization import OrganizationMembership
 from posthog.rate_limit import AIBurstRateThrottle, AISustainedRateThrottle
 
 from products.web_analytics.backend.path_cleaning_suggestions.service import (
@@ -23,11 +24,6 @@ from products.web_analytics.backend.path_cleaning_suggestions.service import (
 SUGGESTIONS_KIND = "path_cleaning_suggestions"
 
 
-class PathCleaningExampleSerializer(serializers.Serializer):
-    before = serializers.CharField(help_text="A real sampled path before this rule is applied.")
-    after = serializers.CharField(help_text="The same path after this rule's regex replacement.")
-
-
 class SuggestedRuleSerializer(serializers.Serializer):
     regex = serializers.CharField(help_text="re2 pattern matching the dynamic path segment.")
     alias = serializers.CharField(help_text="Replacement with angle-bracket placeholders, e.g. /users/<id>.")
@@ -35,9 +31,8 @@ class SuggestedRuleSerializer(serializers.Serializer):
     reason = serializers.CharField(
         required=False, allow_blank=True, help_text="Short rationale for the rule from the model."
     )
-    match_count = serializers.IntegerField(help_text="How many of the sampled paths this rule rewrites.")
-    examples = PathCleaningExampleSerializer(
-        many=True, help_text="Up to 3 before/after examples on the team's real paths."
+    match_count = serializers.IntegerField(
+        help_text="How many of the sampled paths this rule rewrites — evidence the rule was validated on real traffic."
     )
 
 
@@ -124,12 +119,18 @@ class WebAnalyticsPathCleaningSuggestionViewSet(TeamAndOrgViewSetMixin, viewsets
         operation_id="web_analytics_path_cleaning_suggestions_apply",
         summary="Apply a path-cleaning suggestion",
         description="Merges the suggestion's rules into the team's path_cleaning_filters (never overwrites existing "
-        "rules) and resolves the underlying health issue.",
+        "rules) and resolves the underlying health issue. Requires project admin, matching the team API's gate on "
+        "path_cleaning_filters.",
         request=None,
         responses={200: ApplyPathCleaningSuggestionResponseSerializer},
     )
     @action(detail=True, methods=["post"], required_scopes=["web_analytics:write"])
     def apply(self, request: Request, pk: str | None = None, **kwargs: Any) -> Response:
+        # path_cleaning_filters is a project-admin field on the team API (TEAM_CONFIG_ADMIN_FIELDS_SET);
+        # writing it through this endpoint must not be a way around that gate.
+        membership_level = self.user_permissions.team(self.team).effective_membership_level
+        if membership_level is None or membership_level < OrganizationMembership.Level.ADMIN:
+            raise PermissionDenied("Only project admins can apply path cleaning suggestions.")
         if pk is None:
             raise NotFound("No such path-cleaning suggestion.")
         issue = HealthIssue.objects.filter(team_id=self.team.id, kind=SUGGESTIONS_KIND, id=pk).first()

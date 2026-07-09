@@ -24243,13 +24243,6 @@ export namespace Schemas {
       readonly updated: number;
     }
 
-    export interface PathCleaningExample {
-      /** A real sampled path before this rule is applied. */
-      before: string;
-      /** The same path after this rule's regex replacement. */
-      after: string;
-    }
-
     export interface SuggestedRule {
       /** re2 pattern matching the dynamic path segment. */
       regex: string;
@@ -24259,10 +24252,8 @@ export namespace Schemas {
       order: number;
       /** Short rationale for the rule from the model. */
       reason?: string;
-      /** How many of the sampled paths this rule rewrites. */
+      /** How many of the sampled paths this rule rewrites — evidence the rule was validated on real traffic. */
       match_count: number;
-      /** Up to 3 before/after examples on the team's real paths. */
-      examples: PathCleaningExample[];
     }
 
     /**

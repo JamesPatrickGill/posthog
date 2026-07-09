@@ -71,7 +71,10 @@ export const pathCleaningSuggestionsLogic = kea<pathCleaningSuggestionsLogicType
     selectors({
         latestSuggestion: [
             (s) => [s.suggestions, s.handledIds],
-            (suggestions, handledIds): PathCleaningSuggestionIssueApi | null =>
+            (
+                suggestions: PathCleaningSuggestionIssueApi[],
+                handledIds: string[]
+            ): PathCleaningSuggestionIssueApi | null =>
                 suggestions.find((suggestion) => !handledIds.includes(suggestion.id)) ?? null,
         ],
     }),
