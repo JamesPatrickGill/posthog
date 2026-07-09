@@ -208,6 +208,7 @@ the row lists both.
 | katana                  | HTTP                        | requests                                                        | ✅                          |
 | klaviyo                 | HTTP                        | requests                                                        | ✅                          |
 | lago                    | HTTP                        | requests                                                        | ✅                          |
+| langfuse                | HTTP                        | requests                                                        | ✅                          |
 | launchdarkly            | HTTP                        | requests                                                        | ✅                          |
 | kustomer                | HTTP                        | requests                                                        | ✅                          |
 | lattice                 | HTTP                        | requests                                                        | ✅                          |
@@ -561,7 +562,6 @@ doesn't conflict with concurrent PRs.
 - klaus
 - knock
 - kyve
-- langfuse
 - leexi
 - lemon_squeezy
 - lever
