@@ -56,6 +56,7 @@ from .assemblyai.source import AssemblyAISource
 from .attentive.source import AttentiveSource
 from .attio.source import AttioSource
 from .auth0.source import Auth0Source
+from .autumn.source import AutumnSource
 from .aviationstack.source import AviationstackSource
 from .awin.source import AwinSource
 from .aws_cloudtrail.source import AwsCloudTrailSource
@@ -235,6 +236,7 @@ from .front.source import FrontSource
 from .fulcrum.source import FulcrumSource
 from .fullstory.source import FullStorySource
 from .gainsight_px.source import GainsightPxSource
+from .getstream.source import GetStreamSource
 from .giphy.source import GiphySource
 from .gitbook.source import GitBookSource
 from .github.source import GithubSource
@@ -409,6 +411,7 @@ from .northpass_lms.source import NorthpassLMSSource
 from .notion.source import NotionSource
 from .nutshell.source import NutshellSource
 from .nylas.source import NylasSource
+from .octolens.source import OctolensSource
 from .okta.source import OktaSource
 from .omnisend.source import OmnisendSource
 from .oncehub.source import OncehubSource

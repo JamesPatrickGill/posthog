@@ -452,6 +452,7 @@ doesn't conflict with concurrent PRs.
 - apptivo
 - appwrite
 - auth0
+- autumn
 - aws_cloudtrail
 - azure_blob
 - azure_table_storage
@@ -529,6 +530,7 @@ doesn't conflict with concurrent PRs.
 - freshchat
 - freshservice
 - fulcrum
+- getstream
 - glassfrog
 - gmail
 - gnews
@@ -626,6 +628,7 @@ doesn't conflict with concurrent PRs.
 - northpass_lms
 - nutshell
 - nylas
+- octolens
 - onedrive
 - onehundredms
 - onesignal

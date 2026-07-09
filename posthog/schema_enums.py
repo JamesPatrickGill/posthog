@@ -1860,6 +1860,9 @@ class ExternalDataSourceType(StrEnum):
     VAPI = "Vapi"
     VESPA = "Vespa"
     WRITESONIC = "Writesonic"
+    AUTUMN = "Autumn"
+    GET_STREAM = "GetStream"
+    OCTOLENS = "Octolens"
 
 
 class ExternalQueryErrorCode(StrEnum):

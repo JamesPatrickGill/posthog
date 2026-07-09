@@ -729,6 +729,9 @@ class ExternalDataSourceType(models.TextChoices):
     VAPI = "Vapi", "Vapi"
     VESPA = "Vespa", "Vespa"
     WRITESONIC = "Writesonic", "Writesonic"
+    AUTUMN = "Autumn", "Autumn"
+    GETSTREAM = "GetStream", "GetStream"
+    OCTOLENS = "Octolens", "Octolens"
 
 
 # Maps a source type to the direct-SQL engine that can query it live. A source type is only

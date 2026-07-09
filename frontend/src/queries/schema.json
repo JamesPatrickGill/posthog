@@ -22265,7 +22265,10 @@
                 "TogetherAI",
                 "Vapi",
                 "Vespa",
-                "Writesonic"
+                "Writesonic",
+                "Autumn",
+                "GetStream",
+                "Octolens"
             ],
             "type": "string"
         },

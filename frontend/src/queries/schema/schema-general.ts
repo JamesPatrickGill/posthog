@@ -7308,6 +7308,9 @@ export const externalDataSources = [
     'Vapi',
     'Vespa',
     'Writesonic',
+    'Autumn',
+    'GetStream',
+    'Octolens',
 ] as const
 
 export type ExternalDataSourceType = (typeof externalDataSources)[number]
