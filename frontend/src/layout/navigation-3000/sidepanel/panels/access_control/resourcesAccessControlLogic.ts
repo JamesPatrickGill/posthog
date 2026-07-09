@@ -4,7 +4,7 @@ import { loaders } from 'kea-loaders'
 import { lemonToast } from '@posthog/lemon-ui'
 
 import api from 'lib/api'
-import { FEATURE_FLAGS, OrganizationMembershipLevel } from 'lib/constants'
+import { FEATURE_FLAGS, FeatureFlagKey, OrganizationMembershipLevel } from 'lib/constants'
 import { featureFlagLogic } from 'lib/logic/featureFlagLogic'
 import { captureAccessControlEvent } from 'lib/utils/accessControlUtils'
 import { membersLogic } from 'scenes/organization/membersLogic'
@@ -43,7 +43,7 @@ const RESOURCE_FEATURE_REQUIREMENTS: Partial<Record<AccessControlResourceType, A
 
 // Resources whose product is still behind a rollout feature flag — hidden from the settings table
 // until the flag is on, so teams without access to the product don't see a rule they can't use.
-const RESOURCE_FEATURE_FLAG_REQUIREMENTS: Partial<Record<AccessControlResourceType, string>> = {
+const RESOURCE_FEATURE_FLAG_REQUIREMENTS: Partial<Record<AccessControlResourceType, FeatureFlagKey>> = {
     [AccessControlResourceType.ReplayScanner]: FEATURE_FLAGS.REPLAY_VISION,
 }
 
