@@ -736,6 +736,8 @@ export const tasksRunCreateBodyOneImportedMcpServersItemHeadersItemNameMax = 256
 
 export const tasksRunCreateBodyOneImportedMcpServersItemHeadersItemValueMax = 4096
 
+export const tasksRunCreateBodyOneRelayedMcpServersItemNameMax = 64
+
 export const tasksRunCreateBodyOneModeDefault = `background`
 export const tasksRunCreateBodyOneBranchMax = 255
 
@@ -748,6 +750,8 @@ export const tasksRunCreateBodyTwoImportedMcpServersItemUrlMax = 2048
 export const tasksRunCreateBodyTwoImportedMcpServersItemHeadersItemNameMax = 256
 
 export const tasksRunCreateBodyTwoImportedMcpServersItemHeadersItemValueMax = 4096
+
+export const tasksRunCreateBodyTwoRelayedMcpServersItemNameMax = 64
 
 export const tasksRunCreateBodyTwoModeDefault = `background`
 export const tasksRunCreateBodyTwoBranchMax = 255
@@ -785,6 +789,20 @@ export const TasksRunCreateBody = /* @__PURE__ */ zod.union([
                 .nullish()
                 .describe(
                     'Local url-based MCP servers from the creating client (PostHog Code) to make available inside the cloud sandbox. Header values are treated as credentials: stored encrypted and never returned by the API.'
+                ),
+            relayed_mcp_servers: zod
+                .array(
+                    zod
+                        .object({
+                            name: zod.string().max(tasksRunCreateBodyOneRelayedMcpServersItemNameMax),
+                        })
+                        .describe(
+                            'One desktop-only MCP server relayed into the run — a name only, never configuration.'
+                        )
+                )
+                .nullish()
+                .describe(
+                    'Names of desktop-only MCP servers the creating client (PostHog Code) relays into the cloud sandbox over the durable event\/command channel. Names only — the server configuration (command, env, URL, headers) never crosses the wire.'
                 ),
             mode: zod
                 .enum(['interactive', 'background'])
@@ -908,6 +926,20 @@ export const TasksRunCreateBody = /* @__PURE__ */ zod.union([
                 .nullish()
                 .describe(
                     'Local url-based MCP servers from the creating client (PostHog Code) to make available inside the cloud sandbox. Header values are treated as credentials: stored encrypted and never returned by the API.'
+                ),
+            relayed_mcp_servers: zod
+                .array(
+                    zod
+                        .object({
+                            name: zod.string().max(tasksRunCreateBodyTwoRelayedMcpServersItemNameMax),
+                        })
+                        .describe(
+                            'One desktop-only MCP server relayed into the run — a name only, never configuration.'
+                        )
+                )
+                .nullish()
+                .describe(
+                    'Names of desktop-only MCP servers the creating client (PostHog Code) relays into the cloud sandbox over the durable event\/command channel. Names only — the server configuration (command, env, URL, headers) never crosses the wire.'
                 ),
             mode: zod
                 .enum(['interactive', 'background'])
@@ -1262,6 +1294,8 @@ export const tasksRunsCreateBodyImportedMcpServersItemHeadersItemNameMax = 256
 
 export const tasksRunsCreateBodyImportedMcpServersItemHeadersItemValueMax = 4096
 
+export const tasksRunsCreateBodyRelayedMcpServersItemNameMax = 64
+
 export const tasksRunsCreateBodyEnvironmentDefault = `local`
 export const tasksRunsCreateBodyModeDefault = `background`
 export const tasksRunsCreateBodyBranchMax = 255
@@ -1293,6 +1327,18 @@ export const TasksRunsCreateBody = /* @__PURE__ */ zod
             .nullish()
             .describe(
                 'Local url-based MCP servers from the creating client (PostHog Code) to make available inside the cloud sandbox. Header values are treated as credentials: stored encrypted and never returned by the API.'
+            ),
+        relayed_mcp_servers: zod
+            .array(
+                zod
+                    .object({
+                        name: zod.string().max(tasksRunsCreateBodyRelayedMcpServersItemNameMax),
+                    })
+                    .describe('One desktop-only MCP server relayed into the run — a name only, never configuration.')
+            )
+            .nullish()
+            .describe(
+                'Names of desktop-only MCP servers the creating client (PostHog Code) relays into the cloud sandbox over the durable event\/command channel. Names only — the server configuration (command, env, URL, headers) never crosses the wire.'
             ),
         environment: zod
             .enum(['local', 'cloud'])
@@ -1739,7 +1785,7 @@ export const TasksRunsArtifactsPresignCreateBody = /* @__PURE__ */ zod.object({
 })
 
 /**
- * Queue user_message JSON-RPC commands through the task workflow and forward sandbox control commands to the agent server. Supports user_message, cancel, close, permission_response, and set_config_option commands.
+ * Queue user_message JSON-RPC commands through the task workflow and forward sandbox control commands to the agent server. Supports user_message, cancel, close, permission_response, set_config_option, and mcp_response commands.
  * @summary Send command to task run
  */
 export const TasksRunsCommandCreateBody = /* @__PURE__ */ zod
@@ -1749,12 +1795,12 @@ export const TasksRunsCommandCreateBody = /* @__PURE__ */ zod
             .describe('\* `2.0` - 2.0')
             .describe("JSON-RPC version, must be '2.0'\n\n\* `2.0` - 2.0"),
         method: zod
-            .enum(['user_message', 'cancel', 'close', 'permission_response', 'set_config_option'])
+            .enum(['user_message', 'cancel', 'close', 'permission_response', 'set_config_option', 'mcp_response'])
             .describe(
-                '\* `user_message` - user_message\n\* `cancel` - cancel\n\* `close` - close\n\* `permission_response` - permission_response\n\* `set_config_option` - set_config_option'
+                '\* `user_message` - user_message\n\* `cancel` - cancel\n\* `close` - close\n\* `permission_response` - permission_response\n\* `set_config_option` - set_config_option\n\* `mcp_response` - mcp_response'
             )
             .describe(
-                'Command method to execute on the agent server\n\n\* `user_message` - user_message\n\* `cancel` - cancel\n\* `close` - close\n\* `permission_response` - permission_response\n\* `set_config_option` - set_config_option'
+                'Command method to execute on the agent server\n\n\* `user_message` - user_message\n\* `cancel` - cancel\n\* `close` - close\n\* `permission_response` - permission_response\n\* `set_config_option` - set_config_option\n\* `mcp_response` - mcp_response'
             ),
         params: zod.record(zod.string(), zod.unknown()).optional().describe('Parameters for the command'),
         id: zod.unknown().optional().describe('Optional JSON-RPC request ID (string or number)'),

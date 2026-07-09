@@ -13001,6 +13001,14 @@ export namespace Schemas {
     }
 
     /**
+     * One desktop-only MCP server relayed into the run — a name only, never configuration.
+     */
+    export interface RelayedMcpServer {
+      /** @maxLength 64 */
+      name: string;
+    }
+
+    /**
      * * `interactive` - interactive
      * * `background` - background
      */
@@ -13081,6 +13089,11 @@ export namespace Schemas {
          * @nullable
          */
       imported_mcp_servers?: ImportedMcpServer[] | null;
+      /**
+         * Names of desktop-only MCP servers the creating client (PostHog Code) relays into the cloud sandbox over the durable event/command channel. Names only — the server configuration (command, env, URL, headers) never crosses the wire.
+         * @nullable
+         */
+      relayed_mcp_servers?: RelayedMcpServer[] | null;
       /** Execution mode: 'interactive' for user-connected runs, 'background' for autonomous runs
        *
        * * `interactive` - interactive
@@ -13445,6 +13458,11 @@ export namespace Schemas {
          * @nullable
          */
       imported_mcp_servers?: ImportedMcpServer[] | null;
+      /**
+         * Names of desktop-only MCP servers the creating client (PostHog Code) relays into the cloud sandbox over the durable event/command channel. Names only — the server configuration (command, env, URL, headers) never crosses the wire.
+         * @nullable
+         */
+      relayed_mcp_servers?: RelayedMcpServer[] | null;
       /** Execution mode: 'interactive' for user-connected runs, 'background' for autonomous runs
        *
        * * `interactive` - interactive
@@ -31631,6 +31649,7 @@ export namespace Schemas {
      * * `close` - close
      * * `permission_response` - permission_response
      * * `set_config_option` - set_config_option
+     * * `mcp_response` - mcp_response
      */
     export type MethodEnum = typeof MethodEnum[keyof typeof MethodEnum];
 
@@ -31641,6 +31660,7 @@ export namespace Schemas {
       Close: 'close',
       PermissionResponse: 'permission_response',
       SetConfigOption: 'set_config_option',
+      McpResponse: 'mcp_response',
     } as const;
 
     /**
@@ -55153,6 +55173,11 @@ export namespace Schemas {
          * @nullable
          */
       imported_mcp_servers?: ImportedMcpServer[] | null;
+      /**
+         * Names of desktop-only MCP servers the creating client (PostHog Code) relays into the cloud sandbox over the durable event/command channel. Names only — the server configuration (command, env, URL, headers) never crosses the wire.
+         * @nullable
+         */
+      relayed_mcp_servers?: RelayedMcpServer[] | null;
       /** Execution environment for the new run. Use 'cloud' for remote sandbox runs and 'local' for desktop sessions.
        *
        * * `local` - local
@@ -55248,7 +55273,8 @@ export namespace Schemas {
        * * `cancel` - cancel
        * * `close` - close
        * * `permission_response` - permission_response
-       * * `set_config_option` - set_config_option */
+       * * `set_config_option` - set_config_option
+       * * `mcp_response` - mcp_response */
       method: MethodEnum;
       /** Parameters for the command */
       params?: TaskRunCommandRequestParams;
