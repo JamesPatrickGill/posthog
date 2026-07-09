@@ -351,6 +351,7 @@ the row lists both.
 | twilio                  | HTTP                        | requests                                                        | ✅                          |
 | typeform                | HTTP                        | requests + `rest_source.RESTClient`                             | ✅                          |
 | ubidots                 | HTTP                        | requests                                                        | ✅                          |
+| vapi                    | HTTP                        | requests                                                        | ✅                          |
 | vercel                  | HTTP                        | requests                                                        | ✅                          |
 | vitally                 | HTTP                        | requests + `rest_source.RESTClient`                             | ✅                          |
 | webflow                 | HTTP                        | requests                                                        | ✅                          |
@@ -740,7 +741,6 @@ doesn't conflict with concurrent PRs.
 - us_census
 - uservoice
 - vantage
-- vapi
 - veeqo
 - vespa
 - visma_economic
