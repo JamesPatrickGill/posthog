@@ -231,6 +231,7 @@ the row lists both.
 | mailosaur               | HTTP                        | requests                                                        | ✅                          |
 | marketstack             | HTTP                        | requests                                                        | ✅                          |
 | matomo                  | HTTP                        | requests                                                        | ✅                          |
+| maxio                   | HTTP                        | requests + `rest_source.RESTClient`                             | ✅                          |
 | mention                 | HTTP                        | requests                                                        | ✅                          |
 | meta_ads                | HTTP                        | requests                                                        | ✅                          |
 | metabase                | HTTP                        | requests                                                        | ✅                          |
@@ -588,7 +589,6 @@ doesn't conflict with concurrent PRs.
 - mailtrap
 - mantle
 - marketo
-- maxio
 - mendeley
 - mercado_ads
 - mercury
