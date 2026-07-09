@@ -66,6 +66,7 @@ const PipelineFailureRenderer = ({ issue }: { issue: HealthIssue }): JSX.Element
 
 const PathCleaningSuggestionsRenderer = ({ issue }: { issue: HealthIssue }): JSX.Element => {
     const rules: { regex?: string; alias?: string; match_count?: number }[] = issue.payload.rules ?? []
+    const sampledCount = issue.payload.sampled_path_count
     return (
         <div className="text-xs bg-surface-secondary rounded p-2 mt-1 space-y-1">
             {rules.map((rule, index) => (
@@ -74,7 +75,10 @@ const PathCleaningSuggestionsRenderer = ({ issue }: { issue: HealthIssue }): JSX
                     <IconArrowRight />
                     <code className="bg-fill-primary px-1 rounded">{rule.alias}</code>
                     {rule.match_count != null && (
-                        <span className="text-muted font-sans">matches {rule.match_count} paths</span>
+                        <span className="text-muted font-sans">
+                            groups {rule.match_count}
+                            {sampledCount ? ` of your top ${sampledCount}` : ''} paths
+                        </span>
                     )}
                 </div>
             ))}

@@ -45,7 +45,9 @@ export function PathCleaningSuggestionsBanner(): JSX.Element | null {
                             <code>{rule.regex}</code>
                             <IconArrowRight />
                             <code>{rule.alias}</code>
-                            <span className="text-secondary">matches {rule.match_count} paths</span>
+                            <span className="text-secondary">
+                                groups {rule.match_count} of your top {latestSuggestion.sampled_path_count} paths
+                            </span>
                         </div>
                     ))}
                 </div>
