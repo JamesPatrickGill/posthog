@@ -6,8 +6,14 @@ import { lemonToast } from '@posthog/lemon-ui'
 import api from 'lib/api'
 import { teamLogic } from 'scenes/teamLogic'
 
-import { webAnalyticsPathCleaningSuggestionsApply } from 'products/web_analytics/frontend/generated/api'
-import type { PathCleaningSuggestionIssueApi } from 'products/web_analytics/frontend/generated/api.schemas'
+import {
+    webAnalyticsPathCleaningSuggestionsApply,
+    webAnalyticsPathCleaningSuggestionsPreview,
+} from 'products/web_analytics/frontend/generated/api'
+import type {
+    PathCleaningSuggestionIssueApi,
+    PreviewPathCleaningSuggestionResponseApi,
+} from 'products/web_analytics/frontend/generated/api.schemas'
 
 import type { pathCleaningSuggestionsLogicType } from './pathCleaningSuggestionsLogicType'
 
@@ -38,8 +44,22 @@ export const pathCleaningSuggestionsLogic = kea<pathCleaningSuggestionsLogicType
         applySuggestion: (id: string) => ({ id }),
         dismissSuggestion: (id: string) => ({ id }),
         unhandleSuggestion: (id: string) => ({ id }),
+        openPreview: (id: string) => ({ id }),
+        closePreview: true,
     }),
     loaders(({ values }) => ({
+        preview: [
+            null as PreviewPathCleaningSuggestionResponseApi | null,
+            {
+                loadPreview: async ({ id }: { id: string }) => {
+                    if (!values.currentTeamId) {
+                        return null
+                    }
+                    return await webAnalyticsPathCleaningSuggestionsPreview(String(values.currentTeamId), id)
+                },
+                closePreview: () => null,
+            },
+        ],
         suggestions: [
             [] as PathCleaningSuggestionIssueApi[],
             {
@@ -67,6 +87,16 @@ export const pathCleaningSuggestionsLogic = kea<pathCleaningSuggestionsLogicType
                 unhandleSuggestion: (state, { id }) => state.filter((handledId) => handledId !== id),
             },
         ],
+        previewOpen: [
+            false,
+            {
+                openPreview: () => true,
+                closePreview: () => false,
+                // Applying or dismissing from the modal is a terminal action for the suggestion.
+                applySuggestion: () => false,
+                dismissSuggestion: () => false,
+            },
+        ],
     }),
     selectors({
         latestSuggestion: [
@@ -79,6 +109,13 @@ export const pathCleaningSuggestionsLogic = kea<pathCleaningSuggestionsLogicType
         ],
     }),
     listeners(({ values, actions }) => ({
+        openPreview: async ({ id }) => {
+            actions.loadPreview({ id })
+        },
+        loadPreviewFailure: () => {
+            actions.closePreview()
+            lemonToast.error('Could not load the preview. Please try again.')
+        },
         applySuggestion: async ({ id }) => {
             if (!values.currentTeamId) {
                 return

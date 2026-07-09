@@ -157,3 +157,44 @@ class TestPathCleaningSuggestionsAPI(APIBaseTest):
 
         response = self.client.post(self._url(f"{other_suggestion.id}/apply/"))
         self.assertEqual(response.status_code, status.HTTP_404_NOT_FOUND)
+
+    def test_preview_applies_rules_in_order_and_returns_only_changed_paths(self) -> None:
+        suggestion = self._make_suggestion(self.team)
+        sampled = [("/users/1/profile", 100), ("/about", 40)]
+        with patch.object(service, "sample_pathnames", return_value=sampled):
+            response = self.client.get(self._url(f"{suggestion.id}/preview/"))
+
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        body = response.json()
+        self.assertEqual(body["sampled_path_count"], 2)
+        self.assertEqual(body["changed_path_count"], 1)
+        self.assertEqual(
+            body["examples"], [{"before": "/users/1/profile", "after": "/users/<id>/profile", "views": 100}]
+        )
+
+    def test_preview_allows_read_scope_and_non_admin(self) -> None:
+        # The preview modal must work for read-only tokens and plain members — it changes nothing.
+        self.organization_membership.level = OrganizationMembership.Level.MEMBER
+        self.organization_membership.save()
+        suggestion = self._make_suggestion(self.team)
+        value = generate_random_token_personal()
+        PersonalAPIKey.objects.create(
+            user=self.user,
+            label="mcp-read",
+            secure_value=hash_key_value(value),
+            scopes=["web_analytics:read"],
+            scoped_teams=[self.team.id],
+        )
+        self.client.logout()
+        with patch.object(service, "sample_pathnames", return_value=[("/users/1/profile", 5)]):
+            response = self.client.get(
+                self._url(f"{suggestion.id}/preview/"), headers={"authorization": f"Bearer {value}"}
+            )
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+
+    def test_cannot_preview_another_teams_suggestion(self) -> None:
+        other_team = Team.objects.create(organization=Organization.objects.create(name="other-preview"))
+        other_suggestion = self._make_suggestion(other_team)
+
+        response = self.client.get(self._url(f"{other_suggestion.id}/preview/"))
+        self.assertEqual(response.status_code, status.HTTP_404_NOT_FOUND)

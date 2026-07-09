@@ -18,6 +18,7 @@ from products.web_analytics.backend.path_cleaning_suggestions.service import (
     apply_suggestions_to_team,
     build_suggestion_payload,
     generate_suggestions_for_team,
+    preview_rules_on_team,
 )
 
 SUGGESTIONS_KIND = "path_cleaning_suggestions"
@@ -73,6 +74,22 @@ class ApplyPathCleaningSuggestionResponseSerializer(serializers.Serializer):
     applied = serializers.IntegerField(help_text="Number of rules merged into the team's path_cleaning_filters.")
 
 
+class PathCleaningPreviewExampleSerializer(serializers.Serializer):
+    before = serializers.CharField(help_text="A real sampled path before the suggested rules are applied.")
+    after = serializers.CharField(help_text="The same path after all suggested rules run in order.")
+    views = serializers.IntegerField(help_text="Pageviews this path received in the sampling window.")
+
+
+class PreviewPathCleaningSuggestionResponseSerializer(serializers.Serializer):
+    examples = PathCleaningPreviewExampleSerializer(
+        many=True, help_text="Up to 20 before/after pairs for sampled paths the suggested rules would rewrite."
+    )
+    changed_path_count = serializers.IntegerField(
+        help_text="How many of the sampled paths the suggested rules rewrite in total."
+    )
+    sampled_path_count = serializers.IntegerField(help_text="How many top paths were sampled for this preview.")
+
+
 class WebAnalyticsPathCleaningSuggestionViewSet(TeamAndOrgViewSetMixin, viewsets.ViewSet):
     """Path-cleaning suggestions live as `path_cleaning_suggestions` health issues — list and
     dismiss them through the generic health-issues API. This viewset owns only the two
@@ -106,6 +123,23 @@ class WebAnalyticsPathCleaningSuggestionViewSet(TeamAndOrgViewSetMixin, viewsets
         return Response(
             {"status": result.status, "suggestion": PathCleaningSuggestionIssueSerializer.from_issue(issue)}
         )
+
+    @extend_schema(
+        operation_id="web_analytics_path_cleaning_suggestions_preview",
+        summary="Preview a path-cleaning suggestion on real paths",
+        description="Applies the suggestion's rules (in order) to a fresh sample of the team's top paths and returns "
+        "before/after pairs for the paths that would change. Computed on demand; path samples are never stored. "
+        "Nothing is modified.",
+        request=None,
+        responses={200: PreviewPathCleaningSuggestionResponseSerializer},
+    )
+    @action(detail=True, methods=["get"], required_scopes=["web_analytics:read"])
+    def preview(self, request: Request, pk: str | None = None, **kwargs: Any) -> Response:
+        issue = HealthIssue.objects.filter(team_id=self.team.id, kind=SUGGESTIONS_KIND, id=pk).first() if pk else None
+        if issue is None:
+            raise NotFound("No such path-cleaning suggestion.")
+        rules = [AnnotatedRule(**rule) for rule in (issue.payload or {}).get("rules", [])]
+        return Response(preview_rules_on_team(self.team, rules))
 
     @extend_schema(
         operation_id="web_analytics_path_cleaning_suggestions_apply",

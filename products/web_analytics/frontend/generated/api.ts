@@ -23,6 +23,7 @@ import type {
     PaginatedWebAnalyticsFilterPresetListApi,
     PatchedSavedHeatmapRequestApi,
     PatchedWebAnalyticsFilterPresetApi,
+    PreviewPathCleaningSuggestionResponseApi,
     RecordInteractionRequestApi,
     RecordInteractionResponseApi,
     RecordVisitResponseApi,
@@ -593,6 +594,28 @@ export const webAnalyticsPathCleaningSuggestionsApply = async (
         {
             ...options,
             method: 'POST',
+        }
+    )
+}
+
+export const getWebAnalyticsPathCleaningSuggestionsPreviewUrl = (projectId: string, id: string) => {
+    return `/api/projects/${projectId}/web_analytics_path_cleaning_suggestions/${id}/preview/`
+}
+
+/**
+ * Applies the suggestion's rules (in order) to a fresh sample of the team's top paths and returns before/after pairs for the paths that would change. Computed on demand; path samples are never stored. Nothing is modified.
+ * @summary Preview a path-cleaning suggestion on real paths
+ */
+export const webAnalyticsPathCleaningSuggestionsPreview = async (
+    projectId: string,
+    id: string,
+    options?: RequestInit
+): Promise<PreviewPathCleaningSuggestionResponseApi> => {
+    return apiMutator<PreviewPathCleaningSuggestionResponseApi>(
+        getWebAnalyticsPathCleaningSuggestionsPreviewUrl(projectId, id),
+        {
+            ...options,
+            method: 'GET',
         }
     )
 }

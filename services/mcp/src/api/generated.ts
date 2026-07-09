@@ -42914,6 +42914,15 @@ export namespace Schemas {
       variants?: unknown;
     }
 
+    export interface PathCleaningPreviewExample {
+      /** A real sampled path before the suggested rules are applied. */
+      before: string;
+      /** The same path after all suggested rules run in order. */
+      after: string;
+      /** Pageviews this path received in the sampling window. */
+      views: number;
+    }
+
     export interface PauseResponse {
       /** Always 'paused'. */
       status: string;
@@ -43207,6 +43216,15 @@ export namespace Schemas {
       emailable: boolean;
       /** Always true — the previewed interview_url is an illustrative placeholder, never a live link. */
       is_preview_link: boolean;
+    }
+
+    export interface PreviewPathCleaningSuggestionResponse {
+      /** Up to 20 before/after pairs for sampled paths the suggested rules would rewrite. */
+      examples: PathCleaningPreviewExample[];
+      /** How many of the sampled paths the suggested rules rewrite in total. */
+      changed_path_count: number;
+      /** How many top paths were sampled for this preview. */
+      sampled_path_count: number;
     }
 
     /**

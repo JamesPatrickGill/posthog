@@ -611,6 +611,24 @@ export interface ApplyPathCleaningSuggestionResponseApi {
     applied: number
 }
 
+export interface PathCleaningPreviewExampleApi {
+    /** A real sampled path before the suggested rules are applied. */
+    before: string
+    /** The same path after all suggested rules run in order. */
+    after: string
+    /** Pageviews this path received in the sampling window. */
+    views: number
+}
+
+export interface PreviewPathCleaningSuggestionResponseApi {
+    /** Up to 20 before/after pairs for sampled paths the suggested rules would rewrite. */
+    examples: PathCleaningPreviewExampleApi[]
+    /** How many of the sampled paths the suggested rules rewrite in total. */
+    changed_path_count: number
+    /** How many top paths were sampled for this preview. */
+    sampled_path_count: number
+}
+
 export interface SuggestedRuleApi {
     /** re2 pattern matching the dynamic path segment. */
     regex: string

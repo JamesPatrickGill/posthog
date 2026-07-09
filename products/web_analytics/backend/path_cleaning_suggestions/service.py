@@ -261,6 +261,49 @@ def build_suggestion_payload(result: TeamSuggestionResult) -> dict[str, Any]:
     }
 
 
+MAX_PREVIEW_EXAMPLES = 20
+
+
+def preview_rules_on_team(
+    team: Team,
+    rules: list[AnnotatedRule],
+    *,
+    days: int = DEFAULT_SAMPLE_DAYS,
+    limit: int = DEFAULT_SAMPLE_LIMIT,
+    max_examples: int = MAX_PREVIEW_EXAMPLES,
+) -> dict[str, Any]:
+    """Apply the suggested rules (in order, output feeding the next — exactly how ClickHouse
+    applies configured rules) to a fresh sample of the team's top paths. Returns before/after
+    pairs for the paths that change, computed on demand and never stored."""
+    compiled: list[tuple[Any, str]] = []
+    for rule in sorted(rules, key=lambda r: r.order):
+        try:
+            compiled.append((re2.compile(rule.regex), rule.alias))
+        except re2.error:
+            logger.info("path_cleaning_preview_invalid_regex", regex=rule.regex)
+
+    sampled = sample_pathnames(team, days=days, limit=limit)
+    examples: list[dict[str, Any]] = []
+    changed = 0
+    for path, views in sampled:
+        cleaned = path
+        for compiled_regex, alias in compiled:
+            try:
+                cleaned = compiled_regex.sub(alias, cleaned)
+            except (re2.error, IndexError):
+                continue
+        if cleaned != path:
+            changed += 1
+            if len(examples) < max_examples:
+                examples.append({"before": path, "after": cleaned, "views": views})
+
+    return {
+        "examples": examples,
+        "changed_path_count": changed,
+        "sampled_path_count": len(sampled),
+    }
+
+
 def apply_suggestions_to_team(team: Team, rules: list[AnnotatedRule]) -> int:
     """Merge suggested rules into the team's existing `path_cleaning_filters`. Never overwrites: rules
     whose regex already exists are skipped, new ones are appended after the current max order. Returns
