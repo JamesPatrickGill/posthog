@@ -65,10 +65,19 @@ class TestFetch:
         rows = together_ai._fetch(session, "https://api.together.xyz/v1/fine-tunes", "data", MagicMock())
         assert rows == [{"id": "ft-1"}]
 
-    def test_missing_data_key_yields_empty(self) -> None:
-        # A wrapped payload with no data array (e.g. empty account) is an empty collection, not an error.
+    def test_missing_data_key_raises_value_error(self) -> None:
+        # A wrapped payload missing its data key must fault, not default to []: these tables full-refresh,
+        # so silently treating a changed shape as empty would wipe previously synced rows. Bypass retries.
         session = MagicMock()
         session.get.return_value = _response_with_status(200, b'{"object": "list"}')
+        with pytest.raises(ValueError):
+            together_ai._fetch(session, "https://api.together.xyz/v1/files", "data", MagicMock())
+        assert session.get.call_count == 1
+
+    def test_empty_data_array_yields_empty(self) -> None:
+        # A wrapped payload whose data key is present but empty (e.g. empty account) is a valid empty collection.
+        session = MagicMock()
+        session.get.return_value = _response_with_status(200, b'{"object": "list", "data": []}')
         rows = together_ai._fetch(session, "https://api.together.xyz/v1/files", "data", MagicMock())
         assert rows == []
 

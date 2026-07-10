@@ -5,6 +5,7 @@ from urllib.parse import urlencode
 import requests
 from structlog.types import FilteringBoundLogger
 from tenacity import retry, retry_if_exception_type, stop_after_attempt, wait_exponential_jitter
+from urllib3.util.retry import Retry
 
 from products.warehouse_sources.backend.temporal.data_imports.pipelines.pipeline.typings import SourceResponse
 from products.warehouse_sources.backend.temporal.data_imports.sources.common.http import make_tracked_session
@@ -28,7 +29,11 @@ def _get_headers(api_key: str) -> dict[str, str]:
 def _make_session(api_key: str) -> requests.Session:
     # `redact_values` masks the bearer token in logged URLs and captured HTTP samples so a failed or
     # sampled request can never persist the raw Together AI credential in PostHog's HTTP telemetry.
-    return make_tracked_session(headers=_get_headers(api_key), redact_values=(api_key,))
+    # `retry=Retry(total=0)` disables the session's built-in retry layer: `_fetch` already retries
+    # 429/5xx (via `TogetherAIRetryableError`) and timeouts/connection errors through tenacity, so
+    # keeping the default urllib3 retries would stack a second layer and multiply requests against a
+    # rate-limited endpoint instead of backing off cleanly.
+    return make_tracked_session(headers=_get_headers(api_key), redact_values=(api_key,), retry=Retry(total=0))
 
 
 def _build_url(path: str, params: dict[str, Any] | None = None) -> str:
@@ -58,11 +63,19 @@ def _fetch(
         response.raise_for_status()
 
     payload = response.json()
-    # Some endpoints wrap rows in `{"data": [...]}`, others return a bare array (see settings.py).
-    rows = payload.get(data_key, []) if data_key else payload
-    # A shape mismatch (wrapped where we expected bare, proxy HTML, …) is a permanent API-contract
-    # violation, not a transient failure — raise a plain ValueError so it surfaces immediately
-    # instead of burning the retry budget on something retries can't fix.
+    # A shape mismatch (wrapped where we expected bare, proxy HTML, a status-200 error envelope, …) is
+    # a permanent API-contract violation, not a transient failure — raise a plain ValueError so it
+    # surfaces immediately instead of burning the retry budget on something retries can't fix. Crucially,
+    # a missing wrapper key must fault rather than default to `[]`: these tables sync with full refresh,
+    # so silently treating a changed shape as an empty collection would wipe previously synced rows.
+    if data_key:
+        # Some endpoints wrap rows in `{"data": [...]}` (see settings.py).
+        if not isinstance(payload, dict) or data_key not in payload:
+            raise ValueError(f"Together AI API returned an unexpected response shape: url={url}")
+        rows = payload[data_key]
+    else:
+        # Others return a bare array.
+        rows = payload
     if not isinstance(rows, list):
         raise ValueError(f"Together AI API returned an unexpected response shape: url={url}")
     return rows
