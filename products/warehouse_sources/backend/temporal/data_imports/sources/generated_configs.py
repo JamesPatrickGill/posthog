@@ -3806,7 +3806,7 @@ class TwelveDataSourceConfig(config.Config):
 
 @config.config
 class TwelveLabsSourceConfig(config.Config):
-    pass
+    api_key: str
 
 
 @config.config

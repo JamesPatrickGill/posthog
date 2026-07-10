@@ -371,6 +371,7 @@ the row lists both.
 | todoist                 | HTTP                        | requests                                                        | ✅                          |
 | trello                  | HTTP                        | requests                                                        | ✅                          |
 | tremendous              | HTTP                        | requests                                                        | ✅                          |
+| twelve_labs             | HTTP                        | requests                                                        | ✅                          |
 | twilio                  | HTTP                        | requests                                                        | ✅                          |
 | typeform                | HTTP                        | requests + `rest_source.RESTClient`                             | ✅                          |
 | ubidots                 | HTTP                        | requests                                                        | ✅                          |
@@ -811,7 +812,6 @@ doesn't conflict with concurrent PRs.
 - turso
 - tvmaze
 - twelve_data
-- twelve_labs
 - twenty
 - twitter
 - twitter_ads
