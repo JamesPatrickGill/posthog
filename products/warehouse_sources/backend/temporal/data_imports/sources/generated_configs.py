@@ -1143,7 +1143,7 @@ class DynamoDBSourceConfig(config.Config):
 
 @config.config
 class E2BSourceConfig(config.Config):
-    pass
+    api_key: str
 
 
 @config.config

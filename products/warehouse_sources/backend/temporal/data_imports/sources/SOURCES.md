@@ -138,6 +138,7 @@ the row lists both.
 | doit                    | HTTP                        | requests                                                        | ✅                          |
 | dropbox_sign            | HTTP                        | requests                                                        | ✅                          |
 | drip                    | HTTP                        | requests                                                        | ✅                          |
+| e2b                     | HTTP                        | requests                                                        | ✅                          |
 | e_conomic               | HTTP                        | requests                                                        | ✅                          |
 | easypost                | HTTP                        | requests                                                        | ✅                          |
 | easypromos              | HTTP                        | requests                                                        | ✅                          |
@@ -516,7 +517,6 @@ doesn't conflict with concurrent PRs.
 - dwolla
 - dynamics365
 - dynamodb
-- e2b
 - ebay
 - elevenlabs
 - eloqua
