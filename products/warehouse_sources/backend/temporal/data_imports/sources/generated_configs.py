@@ -2334,7 +2334,7 @@ class MissiveSourceConfig(config.Config):
 
 @config.config
 class MistralAISourceConfig(config.Config):
-    pass
+    api_key: str
 
 
 @config.config

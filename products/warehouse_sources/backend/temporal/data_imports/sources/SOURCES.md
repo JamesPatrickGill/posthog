@@ -241,6 +241,7 @@ the row lists both.
 | mention                 | HTTP                        | requests                                                        | ✅                          |
 | meta_ads                | HTTP                        | requests                                                        | ✅                          |
 | metabase                | HTTP                        | requests                                                        | ✅                          |
+| mistral_ai              | HTTP                        | requests                                                        | ✅                          |
 | mixmax                  | HTTP                        | requests                                                        | ✅                          |
 | mixpanel                | HTTP                        | requests                                                        | ✅                          |
 | mollie                  | HTTP                        | requests                                                        | ✅                          |
@@ -647,7 +648,6 @@ doesn't conflict with concurrent PRs.
 - mintlify
 - miro
 - missive
-- mistral_ai
 - mode
 - mono
 - nasa
