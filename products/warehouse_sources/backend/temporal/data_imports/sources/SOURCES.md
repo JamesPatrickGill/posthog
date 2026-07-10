@@ -132,6 +132,7 @@ the row lists both.
 | delighted               | HTTP                        | requests                                                        | ✅                          |
 | devin_ai                | HTTP                        | requests                                                        | ✅                          |
 | ding_connect            | HTTP                        | requests                                                        | ✅                          |
+| digitalocean            | HTTP                        | requests + `rest_source.RESTClient`                             | ✅                          |
 | dixa                    | HTTP                        | requests                                                        | ✅                          |
 | dockerhub               | HTTP                        | requests                                                        | ✅                          |
 | docuseal                | HTTP                        | requests                                                        | ✅                          |
@@ -506,7 +507,6 @@ doesn't conflict with concurrent PRs.
 - deepgram
 - deno_deploy
 - deputy
-- digitalocean
 - display_video_360
 - docusign
 - dolibarr
