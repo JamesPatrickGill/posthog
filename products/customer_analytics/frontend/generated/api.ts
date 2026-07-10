@@ -15,15 +15,18 @@ import type {
     AccountRelationshipApi,
     AccountRelationshipDefinitionApi,
     AccountRelationshipDefinitionsListParams,
+    AccountRelationshipWriteApi,
     AccountsListParams,
     AccountsNotebooksListParams,
     AccountsRelationshipsListParams,
     CustomPropertyDefinitionApi,
     CustomPropertyDefinitionsListParams,
+    CustomPropertyDefinitionsValuesRetrieveParams,
     CustomPropertySourceApi,
     CustomPropertySourceUpdateApi,
     CustomPropertySourcesListParams,
     CustomPropertyValueApi,
+    CustomPropertyValueSuggestionsResponseApi,
     CustomPropertyValueWriteApi,
     CustomerJourneyApi,
     CustomerJourneysListParams,
@@ -403,6 +406,40 @@ export const accountsRelationshipsList = async (
     })
 }
 
+export const getAccountsRelationshipsCreateUrl = (projectId: string, accountId: string) => {
+    return `/api/projects/${projectId}/accounts/${accountId}/relationships/`
+}
+
+export const accountsRelationshipsCreate = async (
+    projectId: string,
+    accountId: string,
+    accountRelationshipWriteApi: AccountRelationshipWriteApi,
+    options?: RequestInit
+): Promise<AccountRelationshipApi> => {
+    return apiMutator<AccountRelationshipApi>(getAccountsRelationshipsCreateUrl(projectId, accountId), {
+        ...options,
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', ...options?.headers },
+        body: JSON.stringify(accountRelationshipWriteApi),
+    })
+}
+
+export const getAccountsRelationshipsEndCreateUrl = (projectId: string, accountId: string, id: string) => {
+    return `/api/projects/${projectId}/accounts/${accountId}/relationships/${id}/end/`
+}
+
+export const accountsRelationshipsEndCreate = async (
+    projectId: string,
+    accountId: string,
+    id: string,
+    options?: RequestInit
+): Promise<AccountRelationshipApi> => {
+    return apiMutator<AccountRelationshipApi>(getAccountsRelationshipsEndCreateUrl(projectId, accountId, id), {
+        ...options,
+        method: 'POST',
+    })
+}
+
 export const getAccountsRetrieveUrl = (projectId: string, id: string) => {
     return `/api/projects/${projectId}/accounts/${id}/`
 }
@@ -575,6 +612,39 @@ export const customPropertyDefinitionsDestroy = async (
         ...options,
         method: 'DELETE',
     })
+}
+
+export const getCustomPropertyDefinitionsValuesRetrieveUrl = (
+    projectId: string,
+    params: CustomPropertyDefinitionsValuesRetrieveParams
+) => {
+    const normalizedParams = new URLSearchParams()
+
+    Object.entries(params || {}).forEach(([key, value]) => {
+        if (value !== undefined) {
+            normalizedParams.append(key, value === null ? 'null' : String(value))
+        }
+    })
+
+    const stringifiedParams = normalizedParams.toString()
+
+    return stringifiedParams.length > 0
+        ? `/api/projects/${projectId}/custom_property_definitions/values/?${stringifiedParams}`
+        : `/api/projects/${projectId}/custom_property_definitions/values/`
+}
+
+export const customPropertyDefinitionsValuesRetrieve = async (
+    projectId: string,
+    params: CustomPropertyDefinitionsValuesRetrieveParams,
+    options?: RequestInit
+): Promise<CustomPropertyValueSuggestionsResponseApi> => {
+    return apiMutator<CustomPropertyValueSuggestionsResponseApi>(
+        getCustomPropertyDefinitionsValuesRetrieveUrl(projectId, params),
+        {
+            ...options,
+            method: 'GET',
+        }
+    )
 }
 
 export const getCustomPropertySourcesListUrl = (projectId: string, params?: CustomPropertySourcesListParams) => {

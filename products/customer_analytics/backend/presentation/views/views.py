@@ -20,6 +20,7 @@ from uuid import UUID
 from drf_spectacular.types import OpenApiTypes
 from drf_spectacular.utils import OpenApiParameter, extend_schema
 from rest_framework import mixins, status, viewsets
+from rest_framework.decorators import action
 from rest_framework.exceptions import PermissionDenied, ValidationError
 from rest_framework.request import Request
 from rest_framework.response import Response
@@ -38,6 +39,7 @@ from products.customer_analytics.backend.presentation.views.serializers import (
     AccountNoteSerializer,
     AccountRelationshipDefinitionSerializer,
     AccountRelationshipSerializer,
+    AccountRelationshipWriteSerializer,
     AccountSerializer,
     CustomerJourneySerializer,
     CustomerProfileConfigSerializer,
@@ -45,6 +47,7 @@ from products.customer_analytics.backend.presentation.views.serializers import (
     CustomPropertySourceSerializer,
     CustomPropertySourceUpdateSerializer,
     CustomPropertyValueSerializer,
+    CustomPropertyValueSuggestionsResponseSerializer,
     CustomPropertyValueWriteSerializer,
 )
 
@@ -219,6 +222,33 @@ class CustomPropertyDefinitionViewSet(
         if definition is None:
             return Response({"detail": "Not found."}, status=status.HTTP_404_NOT_FOUND)
         return Response(CustomPropertyDefinitionSerializer(instance=definition).data)
+
+    @extend_schema(
+        parameters=[
+            OpenApiParameter(
+                name="key",
+                type=OpenApiTypes.STR,
+                location=OpenApiParameter.QUERY,
+                required=True,
+                description="Id of the custom property definition to suggest values for.",
+            ),
+            OpenApiParameter(
+                name="value",
+                type=OpenApiTypes.STR,
+                location=OpenApiParameter.QUERY,
+                required=False,
+                description="Case-insensitive substring to narrow the suggestions.",
+            ),
+        ],
+        responses={200: CustomPropertyValueSuggestionsResponseSerializer},
+    )
+    @action(methods=["GET"], detail=False, pagination_class=None)
+    def values(self, request: Request, *args, **kwargs) -> Response:
+        key = request.GET.get("key")
+        if not key:
+            return Response({"results": [], "refreshing": False})
+        suggestions = api.list_custom_property_value_suggestions(self.team_id, key, request.GET.get("value"))
+        return Response({"results": [{"name": value} for value in suggestions], "refreshing": False})
 
     def create(self, request: Request, *args, **kwargs) -> Response:
         serializer = CustomPropertyDefinitionSerializer(data=request.data)
@@ -1100,3 +1130,39 @@ class AccountRelationshipViewSet(TeamAndOrgViewSetMixin, AccessControlViewSetMix
             include_history=request.query_params.get("include_history", "").lower() == "true",
         )
         return Response(AccountRelationshipSerializer(relationships, many=True).data)
+
+    @extend_schema(request=AccountRelationshipWriteSerializer, responses={201: AccountRelationshipSerializer})
+    def create(self, request: Request, *args, **kwargs) -> Response:
+        account_id = self._accessible_account_id()
+        if account_id is None:
+            return Response({"detail": "Not found."}, status=status.HTTP_404_NOT_FOUND)
+        write = AccountRelationshipWriteSerializer(data=request.data)
+        write.is_valid(raise_exception=True)
+        try:
+            relationship = api.assign_account_relationship(
+                team_id=self.team_id,
+                account_id=account_id,
+                definition_id=write.validated_data["definition"],
+                user_id=write.validated_data["user"],
+                created_by=cast(User, request.user),
+            )
+        except api.Account_DoesNotExist:
+            return Response({"detail": "Not found."}, status=status.HTTP_404_NOT_FOUND)
+        except api.AccountRelationshipDefinitionNotFound:
+            raise ValidationError({"definition": "Relationship definition not found."})
+        except api.AccountRelationshipAssigneeNotInOrganization:
+            raise ValidationError({"user": "User is not a member of this organization."})
+        return Response(AccountRelationshipSerializer(relationship).data, status=status.HTTP_201_CREATED)
+
+    @extend_schema(request=None, responses={200: AccountRelationshipSerializer})
+    @action(methods=["POST"], detail=True)
+    def end(self, request: Request, *args, **kwargs) -> Response:
+        account_id = self._accessible_account_id()
+        if account_id is None:
+            return Response({"detail": "Not found."}, status=status.HTTP_404_NOT_FOUND)
+        relationship = api.end_account_relationship(
+            team_id=self.team_id, account_id=account_id, relationship_id=self.kwargs["pk"]
+        )
+        if relationship is None:
+            return Response({"detail": "Not found."}, status=status.HTTP_404_NOT_FOUND)
+        return Response(AccountRelationshipSerializer(relationship).data)

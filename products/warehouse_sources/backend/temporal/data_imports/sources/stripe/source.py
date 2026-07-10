@@ -161,7 +161,7 @@ class StripeSource(
                                             name="stripe_secret_key",
                                             label="API key",
                                             type=SourceFieldInputConfigType.PASSWORD,
-                                            required=False,
+                                            required=True,
                                             placeholder="rk_live_...",
                                             caption=f"Create a [restricted API key]({STRIPE_API_KEYS_URL}) with the pre-defined permissions",
                                             secret=True,
@@ -178,7 +178,7 @@ class StripeSource(
                                         SourceFieldOauthConfig(
                                             name="stripe_integration_id",
                                             label="Stripe account",
-                                            required=False,
+                                            required=True,
                                             kind="stripe",
                                         ),
                                     ],

@@ -517,6 +517,27 @@ class CustomPropertyValueSerializer(serializers.Serializer):
     )
 
 
+class CustomPropertyValueSuggestionSerializer(serializers.Serializer):
+    """One suggested filter value for a custom property."""
+
+    name = serializers.CharField(read_only=True, help_text="A suggested value for the custom property.")
+
+
+class CustomPropertyValueSuggestionsResponseSerializer(serializers.Serializer):
+    """Response shape of the custom property value-suggestions endpoint.
+
+    Matches the contract of the shared property-values picker (``propertyDefinitionsModel``
+    on the frontend), which expects ``{results: [{name}], refreshing}``.
+    """
+
+    results = CustomPropertyValueSuggestionSerializer(
+        many=True, read_only=True, help_text="Suggested values matching the search input."
+    )
+    refreshing = serializers.BooleanField(
+        read_only=True, help_text="Always false — present for compatibility with the property-values consumer."
+    )
+
+
 class AccountRelationshipDefinitionSerializer(DataclassSerializer):
     """A team-defined account relationship type (CSM, Onboarding manager, ...)."""
 
@@ -573,3 +594,12 @@ class AccountRelationshipSerializer(DataclassSerializer):
         dataclass = AccountRelationship
         ref_name = "AccountRelationship"
         fields = ["id", "definition", "user", "started_at", "ended_at"]
+
+
+class AccountRelationshipWriteSerializer(serializers.Serializer):
+    """Input for assigning a user to an account relationship."""
+
+    definition = serializers.UUIDField(help_text="Id of the relationship definition to assign.")
+    user = serializers.IntegerField(
+        help_text="PostHog user id of the assignee. Must be a member of the account's organization."
+    )
