@@ -214,6 +214,7 @@ the row lists both.
 | justsift                | HTTP                        | requests                                                        | ✅                          |
 | k6_cloud                | HTTP                        | requests                                                        | ✅                          |
 | katana                  | HTTP                        | requests                                                        | ✅                          |
+| kernel                  | HTTP                        | requests                                                        | ✅                          |
 | klaviyo                 | HTTP                        | requests                                                        | ✅                          |
 | lago                    | HTTP                        | requests                                                        | ✅                          |
 | launchdarkly            | HTTP                        | requests                                                        | ✅                          |
@@ -602,7 +603,6 @@ doesn't conflict with concurrent PRs.
 - kafka
 - kapa_ai
 - keka
-- kernel
 - kisi
 - kissmetrics
 - klarna
