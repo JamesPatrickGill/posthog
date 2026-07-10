@@ -180,6 +180,7 @@ the row lists both.
 | gong                    | HTTP                        | requests                                                        | ✅                          |
 | google_ads              | gRPC                        | google-ads (googleads.client)                                   | ✅                          |
 | google_analytics        | HTTP                        | requests (`AuthorizedSession` + `TrackedHTTPAdapter`)           | ✅                          |
+| google_pagespeed_insights | HTTP                      | requests                                                        | ✅                          |
 | google_sheets           | HTTP (vendor SDK)           | gspread                                                         | ✅                          |
 | google_webfonts         | HTTP                        | requests                                                        | ✅                          |
 | granola                 | HTTP                        | requests                                                        | ✅                          |
@@ -557,7 +558,6 @@ doesn't conflict with concurrent PRs.
 - google_directory
 - google_drive
 - google_forms
-- google_pagespeed_insights
 - google_tasks
 - google_workspace_admin_reports
 - grafana
