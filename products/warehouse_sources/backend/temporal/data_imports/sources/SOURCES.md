@@ -130,6 +130,7 @@ the row lists both.
 | datadog                 | HTTP                        | requests                                                        | ✅                          |
 | deel                    | HTTP                        | requests                                                        | ✅                          |
 | delighted               | HTTP                        | requests                                                        | ✅                          |
+| deno_deploy             | HTTP                        | requests                                                        | ✅                          |
 | devin_ai                | HTTP                        | requests                                                        | ✅                          |
 | ding_connect            | HTTP                        | requests                                                        | ✅                          |
 | dixa                    | HTTP                        | requests                                                        | ✅                          |
@@ -504,7 +505,6 @@ doesn't conflict with concurrent PRs.
 - dbt
 - decagon
 - deepgram
-- deno_deploy
 - deputy
 - digitalocean
 - display_video_360
