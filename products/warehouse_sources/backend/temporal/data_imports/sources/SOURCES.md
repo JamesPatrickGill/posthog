@@ -375,6 +375,7 @@ the row lists both.
 | typeform                | HTTP                        | requests + `rest_source.RESTClient`                             | ✅                          |
 | ubidots                 | HTTP                        | requests                                                        | ✅                          |
 | unleash                 | HTTP                        | requests                                                        | ✅                          |
+| unstructured            | HTTP                        | requests                                                        | ✅                          |
 | vercel                  | HTTP                        | requests                                                        | ✅                          |
 | vitally                 | HTTP                        | requests + `rest_source.RESTClient`                             | ✅                          |
 | webflow                 | HTTP                        | requests                                                        | ✅                          |
@@ -817,7 +818,6 @@ doesn't conflict with concurrent PRs.
 - twitter_ads
 - tyntec_sms
 - unleash
-- unstructured
 - uppromote
 - upstash
 - uptick
