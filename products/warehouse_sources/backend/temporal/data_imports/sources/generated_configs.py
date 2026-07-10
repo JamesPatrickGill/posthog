@@ -4121,7 +4121,7 @@ class ZenloopSourceConfig(config.Config):
 
 @config.config
 class ZepSourceConfig(config.Config):
-    pass
+    api_key: str
 
 
 @config.config
