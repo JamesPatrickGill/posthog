@@ -1672,7 +1672,9 @@ class HarveySourceConfig(config.Config):
 
 @config.config
 class HatchetSourceConfig(config.Config):
-    pass
+    api_token: str
+    host: str | None = None
+    tenant_id: str | None = None
 
 
 @config.config

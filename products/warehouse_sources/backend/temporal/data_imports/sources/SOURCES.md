@@ -188,6 +188,7 @@ the row lists both.
 | gridly                  | HTTP                        | requests                                                        | ✅                          |
 | guardian                | HTTP                        | requests                                                        | ✅                          |
 | guru                    | HTTP                        | requests                                                        | ✅                          |
+| hatchet                 | HTTP                        | requests                                                        | ✅                          |
 | height                  | HTTP                        | requests                                                        | ✅                          |
 | hellobaton              | HTTP                        | requests                                                        | ✅                          |
 | hibob                   | HTTP                        | requests                                                        | ✅                          |
@@ -568,7 +569,6 @@ doesn't conflict with concurrent PRs.
 - gusto
 - harness
 - harvey
-- hatchet
 - healthchecks
 - heap
 - helicone
