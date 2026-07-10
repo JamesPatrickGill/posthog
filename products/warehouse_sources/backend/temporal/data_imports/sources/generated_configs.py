@@ -1713,7 +1713,7 @@ class HerokuSourceConfig(config.Config):
 
 @config.config
 class HetznerSourceConfig(config.Config):
-    pass
+    api_token: str
 
 
 @config.config
