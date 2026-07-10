@@ -129,6 +129,7 @@ the row lists both.
 | customer_io             | HTTP + Webhook              | requests + `WebhookSourceManager`                               | ✅ (App API) / ➖ (webhook) |
 | datadog                 | HTTP                        | requests                                                        | ✅                          |
 | deel                    | HTTP                        | requests                                                        | ✅                          |
+| deepgram                | HTTP                        | requests                                                        | ✅                          |
 | delighted               | HTTP                        | requests                                                        | ✅                          |
 | devin_ai                | HTTP                        | requests                                                        | ✅                          |
 | ding_connect            | HTTP                        | requests                                                        | ✅                          |
@@ -503,7 +504,6 @@ doesn't conflict with concurrent PRs.
 - db2
 - dbt
 - decagon
-- deepgram
 - deno_deploy
 - deputy
 - digitalocean
