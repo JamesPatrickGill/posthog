@@ -14,7 +14,7 @@ import datetime
 import datetime as dt
 import ipaddress
 import dataclasses
-from collections.abc import Callable, Generator, Mapping, Sequence
+from collections.abc import Callable, Generator, Iterable, Mapping, Sequence
 from contextlib import contextmanager, suppress
 from enum import Enum
 from functools import lru_cache, wraps
@@ -1735,7 +1735,7 @@ def filters_override_requested_by_client(request: Request, dashboard: Optional["
 
 
 def variables_override_requested_by_client(
-    request: Optional[Request], dashboard: Optional["Dashboard"], variables: list["InsightVariable"]
+    request: Optional[Request], dashboard: Optional["Dashboard"], variables: Iterable["InsightVariable"]
 ) -> Optional[dict[str, dict]]:
     from posthog.auth import SharingAccessTokenAuthentication, SharingPasswordProtectedAuthentication
 
