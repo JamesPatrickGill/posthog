@@ -127,6 +127,7 @@ from products.dashboards.backend.widget_registry import (
 )
 from products.mcp_analytics.backend.dashboard_templates import get_mcp_analytics_default_template
 from products.product_analytics.backend.api.insight import (
+    INCLUDE_DASHBOARDS_PARAMETER,
     DashboardTileBasicSerializer,
     InsightSerializer,
     InsightViewSet,
@@ -2068,6 +2069,9 @@ class DashboardSerializer(DashboardMetadataSerializer):
             ),
         ],
     ),
+    # Dashboards nest insight payloads, so the deprecated-`dashboards`-field opt-in applies to
+    # `tiles[].insight` here too.
+    retrieve=extend_schema(parameters=[INCLUDE_DASHBOARDS_PARAMETER]),
     partial_update=extend_schema(request=PatchedDashboardOpenApiSerializer),
 )
 class DashboardsViewSet(
