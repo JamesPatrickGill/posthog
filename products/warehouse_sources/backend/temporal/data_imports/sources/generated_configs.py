@@ -3874,7 +3874,8 @@ class UpPromoteSourceConfig(config.Config):
 
 @config.config
 class UpstashSourceConfig(config.Config):
-    pass
+    email: str
+    api_key: str
 
 
 @config.config
