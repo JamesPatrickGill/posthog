@@ -49,6 +49,7 @@ the row lists both.
 | aha                     | HTTP                        | requests                                                        | ✅                          |
 | aircall                 | HTTP                        | requests                                                        | ✅                          |
 | airtable                | HTTP                        | requests                                                        | ✅                          |
+| aiven                   | HTTP                        | requests                                                        | ✅                          |
 | algolia                 | HTTP                        | requests                                                        | ✅                          |
 | alpha_vantage           | HTTP                        | requests                                                        | ✅                          |
 | amazon_ads              | HTTP                        | requests                                                        | ✅                          |
@@ -434,7 +435,6 @@ doesn't conflict with concurrent PRs.
 - aikido_security
 - airbyte
 - airops
-- aiven
 - akeneo
 - alguna
 - alpaca_broker_api
