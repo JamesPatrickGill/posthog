@@ -554,8 +554,15 @@ SPECTACULAR_SETTINGS = {
         "UserInterviewSearchDocumentTypeEnum": "products.user_interviews.backend.facade.enums.SEARCH_DOCUMENT_TYPES",
         "BatchExportRunStatusEnum": "products.batch_exports.backend.models.batch_export.BatchExportRun.Status",
         "HeatmapType": "products.web_analytics.backend.models.heatmap_saved.SavedHeatmap.Type",
+        # Pin the subscriptions target enum to its existing name so adding customer_analytics'
+        # `target_type` (below, inline-list category) doesn't auto-rename this shared-basename enum
+        # and churn subscriptions' generated types.
+        "TargetTypeEnum": "products.exports.backend.models.subscription.Subscription.SubscriptionTarget",
         # --- Inline value lists (type-hint enums, no x-spec-enum-id) ---
         "PropertyGroupOperator": ["AND", "OR"],
+        # Pin the customer_analytics custom-property target so it doesn't auto-collide with the
+        # subscriptions `target_type` enum (which would rename subscriptions' generated type).
+        "CustomPropertyDefinitionTargetType": ["account", "person"],
         # The metrics query's OTel metric-type filter; without a pinned name it
         # collides with the experiments MetricTypeEnum (funnel/ratio/...).
         "OtelMetricTypeEnum": ["gauge", "sum", "histogram", "exponential_histogram", "summary"],
