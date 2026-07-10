@@ -4089,7 +4089,7 @@ class ZapSignSourceConfig(config.Config):
 
 @config.config
 class ZapierSupportedStorageSourceConfig(config.Config):
-    pass
+    secret: str
 
 
 @config.config
