@@ -338,6 +338,7 @@ the row lists both.
 | shortio                 | HTTP                        | requests                                                        | ✅                          |
 | simplecast              | HTTP                        | requests                                                        | ✅                          |
 | simplesat               | HTTP                        | requests                                                        | ✅                          |
+| skyvern                 | HTTP                        | requests                                                        | ✅                          |
 | slack                   | HTTP                        | requests + `rest_source.RESTClient`                             | ✅                          |
 | smaily                  | HTTP                        | requests                                                        | ✅                          |
 | smartreach              | HTTP                        | requests                                                        | ✅                          |
@@ -769,7 +770,6 @@ doesn't conflict with concurrent PRs.
 - simfin
 - simplecast
 - simplesat
-- skyvern
 - slash
 - smaily
 - smartengage
