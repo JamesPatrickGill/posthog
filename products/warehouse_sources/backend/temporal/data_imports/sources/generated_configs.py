@@ -3272,7 +3272,7 @@ class SavvyCalSourceConfig(config.Config):
 
 @config.config
 class ScaleAISourceConfig(config.Config):
-    pass
+    api_key: str
 
 
 @config.config
