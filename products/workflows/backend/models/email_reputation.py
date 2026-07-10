@@ -4,32 +4,34 @@ from posthog.models.scoping.root_mixin import TeamScopedRootMixin
 from posthog.models.utils import UUIDModel
 
 
-class EmailReputationState(TeamScopedRootMixin, UUIDModel):
+class EmailReputationSnapshot(TeamScopedRootMixin, UUIDModel):
     """
-    Tracks per-workflow and per-tenant email deliverability reputation so a single bad sender can be
-    warned and paused before AWS SES reacts at the shared-account level.
+    Append-only daily snapshots of per-workflow and per-tenant email deliverability reputation
+    (bounce/complaint rates from app_metrics2), written by the Node Temporal evaluator via raw SQL.
 
     One row per workflow (``hog_flow`` set, ``scope=WORKFLOW``) plus one aggregate row per team
-    (``hog_flow`` null, ``scope=TEAM``). Written primarily by the Node Temporal evaluator via raw SQL;
-    read by Django for the workflow reputation banner and the manual re-enable action.
+    (``hog_flow`` null, ``scope=TEAM``) per evaluation run, so the table doubles as a time series
+    for trend dashboards. Calculation only — enforcement (pausing bad senders) ships separately.
     """
 
     class Meta:
-        db_table = "posthog_emailreputationstate"
+        db_table = "posthog_emailreputationsnapshot"
         constraints = [
+            # One snapshot per target per run; the Node evaluator inserts ON CONFLICT DO NOTHING
+            # against these so Temporal activity retries are idempotent.
             models.UniqueConstraint(
-                fields=["team", "hog_flow"],
+                fields=["team", "hog_flow", "evaluated_at"],
                 condition=models.Q(hog_flow__isnull=False),
-                name="unique_workflow_reputation",
+                name="unique_workflow_reputation_snapshot",
             ),
             models.UniqueConstraint(
-                fields=["team"],
+                fields=["team", "evaluated_at"],
                 condition=models.Q(hog_flow__isnull=True),
-                name="unique_team_reputation",
+                name="unique_team_reputation_snapshot",
             ),
         ]
         indexes = [
-            models.Index(fields=["team", "state"]),
+            models.Index(fields=["team", "evaluated_at"]),
         ]
 
     class Scope(models.TextChoices):
@@ -37,39 +39,26 @@ class EmailReputationState(TeamScopedRootMixin, UUIDModel):
         TEAM = "team"
 
     class State(models.TextChoices):
+        INSUFFICIENT_DATA = "insufficient_data"
         HEALTHY = "healthy"
-        WARNED = "warned"
-        PAUSED = "paused"
-
-    class Reason(models.TextChoices):
-        BOUNCE = "bounce"
-        COMPLAINT = "complaint"
+        WARNING = "warning"
+        CRITICAL = "critical"
 
     # db_constraint=False: posthog_team is a hot table; a real FK constraint would lock it on deploy.
     team = models.ForeignKey("posthog.Team", on_delete=models.CASCADE, db_constraint=False)
     # Null hog_flow marks the team-level aggregate row.
     hog_flow = models.ForeignKey("workflows.HogFlow", on_delete=models.CASCADE, null=True, blank=True)
     scope = models.CharField(max_length=20, choices=Scope)
-    state = models.CharField(max_length=20, choices=State, default=State.HEALTHY)
+    state = models.CharField(max_length=20, choices=State)
 
-    # Rates and sample size from the most recent evaluation window.
     bounce_rate = models.FloatField(default=0.0)
     complaint_rate = models.FloatField(default=0.0)
     emails_sent = models.BigIntegerField(default=0)
 
-    window_end = models.DateTimeField(null=True, blank=True)
-    evaluated_at = models.DateTimeField(null=True, blank=True)
-    state_changed_at = models.DateTimeField(null=True, blank=True)
-    warned_at = models.DateTimeField(null=True, blank=True)
-    paused_at = models.DateTimeField(null=True, blank=True)
-
-    pause_reason = models.CharField(max_length=20, choices=Reason, null=True, blank=True)
-    # Status each workflow held before the evaluator auto-paused it, so manual re-enable can restore it.
-    previous_flow_status = models.CharField(max_length=20, null=True, blank=True)
-
+    # End of the evaluated rolling window; shared by all rows of one evaluator run.
+    evaluated_at = models.DateTimeField()
     created_at = models.DateTimeField(auto_now_add=True)
-    updated_at = models.DateTimeField(auto_now=True)
 
     def __str__(self) -> str:
         target = f"hog_flow {self.hog_flow_id}" if self.hog_flow_id else "team"
-        return f"EmailReputationState({target}, {self.state})"
+        return f"EmailReputationSnapshot({target}, {self.state}, {self.evaluated_at})"

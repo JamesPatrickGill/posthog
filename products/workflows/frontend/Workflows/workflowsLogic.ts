@@ -1,4 +1,4 @@
-import { actions, connect, kea, key, listeners, path, reducers, selectors } from 'kea'
+import { actions, kea, key, listeners, path, reducers, selectors } from 'kea'
 import { loaders } from 'kea-loaders'
 import { router } from 'kea-router'
 
@@ -6,13 +6,9 @@ import { LemonDialog, lemonToast } from '@posthog/lemon-ui'
 
 import api from 'lib/api'
 import { createFuse, Fuse } from 'lib/utils/fuseSearch'
-import { projectLogic } from 'scenes/projectLogic'
 import { urls } from 'scenes/urls'
 
 import { deleteFromTree } from '~/layout/panel-layout/ProjectTree/projectTreeLogic'
-
-import { hogFlowsReputationRetrieve } from 'products/workflows/frontend/generated/api'
-import type { EmailReputationStateApi } from 'products/workflows/frontend/generated/api.schemas'
 
 import type { HogFlow } from './hogflows/types'
 import type { workflowsLogicType } from './workflowsLogicType'
@@ -28,9 +24,6 @@ export interface WorkflowsFilters {
 export const workflowsLogic = kea<workflowsLogicType>([
     key(() => 'workflowsLogic'),
     path(['products', 'workflows', 'frontend', 'workflowsLogic']),
-    connect(() => ({
-        values: [projectLogic, ['currentProjectId']],
-    })),
     actions({
         toggleWorkflowStatus: (workflow: HogFlow) => ({ workflow }),
         duplicateWorkflow: (workflow: HogFlow) => ({ workflow }),
@@ -84,18 +77,6 @@ export const workflowsLogic = kea<workflowsLogicType>([
         ],
     }),
     loaders(({ actions, values }) => ({
-        teamReputation: [
-            null as EmailReputationStateApi | null,
-            {
-                loadTeamReputation: async () => {
-                    if (!values.currentProjectId) {
-                        return null
-                    }
-                    const response = await hogFlowsReputationRetrieve(String(values.currentProjectId))
-                    return response.reputation ?? null
-                },
-            },
-        ],
         workflows: [
             [] as HogFlow[],
             {

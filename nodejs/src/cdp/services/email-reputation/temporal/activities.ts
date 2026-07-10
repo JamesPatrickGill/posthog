@@ -1,21 +1,31 @@
 import { EmailReputationService } from '../email-reputation.service'
-import { EmailMetricsRow, EvaluationSummary, ReputationTransitionPayload } from '../types'
+import { BatchEvaluationSummary } from '../types'
+
+export interface EvaluationPlan {
+    teamIds: number[]
+    batchSize: number
+    batchDelayMs: number
+}
 
 export interface EmailReputationActivities {
-    fetchEmailMetrics: () => Promise<EmailMetricsRow[]>
-    evaluateAndEnforce: (metrics: EmailMetricsRow[]) => Promise<EvaluationSummary>
-    notifyTransitions: (transitions: ReputationTransitionPayload[]) => Promise<void>
+    fetchTeamsToEvaluate: (evaluatedAt: string) => Promise<EvaluationPlan>
+    evaluateTeamBatch: (teamIds: number[], evaluatedAt: string) => Promise<BatchEvaluationSummary>
 }
 
 /**
- * Activity payloads ride Temporal workflow history (~2 MiB cap per payload). The metric rows are
- * one small row per workflow that sent email in the window, so they stay far below the limit; if
- * per-recipient data is ever added, pass it by reference instead.
+ * Activity payloads ride Temporal workflow history (~2 MiB cap per payload). Only team ids and
+ * counts cross the boundary — metric rows and snapshots stay inside the batch activity.
  */
-export function createActivities(service: EmailReputationService): EmailReputationActivities {
+export function createActivities(
+    service: EmailReputationService,
+    pacing: { batchSize: number; batchDelayMs: number }
+): EmailReputationActivities {
     return {
-        fetchEmailMetrics: () => service.fetchEmailMetrics(),
-        evaluateAndEnforce: (metrics) => service.evaluateAndEnforce(metrics),
-        notifyTransitions: (transitions) => service.notifyTransitions(transitions),
+        fetchTeamsToEvaluate: async (evaluatedAt) => ({
+            teamIds: await service.fetchTeamsToEvaluate(evaluatedAt),
+            batchSize: pacing.batchSize,
+            batchDelayMs: pacing.batchDelayMs,
+        }),
+        evaluateTeamBatch: (teamIds, evaluatedAt) => service.evaluateTeamBatch(teamIds, evaluatedAt),
     }
 }

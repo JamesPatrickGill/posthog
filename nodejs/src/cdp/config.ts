@@ -154,15 +154,16 @@ export type CdpConfig = ClickhouseConfig & {
     CYCLOTRON_NODE_JANITOR_MAX_TOUCH_COUNT: number
     CYCLOTRON_NODE_JANITOR_CLEANUP_GRACE_MS: number
 
-    // Email reputation evaluator (Temporal-scheduled bounce/complaint guard for workflows email)
-    EMAIL_REPUTATION_EVALUATION_INTERVAL_MINUTES: number
+    // Email reputation evaluator (daily Temporal-scheduled bounce/complaint snapshots for workflows email)
+    EMAIL_REPUTATION_EVALUATION_HOUR_UTC: number
     EMAIL_REPUTATION_WINDOW_HOURS: number
     EMAIL_REPUTATION_MIN_SENDS: number
-    EMAIL_REPUTATION_BOUNCE_WARN_RATE: number
-    EMAIL_REPUTATION_BOUNCE_PAUSE_RATE: number
-    EMAIL_REPUTATION_COMPLAINT_WARN_RATE: number
-    EMAIL_REPUTATION_COMPLAINT_PAUSE_RATE: number
-    EMAIL_REPUTATION_WARN_GRACE_MINUTES: number
+    EMAIL_REPUTATION_BOUNCE_WARNING_RATE: number
+    EMAIL_REPUTATION_BOUNCE_CRITICAL_RATE: number
+    EMAIL_REPUTATION_COMPLAINT_WARNING_RATE: number
+    EMAIL_REPUTATION_COMPLAINT_CRITICAL_RATE: number
+    EMAIL_REPUTATION_BATCH_SIZE: number
+    EMAIL_REPUTATION_BATCH_DELAY_SECONDS: number
 }
 
 export function getDefaultCdpConfig(): CdpConfig {
@@ -300,15 +301,16 @@ export function getDefaultCdpConfig(): CdpConfig {
         CYCLOTRON_NODE_JANITOR_MAX_TOUCH_COUNT: 3,
         CYCLOTRON_NODE_JANITOR_CLEANUP_GRACE_MS: 10000,
 
-        // Warn ahead of AWS SES's review lines (5% bounce / 0.1% complaint), pause before they're
-        // breached badly enough to endanger the shared sending account.
-        EMAIL_REPUTATION_EVALUATION_INTERVAL_MINUTES: 30,
+        // Thresholds sit ahead of AWS SES's review lines (5% bounce / 0.1% complaint at ~0.5%
+        // escalation). Calculation only for now — enforcement ships separately.
+        EMAIL_REPUTATION_EVALUATION_HOUR_UTC: 6,
         EMAIL_REPUTATION_WINDOW_HOURS: 24,
         EMAIL_REPUTATION_MIN_SENDS: 100,
-        EMAIL_REPUTATION_BOUNCE_WARN_RATE: 0.02,
-        EMAIL_REPUTATION_BOUNCE_PAUSE_RATE: 0.05,
-        EMAIL_REPUTATION_COMPLAINT_WARN_RATE: 0.001,
-        EMAIL_REPUTATION_COMPLAINT_PAUSE_RATE: 0.005,
-        EMAIL_REPUTATION_WARN_GRACE_MINUTES: 120,
+        EMAIL_REPUTATION_BOUNCE_WARNING_RATE: 0.02,
+        EMAIL_REPUTATION_BOUNCE_CRITICAL_RATE: 0.05,
+        EMAIL_REPUTATION_COMPLAINT_WARNING_RATE: 0.001,
+        EMAIL_REPUTATION_COMPLAINT_CRITICAL_RATE: 0.005,
+        EMAIL_REPUTATION_BATCH_SIZE: 50,
+        EMAIL_REPUTATION_BATCH_DELAY_SECONDS: 30,
     }
 }

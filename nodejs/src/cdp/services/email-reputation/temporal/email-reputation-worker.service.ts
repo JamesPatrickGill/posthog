@@ -4,11 +4,9 @@ import { DataConverter } from '@temporalio/common'
 import { NativeConnection, Worker } from '@temporalio/worker'
 import * as fs from 'fs/promises'
 
-import { InternalFetchService } from '~/common/services/internal-fetch'
 import { EncryptionCodec } from '~/common/temporal/codec'
 import { PostgresRouter } from '~/common/utils/db/postgres'
 import { logger } from '~/common/utils/logger'
-import { PubSub } from '~/common/utils/pubsub'
 import {
     HealthCheckResult,
     HealthCheckResultError,
@@ -25,8 +23,8 @@ export const EMAIL_REPUTATION_SCHEDULE_ID = 'email-reputation-evaluation'
 export const EMAIL_REPUTATION_WORKFLOW_TYPE = 'emailReputationEvaluation'
 
 /**
- * Hosts the Temporal worker for email reputation evaluation inside the plugin server and
- * idempotently ensures the Temporal Schedule that triggers it. Follows the session-replay
+ * Hosts the Temporal worker for the daily email reputation snapshot run inside the plugin server
+ * and idempotently ensures the Temporal Schedule that triggers it. Follows the session-replay
  * rasterizer's Temporal setup (TLS + payload encryption) but registers a TS workflow via
  * workflowsPath rather than activities only.
  */
@@ -38,7 +36,7 @@ export class EmailReputationWorkerService {
 
     constructor(
         private config: PluginsServerConfig,
-        private deps: { postgres: PostgresRouter; pubSub: PubSub }
+        private deps: { postgres: PostgresRouter }
     ) {}
 
     public async start(): Promise<void> {
@@ -54,7 +52,10 @@ export class EmailReputationWorkerService {
             namespace,
             taskQueue: EMAIL_REPUTATION_TASK_QUEUE,
             workflowsPath: require.resolve('./workflow'),
-            activities: createActivities(service),
+            activities: createActivities(service, {
+                batchSize: this.config.EMAIL_REPUTATION_BATCH_SIZE,
+                batchDelayMs: this.config.EMAIL_REPUTATION_BATCH_DELAY_SECONDS * 1000,
+            }),
             maxConcurrentActivityTaskExecutions: 2,
             dataConverter,
         })
@@ -80,29 +81,24 @@ export class EmailReputationWorkerService {
             password: this.config.CLICKHOUSE_PASSWORD || undefined,
             database: this.config.CLICKHOUSE_DATABASE,
         })
-        const internalFetch = new InternalFetchService(
-            this.config.INTERNAL_API_BASE_URL,
-            this.config.INTERNAL_API_SECRET
-        )
-        return new EmailReputationService(clickhouse, this.deps.postgres, this.deps.pubSub, internalFetch, {
+        return new EmailReputationService(clickhouse, this.deps.postgres, {
             windowHours: this.config.EMAIL_REPUTATION_WINDOW_HOURS,
             thresholds: {
                 minSends: this.config.EMAIL_REPUTATION_MIN_SENDS,
-                bounceWarn: this.config.EMAIL_REPUTATION_BOUNCE_WARN_RATE,
-                bouncePause: this.config.EMAIL_REPUTATION_BOUNCE_PAUSE_RATE,
-                complaintWarn: this.config.EMAIL_REPUTATION_COMPLAINT_WARN_RATE,
-                complaintPause: this.config.EMAIL_REPUTATION_COMPLAINT_PAUSE_RATE,
-                warnGraceMinutes: this.config.EMAIL_REPUTATION_WARN_GRACE_MINUTES,
+                bounceWarning: this.config.EMAIL_REPUTATION_BOUNCE_WARNING_RATE,
+                bounceCritical: this.config.EMAIL_REPUTATION_BOUNCE_CRITICAL_RATE,
+                complaintWarning: this.config.EMAIL_REPUTATION_COMPLAINT_WARNING_RATE,
+                complaintCritical: this.config.EMAIL_REPUTATION_COMPLAINT_CRITICAL_RATE,
             },
         })
     }
 
     private async ensureSchedule(client: Client): Promise<void> {
-        const interval = `${this.config.EMAIL_REPUTATION_EVALUATION_INTERVAL_MINUTES}m`
+        const hour = this.config.EMAIL_REPUTATION_EVALUATION_HOUR_UTC
         try {
             await client.schedule.create({
                 scheduleId: EMAIL_REPUTATION_SCHEDULE_ID,
-                spec: { intervals: [{ every: interval }] },
+                spec: { calendars: [{ hour }] },
                 action: {
                     type: 'startWorkflow',
                     workflowType: EMAIL_REPUTATION_WORKFLOW_TYPE,
@@ -111,7 +107,7 @@ export class EmailReputationWorkerService {
                 },
                 policies: { overlap: ScheduleOverlapPolicy.SKIP },
             })
-            logger.info('[EmailReputationWorker] created schedule', { interval })
+            logger.info('[EmailReputationWorker] created schedule', { hour })
         } catch (error) {
             if (error instanceof ScheduleAlreadyRunning) {
                 return

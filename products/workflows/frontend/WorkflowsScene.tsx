@@ -7,6 +7,7 @@ import { LemonButton, LemonMenu, LemonMenuItems } from '@posthog/lemon-ui'
 import api from 'lib/api'
 import { RestrictionScope, useRestrictedArea } from 'lib/components/RestrictedArea'
 import { TeamMembershipLevel } from 'lib/constants'
+import { useFeatureFlag } from 'lib/hooks/useFeatureFlag'
 import { integrationsLogic } from 'lib/integrations/integrationsLogic'
 import { IconSlack, IconTwilio } from 'lib/lemon-ui/icons'
 import { LemonTab, LemonTabs } from 'lib/lemon-ui/LemonTabs'
@@ -28,10 +29,11 @@ import { OptOutScene } from './OptOuts/OptOutScene'
 import { MessageTemplatesTable } from './TemplateLibrary/MessageTemplatesTable'
 import { newWorkflowLogic } from './Workflows/newWorkflowLogic'
 import { NewWorkflowModal } from './Workflows/NewWorkflowModal'
+import { WorkflowsReputation } from './Workflows/Reputation/WorkflowsReputation'
 import { WorkflowsTable } from './Workflows/WorkflowsTable'
 import type { workflowsSceneLogicType } from './WorkflowsSceneType'
 
-const WORKFLOW_SCENE_TABS = ['workflows', 'library', 'channels', 'opt-outs'] as const
+const WORKFLOW_SCENE_TABS = ['workflows', 'library', 'channels', 'opt-outs', 'reputation'] as const
 export type WorkflowsSceneTab = (typeof WORKFLOW_SCENE_TABS)[number]
 
 export type WorkflowsSceneProps = {
@@ -101,6 +103,7 @@ export function WorkflowsScene(props: WorkflowsSceneProps = {}): JSX.Element {
     const { openSetupModal } = useActions(integrationsLogic)
     const { openNewCategoryModal } = useActions(optOutCategoriesLogic)
     const { showNewWorkflowModal } = useActions(newWorkflowLogic)
+    const emailReputationEnabled = useFeatureFlag('WORKFLOWS_EMAIL_REPUTATION')
     const newChannelRestrictedReason = useRestrictedArea({
         scope: RestrictionScope.Project,
         minimumAccessLevel: TeamMembershipLevel.Admin,
@@ -167,6 +170,16 @@ export function WorkflowsScene(props: WorkflowsSceneProps = {}): JSX.Element {
             content: <OptOutScene />,
             link: urls.workflows('opt-outs'),
         },
+        ...(emailReputationEnabled
+            ? [
+                  {
+                      label: 'Reputation',
+                      key: 'reputation' as const,
+                      content: <WorkflowsReputation />,
+                      link: urls.workflows('reputation'),
+                  },
+              ]
+            : []),
     ]
 
     return (

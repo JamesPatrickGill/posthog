@@ -23,7 +23,6 @@ import { userLogic } from 'scenes/userLogic'
 import { HogFunctionTemplateType } from '~/types'
 
 import { resourceEditedLogic } from 'products/notifications/frontend/resourceEditedLogic'
-import { hogFlowsReputationReenableCreate } from 'products/workflows/frontend/generated/api'
 
 import { getRegisteredTriggerTypes } from './hogflows/registry/triggers/triggerTypeRegistry'
 import {
@@ -182,8 +181,6 @@ export const workflowLogic = kea<workflowLogicType>([
         }),
         discardChanges: true,
         duplicate: true,
-        reenableReputation: true,
-        reenableReputationFinished: true,
         autoSaveWorkflow: true,
         markAutoSave: (isAutoSave: boolean) => ({ isAutoSave }),
         setAutoSaveEnabled: (enabled: boolean) => ({ enabled }),
@@ -315,13 +312,6 @@ export const workflowLogic = kea<workflowLogicType>([
             [] as HogFlowSchedule[],
             {
                 setSchedules: (_, { schedules }) => schedules,
-            },
-        ],
-        reputationReenabling: [
-            false,
-            {
-                reenableReputation: () => true,
-                reenableReputationFinished: () => false,
             },
         ],
         scheduleState: [
@@ -952,22 +942,6 @@ export const workflowLogic = kea<workflowLogicType>([
             const createdWorkflow = await api.hogFlows.createHogFlow(newWorkflow)
             lemonToast.success('Workflow duplicated')
             router.actions.push(urls.workflow(createdWorkflow.id, 'workflow'))
-        },
-        reenableReputation: async () => {
-            const workflowId = values.originalWorkflow?.id
-            if (!workflowId || !values.currentProjectId) {
-                actions.reenableReputationFinished()
-                return
-            }
-            try {
-                await hogFlowsReputationReenableCreate(String(values.currentProjectId), workflowId)
-                lemonToast.success('Email sending re-enabled')
-                actions.loadWorkflow()
-            } catch (e) {
-                lemonToast.error(e instanceof ApiError ? e.message : 'Failed to re-enable email sending')
-            } finally {
-                actions.reenableReputationFinished()
-            }
         },
         triggerManualWorkflow: async ({ variables }) => {
             if (!values.workflow.id || values.workflow.id === 'new') {

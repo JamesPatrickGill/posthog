@@ -1,15 +1,16 @@
 /**
- * Temporal workflow: one email-reputation evaluation pass. Started every
- * EMAIL_REPUTATION_EVALUATION_INTERVAL_MINUTES by a Temporal Schedule (overlap: SKIP).
+ * Temporal workflow: one daily email-reputation snapshot run, started by a Temporal Schedule
+ * (overlap: SKIP). Teams are evaluated in paced batches with durable sleeps in between, so the
+ * sweep doesn't hit ClickHouse/Postgres in one burst and resumes mid-run after a worker restart.
  *
  * Runs in Temporal's deterministic workflow sandbox — keep this file free of runtime imports
  * other than @temporalio/workflow; all IO happens in the activities.
  */
-import { proxyActivities } from '@temporalio/workflow'
+import { proxyActivities, sleep } from '@temporalio/workflow'
 
 import type { EmailReputationActivities } from './activities'
 
-const { fetchEmailMetrics, evaluateAndEnforce, notifyTransitions } = proxyActivities<EmailReputationActivities>({
+const { fetchTeamsToEvaluate, evaluateTeamBatch } = proxyActivities<EmailReputationActivities>({
     startToCloseTimeout: '10 minutes',
     retry: {
         maximumAttempts: 3,
@@ -18,25 +19,36 @@ const { fetchEmailMetrics, evaluateAndEnforce, notifyTransitions } = proxyActivi
 })
 
 export interface EmailReputationEvaluationResult {
-    workflowsEvaluated: number
+    evaluatedAt: string
     teamsEvaluated: number
-    transitions: number
+    workflowsEvaluated: number
+    snapshotsWritten: number
 }
 
 export async function emailReputationEvaluation(): Promise<EmailReputationEvaluationResult> {
-    const metrics = await fetchEmailMetrics()
-    if (metrics.length === 0) {
-        return { workflowsEvaluated: 0, teamsEvaluated: 0, transitions: 0 }
+    // Captured once before any awaits: every batch (and any retry) shares one run timestamp, which
+    // both anchors the metrics window and dedupes re-inserted snapshot rows. The sandbox makes
+    // `new Date()` deterministic on replay.
+    const evaluatedAt = new Date().toISOString()
+
+    const plan = await fetchTeamsToEvaluate(evaluatedAt)
+    const result: EmailReputationEvaluationResult = {
+        evaluatedAt,
+        teamsEvaluated: 0,
+        workflowsEvaluated: 0,
+        snapshotsWritten: 0,
     }
 
-    const summary = await evaluateAndEnforce(metrics)
-    if (summary.transitions.length > 0) {
-        await notifyTransitions(summary.transitions)
+    const batchSize = Math.max(1, plan.batchSize)
+    for (let offset = 0; offset < plan.teamIds.length; offset += batchSize) {
+        if (offset > 0 && plan.batchDelayMs > 0) {
+            await sleep(plan.batchDelayMs)
+        }
+        const summary = await evaluateTeamBatch(plan.teamIds.slice(offset, offset + batchSize), evaluatedAt)
+        result.teamsEvaluated += summary.teamsEvaluated
+        result.workflowsEvaluated += summary.workflowsEvaluated
+        result.snapshotsWritten += summary.snapshotsWritten
     }
 
-    return {
-        workflowsEvaluated: summary.workflowsEvaluated,
-        teamsEvaluated: summary.teamsEvaluated,
-        transitions: summary.transitions.length,
-    }
+    return result
 }

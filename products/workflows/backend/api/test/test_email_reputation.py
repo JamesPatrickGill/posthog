@@ -1,145 +1,67 @@
-from posthog.test.base import APIBaseTest
-from unittest.mock import patch
+from datetime import UTC, datetime, timedelta
 
-from django.test import override_settings
+from posthog.test.base import APIBaseTest
 
 from rest_framework import status
 
-from products.notifications.backend.facade.api import NotificationType, Priority
-from products.workflows.backend.models import EmailReputationState, HogFlow
+from products.workflows.backend.models import EmailReputationSnapshot, HogFlow
+
+RUN_1 = datetime(2026, 7, 8, 6, 0, tzinfo=UTC)
+RUN_2 = RUN_1 + timedelta(days=1)
 
 
 class TestEmailReputationAPI(APIBaseTest):
-    def _create_flow(self, status_: str = "active") -> HogFlow:
+    def _create_flow(self, name: str) -> HogFlow:
         return HogFlow.objects.create(
             team=self.team,
-            name="Email workflow",
-            status=status_,
+            name=name,
+            status="active",
             trigger={"type": "event"},
             edges=[],
             actions=[],
             billable_action_types=["function_email"],
         )
 
-    def _create_reputation(self, hog_flow: HogFlow | None, **kwargs) -> EmailReputationState:
-        state = EmailReputationState(
+    def _create_snapshot(self, hog_flow: HogFlow | None, evaluated_at: datetime, **kwargs) -> EmailReputationSnapshot:
+        snapshot = EmailReputationSnapshot(
             team=self.team,
             hog_flow=hog_flow,
-            scope=EmailReputationState.Scope.WORKFLOW if hog_flow else EmailReputationState.Scope.TEAM,
+            scope=EmailReputationSnapshot.Scope.WORKFLOW if hog_flow else EmailReputationSnapshot.Scope.TEAM,
+            evaluated_at=evaluated_at,
             **kwargs,
         )
-        state.save()
-        return state
+        snapshot.save()
+        return snapshot
 
-    def test_reenable_restores_flow_and_resets_reputation_state(self):
-        flow = self._create_flow(status_="paused")
-        self._create_reputation(
-            flow,
-            state=EmailReputationState.State.PAUSED,
-            pause_reason=EmailReputationState.Reason.BOUNCE,
-            previous_flow_status="active",
-            bounce_rate=0.07,
-        )
-        self._create_reputation(None, state=EmailReputationState.State.PAUSED)
-
-        response = self.client.post(f"/api/projects/{self.team.id}/hog_flows/{flow.id}/reputation/reenable")
-
-        assert response.status_code == status.HTTP_200_OK, response.json()
-        assert response.json()["status"] == "active"
-
-        flow.refresh_from_db()
-        assert flow.status == "active"
-
-        workflow_state = EmailReputationState.objects.unscoped().get(hog_flow_id=flow.id)
-        assert workflow_state.state == EmailReputationState.State.HEALTHY
-        assert workflow_state.pause_reason is None
-        assert workflow_state.paused_at is None
-        assert workflow_state.previous_flow_status is None
-
-        # Last paused workflow re-enabled: the team-level pause clears too
-        team_state = EmailReputationState.objects.unscoped().get(team_id=self.team.id, hog_flow__isnull=True)
-        assert team_state.state == EmailReputationState.State.HEALTHY
-
-        # The reputation snapshot rides the workflow serializer for the banner
-        assert response.json()["reputation"]["state"] == "healthy"
-
-    def test_reenable_rejected_when_flow_is_not_paused(self):
-        flow = self._create_flow(status_="active")
-
-        response = self.client.post(f"/api/projects/{self.team.id}/hog_flows/{flow.id}/reputation/reenable")
-
-        assert response.status_code == status.HTTP_400_BAD_REQUEST
-
-    def test_plain_status_patch_cannot_leave_or_enter_paused(self):
-        paused_flow = self._create_flow(status_="paused")
-        response = self.client.patch(f"/api/projects/{self.team.id}/hog_flows/{paused_flow.id}/", {"status": "active"})
-        assert response.status_code == status.HTTP_400_BAD_REQUEST
-        paused_flow.refresh_from_db()
-        assert paused_flow.status == "paused"
-
-        active_flow = self._create_flow(status_="active")
-        response = self.client.patch(f"/api/projects/{self.team.id}/hog_flows/{active_flow.id}/", {"status": "paused"})
-        assert response.status_code == status.HTTP_400_BAD_REQUEST
-        active_flow.refresh_from_db()
-        assert active_flow.status == "active"
-
-    def test_team_reputation_endpoint_returns_aggregate_row_or_null(self):
+    def test_reputation_endpoint_returns_empty_shape_before_first_evaluation(self):
         response = self.client.get(f"/api/projects/{self.team.id}/hog_flows/reputation")
         assert response.status_code == status.HTTP_200_OK
-        assert response.json() == {"reputation": None}
+        assert response.json() == {"reputation": None, "history": [], "workflows": []}
 
-        self._create_reputation(None, state=EmailReputationState.State.WARNED, bounce_rate=0.03)
+    def test_reputation_endpoint_returns_latest_history_and_worst_first_workflows(self):
+        ok_flow = self._create_flow("Fine workflow")
+        bad_flow = self._create_flow("Toxic workflow")
+
+        # Two daily team runs: latest must win regardless of insertion order
+        self._create_snapshot(None, RUN_2, state="warning", bounce_rate=0.03)
+        self._create_snapshot(None, RUN_1, state="healthy", bounce_rate=0.01)
+
+        # Per-workflow: only the latest run's snapshot per flow, sorted worst first
+        self._create_snapshot(ok_flow, RUN_1, state="critical", bounce_rate=0.09)
+        self._create_snapshot(ok_flow, RUN_2, state="healthy", bounce_rate=0.005)
+        self._create_snapshot(bad_flow, RUN_2, state="critical", bounce_rate=0.08)
+
         response = self.client.get(f"/api/projects/{self.team.id}/hog_flows/reputation")
         assert response.status_code == status.HTTP_200_OK
-        assert response.json()["reputation"]["state"] == "warned"
-        assert response.json()["reputation"]["scope"] == "team"
+        data = response.json()
 
-    @override_settings(INTERNAL_API_SECRET="test-secret")
-    @patch("products.workflows.backend.reputation.notifications.create_notification")
-    def test_internal_notify_endpoint_creates_notifications(self, mock_create_notification):
-        flow = self._create_flow()
-        payload = {
-            "transitions": [
-                {
-                    "team_id": self.team.id,
-                    "scope": "workflow",
-                    "new_state": "paused",
-                    "reason": "bounce",
-                    "rate": 0.06,
-                    "threshold": 0.05,
-                    "hog_flow_id": str(flow.id),
-                    "hog_flow_name": flow.name,
-                },
-                {"team_id": self.team.id},  # invalid: skipped, not fatal
-            ]
-        }
+        assert data["reputation"]["state"] == "warning"
+        assert data["reputation"]["scope"] == "team"
 
-        self.client.logout()
-        response = self.client.post(
-            "/api/internal/hog_flows/email_reputation_notify",
-            payload,
-            content_type="application/json",
-            HTTP_X_INTERNAL_API_SECRET="test-secret",
-        )
+        assert [row["state"] for row in data["history"]] == ["healthy", "warning"]  # oldest first
 
-        assert response.status_code == status.HTTP_200_OK, response.json()
-        assert response.json() == {"notified": 1}
-
-        assert mock_create_notification.call_count == 1
-        notification = mock_create_notification.call_args[0][0]
-        assert notification.team_id == self.team.id
-        assert notification.notification_type == NotificationType.EMAIL_REPUTATION
-        assert notification.priority == Priority.CRITICAL
-        assert "paused" in notification.title
-        assert notification.source_url == f"/workflows/{flow.id}/metrics"
-
-    @override_settings(INTERNAL_API_SECRET="test-secret")
-    def test_internal_notify_endpoint_rejects_bad_secret(self):
-        self.client.logout()
-        response = self.client.post(
-            "/api/internal/hog_flows/email_reputation_notify",
-            {"transitions": []},
-            content_type="application/json",
-            HTTP_X_INTERNAL_API_SECRET="wrong-secret",
-        )
-        assert response.status_code in (status.HTTP_401_UNAUTHORIZED, status.HTTP_403_FORBIDDEN)
+        assert [(row["hog_flow_name"], row["state"]) for row in data["workflows"]] == [
+            ("Toxic workflow", "critical"),
+            ("Fine workflow", "healthy"),
+        ]
+        assert data["workflows"][0]["hog_flow_id"] == str(bad_flow.id)

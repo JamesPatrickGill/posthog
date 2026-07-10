@@ -18,7 +18,6 @@ class NotificationType(str, Enum):
     REMINDER = "reminder"
     WEB_ANALYTICS_DIGEST = "web_analytics_digest"
     ACHIEVEMENT_UNLOCKED = "achievement_unlocked"
-    EMAIL_REPUTATION = "email_reputation"
 
 
 class Priority(str, Enum):

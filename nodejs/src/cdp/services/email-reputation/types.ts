@@ -1,6 +1,6 @@
-import { ReputationReason, ReputationState } from './state-machine'
+import { ReputationState } from './classifier'
 
-/** Per-workflow email metrics aggregated from app_metrics2 over the evaluation window.
+/** Per-source email metrics aggregated from app_metrics2 over the evaluation window.
  * `appSourceId` is usually a HogFlow id but can be a batch-job id; rows that don't match a
  * HogFlow still count toward the team aggregate. */
 export interface EmailMetricsRow {
@@ -11,30 +11,10 @@ export interface EmailMetricsRow {
     complained: number
 }
 
-/** A state change the evaluator applied, shaped for the Django internal notify endpoint. */
-export interface ReputationTransitionPayload {
-    team_id: number
-    scope: 'workflow' | 'team'
-    new_state: 'warned' | 'paused'
-    reason: ReputationReason
-    rate: number
-    threshold: number
-    hog_flow_id?: string
-    hog_flow_name?: string
-}
-
-export interface EvaluationSummary {
-    workflowsEvaluated: number
+/** Counts returned by a batch evaluation — snapshot rows never ride Temporal workflow history. */
+export interface BatchEvaluationSummary {
     teamsEvaluated: number
-    transitions: ReputationTransitionPayload[]
-}
-
-/** Row shape of posthog_emailreputationstate as read via pg (timestamps are ISO strings). */
-export interface ReputationStateRow {
-    id: string
-    team_id: number
-    hog_flow_id: string | null
-    scope: 'workflow' | 'team'
-    state: ReputationState
-    warned_at: string | null
+    workflowsEvaluated: number
+    snapshotsWritten: number
+    statesByScope: Record<'team' | 'workflow', Partial<Record<ReputationState, number>>>
 }

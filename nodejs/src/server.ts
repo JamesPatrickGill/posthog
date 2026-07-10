@@ -53,7 +53,7 @@ import { createSesRateLimiterValkeyPool } from './cdp/services/rate-limiter/rate
 import { RateLimiterService } from './cdp/services/rate-limiter/rate-limiter.service'
 import { EncryptedFields } from './cdp/utils/encryption-utils'
 import { CleanupResources, NodeServer, ServerLifecycle } from './servers/base-server'
-import { HealthCheckResultError, PluginServerService, PluginsServerConfig, RedisPool } from './types'
+import { HealthCheckResultOk, PluginServerService, PluginsServerConfig, RedisPool } from './types'
 
 /**
  * PluginServer handles CDP, logs, evaluation scheduler, and local-dev combined modes.
@@ -344,16 +344,13 @@ export class PluginServer implements NodeServer {
 
         if (capabilities.emailReputationEvaluator) {
             serviceLoaders.push(async () => {
-                const worker = new EmailReputationWorkerService(this.config, {
-                    postgres: this.postgres!,
-                    pubSub: this.pubsub!,
-                })
+                const worker = new EmailReputationWorkerService(this.config, { postgres: this.postgres! })
                 try {
                     await worker.start()
                 } catch (error) {
                     // In dev this capability rides along with the full CDP set — don't take the whole
-                    // plugin server down when the local Temporal isn't running. Dedicated deployments
-                    // should crash and restart.
+                    // plugin server down (or fail its /_health) when the local Temporal isn't running.
+                    // Dedicated deployments should crash and restart.
                     if (isDevEnv()) {
                         logger.warn('[EmailReputationWorker] failed to start, continuing without it (dev only)', {
                             error,
@@ -361,7 +358,7 @@ export class PluginServer implements NodeServer {
                         return {
                             id: 'email-reputation-evaluator',
                             onShutdown: () => Promise.resolve(),
-                            healthcheck: () => new HealthCheckResultError('Email reputation worker not started', {}),
+                            healthcheck: () => new HealthCheckResultOk(),
                         }
                     }
                     throw error

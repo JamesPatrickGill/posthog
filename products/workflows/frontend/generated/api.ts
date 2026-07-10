@@ -57,26 +57,6 @@ type NonReadonly<T> = [T] extends [UnionToIntersection<T>]
       }
     : DistributeReadOnlyOverUnions<T>
 
-export const getInternalHogFlowsEmailReputationNotifyCreateUrl = () => {
-    return `/api/internal/hog_flows/email_reputation_notify`
-}
-
-/**
- * Internal endpoint the Node email-reputation evaluator calls after it has detected and
- * enforced reputation state transitions. Fires an in-app notification per transition through
- * the notifications facade. Detection, persistence and pausing all happen Node-side; this
- * endpoint only handles the user-facing notification.
- *
- * Accepts: { "transitions": [ { team_id, scope, new_state, reason, rate, threshold,
- *                                hog_flow_id?, hog_flow_name? }, ... ] }
- */
-export const internalHogFlowsEmailReputationNotifyCreate = async (options?: RequestInit): Promise<void> => {
-    return apiMutator<void>(getInternalHogFlowsEmailReputationNotifyCreateUrl(), {
-        ...options,
-        method: 'POST',
-    })
-}
-
 export const getInternalHogFlowsProcessDueSchedulesCreateUrl = () => {
     return `/api/internal/hog_flows/process_due_schedules`
 }
@@ -551,27 +531,6 @@ export const hogFlowsMetricsTotalsRetrieve = async (
     })
 }
 
-export const getHogFlowsReputationReenableCreateUrl = (projectId: string, id: string) => {
-    return `/api/projects/${projectId}/hog_flows/${id}/reputation/reenable/`
-}
-
-/**
- * Manually resume a workflow that the email reputation guard auto-paused. Restores the status the
- * workflow held before the pause and resets its reputation state to healthy, so the evaluator
- * starts a fresh warn/pause cycle if rates are still bad. This is the only way out of 'paused' —
- * plain status PATCHes are rejected by the serializer.
- */
-export const hogFlowsReputationReenableCreate = async (
-    projectId: string,
-    id: string,
-    options?: RequestInit
-): Promise<HogFlowApi> => {
-    return apiMutator<HogFlowApi>(getHogFlowsReputationReenableCreateUrl(projectId, id), {
-        ...options,
-        method: 'POST',
-    })
-}
-
 export const getHogFlowsRerunCreateUrl = (projectId: string, id: string) => {
     return `/api/projects/${projectId}/hog_flows/${id}/rerun/`
 }
@@ -721,7 +680,9 @@ export const getHogFlowsReputationRetrieveUrl = (projectId: string) => {
 }
 
 /**
- * Project-wide email reputation aggregate across all workflows; reputation is null until first evaluated.
+ * Email deliverability reputation for this project: the latest project-wide snapshot, recent
+ * project-wide history for trend display, and the latest snapshot per workflow (worst first).
+ * Written daily by the Node evaluator; everything is null/empty until the first run.
  */
 export const hogFlowsReputationRetrieve = async (
     projectId: string,

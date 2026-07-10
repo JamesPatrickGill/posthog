@@ -1,29 +1,33 @@
+import { randomUUID } from 'crypto'
+
 import { FixtureHogFlowBuilder } from '~/cdp/_tests/builders/hogflow.builder'
 import { insertHogFlow } from '~/cdp/_tests/fixtures-hogflows'
 import { HogFlow } from '~/cdp/schema/hogflow'
 import { closeHub, createHub } from '~/common/utils/db/hub'
 import { PostgresUse } from '~/common/utils/db/postgres'
-import { PubSub } from '~/common/utils/pubsub'
 import { createTeam, getTeam, resetTestDatabase } from '~/tests/helpers/sql'
 import { Hub } from '~/types'
 
+import { DEFAULT_THRESHOLDS } from './classifier'
 import { EmailReputationService } from './email-reputation.service'
-import { DEFAULT_THRESHOLDS } from './state-machine'
+import { EmailMetricsRow } from './types'
+
+const EVALUATED_AT = '2026-07-10T06:00:00.000Z'
 
 describe('EmailReputationService', () => {
     jest.setTimeout(5000)
 
     let hub: Hub
     let service: EmailReputationService
-    let mockPubSub: { publish: jest.Mock }
+    let mockClickhouse: { query: jest.Mock }
     let teamId: number
 
-    const insertEmailFlow = async (status: HogFlow['status'] = 'active'): Promise<HogFlow> => {
+    const insertEmailFlow = async (): Promise<HogFlow> => {
         return await insertHogFlow(
             hub.postgres,
             new FixtureHogFlowBuilder()
                 .withTeamId(teamId)
-                .withStatus(status)
+                .withStatus('active')
                 .withWorkflow({
                     actions: {
                         trigger: { type: 'trigger', config: { type: 'event', filters: {} } },
@@ -39,22 +43,39 @@ describe('EmailReputationService', () => {
         )
     }
 
-    const getFlowStatus = async (flowId: string): Promise<string> => {
-        const result = await hub.postgres.query<{ status: string }>(
-            PostgresUse.COMMON_READ,
-            `SELECT status FROM posthog_hogflow WHERE id = $1`,
-            [flowId],
-            'testGetFlowStatus'
+    const insertBatchJob = async (hogFlowId: string): Promise<string> => {
+        const batchJobId = randomUUID()
+        await hub.postgres.query(
+            PostgresUse.COMMON_WRITE,
+            `INSERT INTO workflows_hogflowbatchjob (id, team_id, hog_flow_id, variables, filters, status, created_at, updated_at)
+             VALUES ($1, $2, $3, '{}', '{}', 'completed', now(), now())`,
+            [batchJobId, teamId, hogFlowId],
+            'testInsertBatchJob'
         )
-        return result.rows[0].status
+        return batchJobId
     }
 
-    const getReputationRows = async (): Promise<any[]> => {
+    const mockMetrics = (rows: EmailMetricsRow[]): void => {
+        mockClickhouse.query.mockResolvedValue({
+            json: () =>
+                Promise.resolve(
+                    rows.map((row) => ({
+                        team_id: row.teamId,
+                        app_source_id: row.appSourceId,
+                        sent: row.sent,
+                        bounced: row.bounced,
+                        complained: row.complained,
+                    }))
+                ),
+        })
+    }
+
+    const getSnapshots = async (): Promise<any[]> => {
         const result = await hub.postgres.query(
             PostgresUse.COMMON_READ,
-            `SELECT * FROM posthog_emailreputationstate WHERE team_id = $1 ORDER BY scope, hog_flow_id`,
+            `SELECT * FROM posthog_emailreputationsnapshot WHERE team_id = $1 ORDER BY scope, hog_flow_id`,
             [teamId],
-            'testGetReputationRows'
+            'testGetSnapshots'
         )
         return result.rows
     }
@@ -64,94 +85,61 @@ describe('EmailReputationService', () => {
         await resetTestDatabase()
         const team = await getTeam(hub.postgres, 2)
         teamId = await createTeam(hub.postgres, team!.organization_id)
-        mockPubSub = { publish: jest.fn().mockResolvedValue(undefined) }
-        service = new EmailReputationService(
-            {} as any, // ClickHouse client unused: evaluateAndEnforce receives metric rows directly
-            hub.postgres,
-            mockPubSub as unknown as PubSub,
-            {} as any, // InternalFetchService unused: notifyTransitions not exercised here
-            { windowHours: 24, thresholds: DEFAULT_THRESHOLDS }
-        )
+        mockClickhouse = { query: jest.fn() }
+        service = new EmailReputationService(mockClickhouse as any, hub.postgres, {
+            windowHours: 24,
+            thresholds: DEFAULT_THRESHOLDS,
+        })
     })
 
     afterEach(async () => {
         await closeHub(hub)
     })
 
-    it('pauses an active workflow on a hard bounce breach and records the transition', async () => {
-        const flow = await insertEmailFlow('active')
+    it('writes workflow and team snapshots, and a retried batch adds no duplicate rows', async () => {
+        const flow = await insertEmailFlow()
+        mockMetrics([{ teamId, appSourceId: flow.id, sent: 1000, bounced: 60, complained: 0 }])
 
-        const summary = await service.evaluateAndEnforce([
-            { teamId, appSourceId: flow.id, sent: 1000, bounced: 60, complained: 0 },
-        ])
+        const summary = await service.evaluateTeamBatch([teamId], EVALUATED_AT)
+        expect(summary).toMatchObject({ teamsEvaluated: 1, workflowsEvaluated: 1, snapshotsWritten: 2 })
 
-        expect(await getFlowStatus(flow.id)).toEqual('paused')
-        expect(mockPubSub.publish).toHaveBeenCalledWith(
-            'reload-hog-flows',
-            JSON.stringify({ teamId, hogFlowIds: [flow.id] })
-        )
-
-        const rows = await getReputationRows()
+        const rows = await getSnapshots()
+        expect(rows).toHaveLength(2)
         const workflowRow = rows.find((r) => r.hog_flow_id === flow.id)
-        expect(workflowRow).toMatchObject({
-            state: 'paused',
-            scope: 'workflow',
-            pause_reason: 'bounce',
-            previous_flow_status: 'active',
-            emails_sent: '1000',
-        })
+        expect(workflowRow).toMatchObject({ scope: 'workflow', state: 'critical', emails_sent: '1000' })
         expect(workflowRow.bounce_rate).toBeCloseTo(0.06)
+        expect(rows.find((r) => r.hog_flow_id === null)).toMatchObject({ scope: 'team', state: 'critical' })
 
-        const workflowTransition = summary.transitions.find((t) => t.scope === 'workflow')
-        expect(workflowTransition).toMatchObject({
-            team_id: teamId,
-            new_state: 'paused',
-            reason: 'bounce',
-            hog_flow_id: flow.id,
-            threshold: DEFAULT_THRESHOLDS.bouncePause,
-        })
+        // Same evaluatedAt (a Temporal activity retry) dedupes on the unique index
+        const retry = await service.evaluateTeamBatch([teamId], EVALUATED_AT)
+        expect(retry.snapshotsWritten).toEqual(0)
+        expect(await getSnapshots()).toHaveLength(2)
+
+        // A later run appends new history rows instead of updating in place
+        await service.evaluateTeamBatch([teamId], '2026-07-11T06:00:00.000Z')
+        expect(await getSnapshots()).toHaveLength(4)
     })
 
-    it('warns without pausing on a soft breach, and a repeat evaluation adds no duplicate transition', async () => {
-        const flow = await insertEmailFlow('active')
-        const metrics = [{ teamId, appSourceId: flow.id, sent: 1000, bounced: 30, complained: 0 }]
-
-        const first = await service.evaluateAndEnforce(metrics)
-        expect(await getFlowStatus(flow.id)).toEqual('active')
-        expect(first.transitions.filter((t) => t.scope === 'workflow')).toHaveLength(1)
-        expect(first.transitions[0].new_state).toEqual('warned')
-
-        // Within the grace period the warning holds: no new transition, no notification spam
-        const second = await service.evaluateAndEnforce(metrics)
-        expect(second.transitions).toHaveLength(0)
-        expect(await getFlowStatus(flow.id)).toEqual('active')
-    })
-
-    it('pauses all active email workflows when the team aggregate breaches, even if no single flow does', async () => {
-        const bigFlow = await insertEmailFlow('active')
-        const toxicFlow = await insertEmailFlow('active')
-
-        // bigFlow warns (3%), toxicFlow is below min sends (held healthy), but the aggregate
-        // (1090 sent / 105 bounced ≈ 9.6%) breaches the team hard threshold
-        const summary = await service.evaluateAndEnforce([
-            { teamId, appSourceId: bigFlow.id, sent: 1000, bounced: 30, complained: 0 },
-            { teamId, appSourceId: toxicFlow.id, sent: 90, bounced: 75, complained: 0 },
+    it('folds batch-job metrics into the parent workflow and counts orphans only at team level', async () => {
+        const flow = await insertEmailFlow()
+        const batchJobId = await insertBatchJob(flow.id)
+        mockMetrics([
+            { teamId, appSourceId: flow.id, sent: 400, bounced: 4, complained: 0 },
+            { teamId, appSourceId: batchJobId, sent: 600, bounced: 20, complained: 0 },
+            // Matches neither a flow nor a batch job (e.g. deleted flow): team aggregate only
+            { teamId, appSourceId: randomUUID(), sent: 100, bounced: 100, complained: 0 },
         ])
 
-        expect(await getFlowStatus(bigFlow.id)).toEqual('paused')
-        expect(await getFlowStatus(toxicFlow.id)).toEqual('paused')
+        await service.evaluateTeamBatch([teamId], EVALUATED_AT)
 
-        const rows = await getReputationRows()
+        const rows = await getSnapshots()
+        const workflowRow = rows.find((r) => r.hog_flow_id === flow.id)
+        // 400+600 sent, 4+20 bounced = 2.4% → warning
+        expect(workflowRow).toMatchObject({ state: 'warning', emails_sent: '1000' })
+        expect(workflowRow.bounce_rate).toBeCloseTo(0.024)
+
         const teamRow = rows.find((r) => r.hog_flow_id === null)
-        expect(teamRow).toMatchObject({ state: 'paused', scope: 'team', pause_reason: 'bounce' })
-        for (const flowId of [bigFlow.id, toxicFlow.id]) {
-            expect(rows.find((r) => r.hog_flow_id === flowId)).toMatchObject({
-                state: 'paused',
-                previous_flow_status: 'active',
-            })
-        }
-
-        const teamTransition = summary.transitions.find((t) => t.scope === 'team')
-        expect(teamTransition).toMatchObject({ team_id: teamId, new_state: 'paused', reason: 'bounce' })
+        // Orphan row included: 1100 sent, 124 bounced ≈ 11.3% → critical
+        expect(teamRow).toMatchObject({ state: 'critical', emails_sent: '1100' })
     })
 })

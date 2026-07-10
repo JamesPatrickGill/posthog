@@ -60,10 +60,6 @@ export const REALTIME_NOTIFICATION_TYPE_META: Record<string, { label: string; de
         label: 'Achievement unlocked',
         description: 'When you unlock a new achievement',
     },
-    email_reputation: {
-        label: 'Email reputation',
-        description: 'When a workflow or project is throttling or pausing email sends due to bounces or complaints',
-    },
 }
 
 export function NotificationTitle({
