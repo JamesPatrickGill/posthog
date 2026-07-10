@@ -2417,7 +2417,7 @@ class NavanSourceConfig(config.Config):
 
 @config.config
 class NebiusAISourceConfig(config.Config):
-    pass
+    api_key: str
 
 
 @config.config
