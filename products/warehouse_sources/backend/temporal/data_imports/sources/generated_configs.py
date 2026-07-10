@@ -1677,7 +1677,8 @@ class HatchetSourceConfig(config.Config):
 
 @config.config
 class HealthchecksSourceConfig(config.Config):
-    pass
+    api_key: str
+    base_url: str | None = None
 
 
 @config.config
