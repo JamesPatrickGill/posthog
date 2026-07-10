@@ -79,6 +79,7 @@ the row lists both.
 | breezometer             | HTTP                        | requests                                                        | ✅                          |
 | brevo                   | HTTP                        | requests                                                        | ✅                          |
 | brex                    | HTTP                        | requests                                                        | ✅                          |
+| browser_use             | HTTP                        | requests                                                        | ✅                          |
 | bugsnag                 | HTTP                        | requests                                                        | ✅                          |
 | buildbetter             | HTTP                        | requests                                                        | ✅                          |
 | buildkite               | HTTP                        | requests                                                        | ✅                          |
@@ -469,7 +470,6 @@ doesn't conflict with concurrent PRs.
 - branch
 - breezy_hr
 - browse_ai
-- browser_use
 - browserbase
 - cal_com
 - campaign_manager_360
