@@ -1792,7 +1792,8 @@ class IlluminaBasespaceSourceConfig(config.Config):
 
 @config.config
 class ImaggaSourceConfig(config.Config):
-    pass
+    api_key: str
+    api_secret: str
 
 
 @config.config
