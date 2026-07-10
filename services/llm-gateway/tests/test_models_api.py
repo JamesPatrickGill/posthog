@@ -1,15 +1,23 @@
-from unittest.mock import MagicMock, patch
+from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 from fastapi.testclient import TestClient
 
+from llm_gateway.config import get_settings
 from llm_gateway.rate_limiting.model_cost_service import ModelCost, ModelCostService
 from llm_gateway.services.model_registry import ModelRegistryService
+from llm_gateway.services.plan_resolver import PlanInfo
 
 MOCK_COST_DATA: dict[str, ModelCost] = {
     "gpt-4o": {
         "litellm_provider": "openai",
         "max_input_tokens": 128000,
+        "supports_vision": True,
+        "mode": "chat",
+    },
+    "claude-fable-5": {
+        "litellm_provider": "anthropic",
+        "max_input_tokens": 200000,
         "supports_vision": True,
         "mode": "chat",
     },
@@ -241,3 +249,99 @@ class TestResponsesModeModels:
             assert response.status_code == 200
             model_ids = {m["id"] for m in response.json()["data"]}
             assert "gpt-5.3-codex" in model_ids
+
+
+class TestPremiumModelGateOnModelsEndpoint:
+    """Plan-aware /v1/models: premium (fable-tier) models are omitted for
+    non-usage-based-plan callers, and for unauthenticated ones, once the
+    premium-model gate flag is enabled. See api.models._should_omit_premium_models.
+    """
+
+    def _set_plan(self, client: TestClient, plan_key: str | None) -> None:
+        client.app.state.plan_resolver.get_plan = AsyncMock(
+            return_value=PlanInfo(plan_key=plan_key, seat_created_at=None)
+        )
+
+    def test_gate_off_includes_fable_for_unauthenticated(self, client: TestClient):
+        with patch.object(get_settings(), "premium_model_gate_enabled", False):
+            response = client.get("/posthog_code/v1/models")
+
+        model_ids = {m["id"] for m in response.json()["data"]}
+        assert "claude-fable-5" in model_ids
+
+    def test_gate_off_does_no_auth_or_plan_work(self, client: TestClient):
+        """Pins the zero-I/O property: with the gate off, a models listing must
+        not authenticate or resolve a plan — it's the pre-gate static, anonymous
+        endpoint. Auth is lazy inside _should_omit_premium_models, not an eager
+        route dependency."""
+        with (
+            patch.object(get_settings(), "premium_model_gate_enabled", False),
+            patch("llm_gateway.api.models.get_auth_service") as mock_auth,
+            patch("llm_gateway.api.models.resolve_plan_info") as mock_plan,
+        ):
+            response = client.get("/posthog_code/v1/models", headers={"Authorization": "Bearer phx_test"})
+
+        assert response.status_code == 200
+        mock_auth.assert_not_called()
+        mock_plan.assert_not_called()
+
+    def test_ungated_product_does_no_auth_or_plan_work_even_when_gate_on(self, client: TestClient):
+        with (
+            patch.object(get_settings(), "premium_model_gate_enabled", True),
+            patch("llm_gateway.api.models.get_auth_service") as mock_auth,
+            patch("llm_gateway.api.models.resolve_plan_info") as mock_plan,
+        ):
+            response = client.get("/v1/models", headers={"Authorization": "Bearer phx_test"})
+
+        assert response.status_code == 200
+        mock_auth.assert_not_called()
+        mock_plan.assert_not_called()
+
+    def test_gate_on_omits_fable_for_unauthenticated(self, client: TestClient):
+        with patch.object(get_settings(), "premium_model_gate_enabled", True):
+            response = client.get("/posthog_code/v1/models")
+
+        model_ids = {m["id"] for m in response.json()["data"]}
+        assert "claude-fable-5" not in model_ids
+
+    @pytest.mark.parametrize(
+        "plan_key",
+        [None, "posthog-code-free-20260301", "posthog-code-pro-200-20260301"],
+        ids=["none", "free", "pro"],
+    )
+    def test_gate_on_omits_fable_for_non_usage_based_plan(self, authenticated_client: TestClient, plan_key):
+        self._set_plan(authenticated_client, plan_key)
+        with patch.object(get_settings(), "premium_model_gate_enabled", True):
+            response = authenticated_client.get(
+                "/posthog_code/v1/models", headers={"Authorization": "Bearer phx_test_key"}
+            )
+
+        model_ids = {m["id"] for m in response.json()["data"]}
+        assert "claude-fable-5" not in model_ids
+
+    def test_gate_on_includes_fable_for_usage_based_plan(self, authenticated_client: TestClient):
+        self._set_plan(authenticated_client, "posthog-code-usage-20260709")
+        with patch.object(get_settings(), "premium_model_gate_enabled", True):
+            response = authenticated_client.get(
+                "/posthog_code/v1/models", headers={"Authorization": "Bearer phx_test_key"}
+            )
+
+        model_ids = {m["id"] for m in response.json()["data"]}
+        assert "claude-fable-5" in model_ids
+
+    def test_gate_on_unaffected_products_keep_fable(self, client: TestClient):
+        # llm_gateway doesn't opt into premium_models_gated, so it's unaffected by
+        # the gate regardless of flag state or plan.
+        with patch.object(get_settings(), "premium_model_gate_enabled", True):
+            response = client.get("/llm_gateway/v1/models")
+
+        model_ids = {m["id"] for m in response.json()["data"]}
+        assert "claude-fable-5" in model_ids
+
+    def test_unauthenticated_request_still_succeeds(self, client: TestClient):
+        # /v1/models must keep working for anonymous callers (no 401s) regardless
+        # of gate state.
+        with patch.object(get_settings(), "premium_model_gate_enabled", True):
+            response = client.get("/posthog_code/v1/models")
+
+        assert response.status_code == 200

@@ -1,10 +1,13 @@
 from typing import Literal
 
-from fastapi import APIRouter
+from fastapi import APIRouter, Request
 from pydantic import BaseModel
 
-from llm_gateway.products.config import validate_product
+from llm_gateway.auth.service import get_auth_service
+from llm_gateway.config import get_settings
+from llm_gateway.products.config import get_product_config, validate_product
 from llm_gateway.services.model_registry import get_available_models
+from llm_gateway.services.plan_resolver import is_usage_based_plan, resolve_plan_info
 
 models_router = APIRouter(tags=["models"])
 
@@ -48,8 +51,24 @@ class ModelsResponse(BaseModel):
     models: list[ModelObject] = []  # Alias for `data` — codex-acp expects this field
 
 
-def _build_response(product: str) -> ModelsResponse:
+async def _should_omit_premium_models(request: Request, product: str) -> bool:
+    config = get_product_config(product)
+    if not (config and config.premium_models_gated):
+        return False
+    if not get_settings().premium_model_gate_enabled:
+        return False
+    user = await get_auth_service().authenticate_request(request, request.app.state.db_pool)
+    if user is None:
+        return True
+    plan_info = await resolve_plan_info(request, user.user_id, product)
+    return not is_usage_based_plan(plan_info.plan_key)
+
+
+async def _build_response(request: Request, product: str) -> ModelsResponse:
     models = get_available_models(product)
+    if await _should_omit_premium_models(request, product):
+        premium_models = set(get_settings().premium_models)
+        models = [m for m in models if m.id not in premium_models]
     model_objects = [
         ModelObject(
             id=m.id,
@@ -66,11 +85,11 @@ def _build_response(product: str) -> ModelsResponse:
 
 
 @models_router.get("/v1/models")
-async def list_models() -> ModelsResponse:
-    return _build_response("llm_gateway")
+async def list_models(request: Request) -> ModelsResponse:
+    return await _build_response(request, "llm_gateway")
 
 
 @models_router.get("/{product}/v1/models")
-async def list_models_for_product(product: str) -> ModelsResponse:
+async def list_models_for_product(product: str, request: Request) -> ModelsResponse:
     validate_product(product)
-    return _build_response(product)
+    return await _build_response(request, product)

@@ -11,6 +11,7 @@ from fastapi import Depends, HTTPException, Request, status
 from llm_gateway.auth.models import AuthenticatedUser
 from llm_gateway.auth.service import AuthService, get_auth_service
 from llm_gateway.circuit_breaker import AnthropicCircuitBreaker
+from llm_gateway.config import get_settings
 from llm_gateway.products.config import (
     ALLOWED_PRODUCTS,
     check_product_access,
@@ -25,7 +26,7 @@ from llm_gateway.request_context import (
     get_request_id,
     set_throttle_context,
 )
-from llm_gateway.services.plan_resolver import PlanInfo, resolve_plan_info
+from llm_gateway.services.plan_resolver import PlanInfo, is_usage_based_plan, resolve_plan_info
 from llm_gateway.services.quota_resolver import QuotaResourceStatus, resolve_quota_status
 
 logger = structlog.get_logger(__name__)
@@ -181,6 +182,28 @@ async def resolve_plan_and_quota(
     return plan_info, QuotaResourceStatus(limited=False)
 
 
+_PREMIUM_MODEL_GATE_DETAIL_TEMPLATE = (
+    "{model} requires usage-based billing. Switch to a usage-based plan at "
+    "https://app.posthog.com/organization/billing to use premium models."
+)
+
+
+async def _check_premium_model_gate(product: str, model: str | None, plan_key: str | None) -> None:
+    config = get_product_config(product)
+    if not (config and config.premium_models_gated):
+        return
+    if not model or model not in get_settings().premium_models:
+        return
+    if not get_settings().premium_model_gate_enabled:
+        return
+    if is_usage_based_plan(plan_key):
+        return
+    raise HTTPException(
+        status_code=status.HTTP_403_FORBIDDEN,
+        detail=_PREMIUM_MODEL_GATE_DETAIL_TEMPLATE.format(model=model),
+    )
+
+
 async def enforce_throttles(
     request: Request,
     user: Annotated[AuthenticatedUser, Depends(enforce_product_access)],
@@ -201,6 +224,9 @@ async def enforce_throttles(
         team_id=user.team_id,
         product=product,
     )
+
+    model = await get_model_from_request(request)
+    await _check_premium_model_gate(product, model, plan_info.plan_key)
 
     context = ThrottleContext(
         user=user,

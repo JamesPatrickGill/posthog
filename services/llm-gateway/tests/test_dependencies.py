@@ -6,7 +6,9 @@ from fastapi import HTTPException, Request
 from starlette.datastructures import Headers
 
 from llm_gateway.auth.models import AuthenticatedUser
+from llm_gateway.config import get_settings
 from llm_gateway.dependencies import (
+    _check_premium_model_gate,
     _extract_end_user_id_from_body,
     enforce_throttles,
     get_provider_from_request,
@@ -238,3 +240,58 @@ class TestResolvePlanAndQuota:
 
         quota_mock.assert_not_awaited()
         assert quota_status.limited is False
+
+
+class TestCheckPremiumModelGate:
+    """Completion-path enforcement of the premium-model plan gate.
+
+    See dependencies._check_premium_model_gate: gated only for products that
+    opt in (posthog_code), only for models in settings.premium_models, only
+    when the PostHog flag is enabled, and denies (rather than fails open) when
+    the plan is missing/unknown.
+    """
+
+    @pytest.mark.asyncio
+    async def test_gate_off_allows_premium_model_on_any_plan(self) -> None:
+        with patch.object(get_settings(), "premium_model_gate_enabled", False):
+            await _check_premium_model_gate("posthog_code", "claude-fable-5", None)
+            await _check_premium_model_gate("posthog_code", "claude-fable-5", "posthog-code-free-20260301")
+            await _check_premium_model_gate("posthog_code", "claude-fable-5", "posthog-code-pro-200-20260301")
+        # No HTTPException raised for any plan state — reaching here is the assertion.
+
+    @pytest.mark.asyncio
+    @pytest.mark.parametrize(
+        "plan_key",
+        [None, "posthog-code-free-20260301", "posthog-code-pro-200-20260301"],
+        ids=["none", "free", "pro"],
+    )
+    async def test_gate_on_denies_premium_model_for_non_usage_based_plan(self, plan_key: str | None) -> None:
+        with patch.object(get_settings(), "premium_model_gate_enabled", True):
+            with pytest.raises(HTTPException) as exc_info:
+                await _check_premium_model_gate("posthog_code", "claude-fable-5", plan_key)
+
+        assert exc_info.value.status_code == 403
+        assert "claude-fable-5" in exc_info.value.detail
+        assert "usage-based" in exc_info.value.detail
+
+    @pytest.mark.asyncio
+    async def test_gate_on_allows_premium_model_for_usage_based_plan(self) -> None:
+        with patch.object(get_settings(), "premium_model_gate_enabled", True):
+            await _check_premium_model_gate("posthog_code", "claude-fable-5", "posthog-code-usage-20260709")
+
+    @pytest.mark.asyncio
+    async def test_gate_on_allows_non_premium_model_on_any_plan(self) -> None:
+        with patch.object(get_settings(), "premium_model_gate_enabled", True):
+            await _check_premium_model_gate("posthog_code", "claude-sonnet-4-6", None)
+
+    @pytest.mark.asyncio
+    async def test_gate_on_ignores_products_that_do_not_opt_in(self) -> None:
+        # posthog_ai never sets premium_models_gated, so a fable-ish model id is unaffected
+        # regardless of plan or flag state.
+        with patch.object(get_settings(), "premium_model_gate_enabled", True):
+            await _check_premium_model_gate("posthog_ai", "claude-fable-5", None)
+
+    @pytest.mark.asyncio
+    async def test_no_model_in_request_is_allowed(self) -> None:
+        with patch.object(get_settings(), "premium_model_gate_enabled", True):
+            await _check_premium_model_gate("posthog_code", None, None)
