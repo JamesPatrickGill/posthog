@@ -137,10 +137,10 @@ tools:
         title: Save a scanner's affected users as a cohort
         description: >
             Create a static cohort of the identified users a scanner flagged within the trailing window (default 30
-            days). For monitor scanners only verdict-yes observations count; for other types every succeeded
-            observation counts. The cohort is a dated snapshot and does not live-update; calling again creates a new
-            cohort. Use the cohort anywhere cohorts work: funnel breakdowns, retention, survey targeting, experiment
-            exclusion. Fails when the window contains no identified users.
+            days). For monitor scanners only verdict-yes observations count; for other types every succeeded observation
+            counts. The cohort is a dated snapshot and does not live-update; calling again creates a new cohort. Use the
+            cohort anywhere cohorts work: funnel breakdowns, retention, survey targeting, experiment exclusion. Fails
+            when the window contains no identified users.
         feature_flag: replay-vision
     vision-scanners-create:
         operation: vision_scanners_create
@@ -242,8 +242,8 @@ tools:
         description: >
             Affected sessions and identified users for a scanner over the trailing 30-day window, counted from its
             observations. For monitor scanners only verdict-yes observations count; for other types every succeeded
-            observation counts. `unidentified_sessions` reports affected sessions with no identified person, so the
-            user count reads honestly against the session count.
+            observation counts. `unidentified_sessions` reports affected sessions with no identified person, so the user
+            count reads honestly against the session count.
         feature_flag: replay-vision
     vision-scanners-list:
         operation: vision_scanners_list
