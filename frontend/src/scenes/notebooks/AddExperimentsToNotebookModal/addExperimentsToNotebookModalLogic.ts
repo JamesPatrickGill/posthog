@@ -25,7 +25,6 @@ export const addExperimentsToNotebookModalLogic = kea<addExperimentsToNotebookMo
         values: [teamLogic, ['currentTeamId']],
     })),
     actions({
-        openModal: (insertionPosition: number | null) => ({ insertionPosition }),
         closeModal: true,
         setModalFilters: (filters: Partial<ExperimentsModalFilters>, merge: boolean = true) => ({ filters, merge }),
         setModalPage: (page: number) => ({ page }),
@@ -60,20 +59,6 @@ export const addExperimentsToNotebookModalLogic = kea<addExperimentsToNotebookMo
         },
     })),
     reducers({
-        isAddExperimentsToNotebookModalOpen: [
-            false,
-            {
-                openModal: () => true,
-                closeModal: () => false,
-            },
-        ],
-        insertionPosition: [
-            null as number | null,
-            {
-                openModal: (_, { insertionPosition }) => insertionPosition,
-                closeModal: () => null,
-            },
-        ],
         rawModalFilters: [
             { page: 1, order: '-created_at' } as ExperimentsModalFilters,
             {
@@ -109,9 +94,6 @@ export const addExperimentsToNotebookModalLogic = kea<addExperimentsToNotebookMo
         ],
     }),
     listeners(({ actions, values, selectors }) => ({
-        openModal: () => {
-            actions.loadExperiments()
-        },
         setModalPage: ({ page }) => {
             actions.setModalFilters({ page }, true)
         },
