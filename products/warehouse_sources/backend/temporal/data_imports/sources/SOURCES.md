@@ -241,6 +241,7 @@ the row lists both.
 | mention                 | HTTP                        | requests                                                        | ✅                          |
 | meta_ads                | HTTP                        | requests                                                        | ✅                          |
 | metabase                | HTTP                        | requests                                                        | ✅                          |
+| metorial                | HTTP                        | requests                                                        | ✅                          |
 | mixmax                  | HTTP                        | requests                                                        | ✅                          |
 | mixpanel                | HTTP                        | requests                                                        | ✅                          |
 | mollie                  | HTTP                        | requests                                                        | ✅                          |
@@ -636,7 +637,6 @@ doesn't conflict with concurrent PRs.
 - mercado_ads
 - mercury
 - merge
-- metorial
 - metricool
 - metriport
 - metronome

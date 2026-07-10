@@ -2279,7 +2279,7 @@ class MetabaseSourceConfig(config.Config):
 
 @config.config
 class MetorialSourceConfig(config.Config):
-    pass
+    api_key: str
 
 
 @config.config
