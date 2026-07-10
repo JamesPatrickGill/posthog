@@ -7758,9 +7758,9 @@ export namespace Schemas {
          *
        *         DEPRECATED. Will be removed in a future release. Use dashboard_tiles instead.
        *         A dashboard ID for each of the dashboards that this insight is displayed on.
-       *         Session-authenticated (web app) requests receive this field; other callers (personal API
-       *         keys, OAuth, sharing tokens) must pass the `include_dashboards=true` query parameter to
-       *         receive it.
+       *         This field may be omitted from responses: once opt-in enforcement is enabled, API-token
+       *         callers (personal API keys, OAuth) only receive it when passing the
+       *         `include_dashboards=true` query parameter. Do not rely on it being present.
        *
          * @deprecated
          */
@@ -37528,7 +37528,7 @@ export namespace Schemas {
       derived_name?: string | null;
       query?: unknown;
       /** @deprecated */
-      readonly dashboards: readonly number[];
+      readonly dashboards?: readonly number[];
       readonly dashboard_tiles: readonly DashboardTileBasic[];
       /**
          * @maxLength 400
@@ -40977,9 +40977,9 @@ export namespace Schemas {
          *
        *         DEPRECATED. Will be removed in a future release. Use dashboard_tiles instead.
        *         A dashboard ID for each of the dashboards that this insight is displayed on.
-       *         Session-authenticated (web app) requests receive this field; other callers (personal API
-       *         keys, OAuth, sharing tokens) must pass the `include_dashboards=true` query parameter to
-       *         receive it.
+       *         This field may be omitted from responses: once opt-in enforcement is enabled, API-token
+       *         callers (personal API keys, OAuth) only receive it when passing the
+       *         `include_dashboards=true` query parameter. Do not rely on it being present.
        *
          * @deprecated
          */
@@ -59914,6 +59914,10 @@ export namespace Schemas {
     filters_override?: string;
     format?: EnvironmentsDashboardsRetrieveFormat;
     /**
+     * Opt in to receiving the deprecated `dashboards` field in insight payloads. Once opt-in enforcement is enabled, API-token callers stop receiving it by default; use `dashboard_tiles` instead.
+     */
+    include_dashboards?: boolean;
+    /**
      * Object (or pre-encoded JSON string) to override dashboard variables for this request only (not persisted). Format: {"<variable_id>": {"code_name": "<code_name>", "variableId": "<variable_id>", "value": <new_value>}}. Each entry must include `code_name` — partial entries are silently dropped. The simplest workflow is to call `dashboard-get` first, copy the matching entry from the response, and mutate `value`. Top-level keys replace; nested values are not deep-merged. Ignored when accessed via a sharing token.
      */
     variables_override?: string;
@@ -61854,7 +61858,7 @@ export namespace Schemas {
     favorited?: boolean;
     format?: EnvironmentsInsightsListFormat;
     /**
-     * Opt in to receiving the deprecated `dashboards` field in insight payloads. API-token callers no longer receive it by default; use `dashboard_tiles` instead.
+     * Opt in to receiving the deprecated `dashboards` field in insight payloads. Once opt-in enforcement is enabled, API-token callers stop receiving it by default; use `dashboard_tiles` instead.
      */
     include_dashboards?: boolean;
     /**
@@ -61946,7 +61950,7 @@ export namespace Schemas {
     export type EnvironmentsInsightsCreateParams = {
     format?: EnvironmentsInsightsCreateFormat;
     /**
-     * Opt in to receiving the deprecated `dashboards` field in insight payloads. API-token callers no longer receive it by default; use `dashboard_tiles` instead.
+     * Opt in to receiving the deprecated `dashboards` field in insight payloads. Once opt-in enforcement is enabled, API-token callers stop receiving it by default; use `dashboard_tiles` instead.
      */
     include_dashboards?: boolean;
     };
@@ -61983,7 +61987,7 @@ export namespace Schemas {
      */
     from_dashboard?: number;
     /**
-     * Opt in to receiving the deprecated `dashboards` field in insight payloads. API-token callers no longer receive it by default; use `dashboard_tiles` instead.
+     * Opt in to receiving the deprecated `dashboards` field in insight payloads. Once opt-in enforcement is enabled, API-token callers stop receiving it by default; use `dashboard_tiles` instead.
      */
     include_dashboards?: boolean;
     /**
@@ -62028,7 +62032,7 @@ export namespace Schemas {
     export type EnvironmentsInsightsUpdateParams = {
     format?: EnvironmentsInsightsUpdateFormat;
     /**
-     * Opt in to receiving the deprecated `dashboards` field in insight payloads. API-token callers no longer receive it by default; use `dashboard_tiles` instead.
+     * Opt in to receiving the deprecated `dashboards` field in insight payloads. Once opt-in enforcement is enabled, API-token callers stop receiving it by default; use `dashboard_tiles` instead.
      */
     include_dashboards?: boolean;
     };
@@ -62044,7 +62048,7 @@ export namespace Schemas {
     export type EnvironmentsInsightsPartialUpdateParams = {
     format?: EnvironmentsInsightsPartialUpdateFormat;
     /**
-     * Opt in to receiving the deprecated `dashboards` field in insight payloads. API-token callers no longer receive it by default; use `dashboard_tiles` instead.
+     * Opt in to receiving the deprecated `dashboards` field in insight payloads. Once opt-in enforcement is enabled, API-token callers stop receiving it by default; use `dashboard_tiles` instead.
      */
     include_dashboards?: boolean;
     };
@@ -66262,6 +66266,10 @@ export namespace Schemas {
     filters_override?: string;
     format?: DashboardsRetrieveFormat;
     /**
+     * Opt in to receiving the deprecated `dashboards` field in insight payloads. Once opt-in enforcement is enabled, API-token callers stop receiving it by default; use `dashboard_tiles` instead.
+     */
+    include_dashboards?: boolean;
+    /**
      * Object (or pre-encoded JSON string) to override dashboard variables for this request only (not persisted). Format: {"<variable_id>": {"code_name": "<code_name>", "variableId": "<variable_id>", "value": <new_value>}}. Each entry must include `code_name` — partial entries are silently dropped. The simplest workflow is to call `dashboard-get` first, copy the matching entry from the response, and mutate `value`. Top-level keys replace; nested values are not deep-merged. Ignored when accessed via a sharing token.
      */
     variables_override?: string;
@@ -69111,7 +69119,7 @@ export namespace Schemas {
     favorited?: boolean;
     format?: InsightsListFormat;
     /**
-     * Opt in to receiving the deprecated `dashboards` field in insight payloads. API-token callers no longer receive it by default; use `dashboard_tiles` instead.
+     * Opt in to receiving the deprecated `dashboards` field in insight payloads. Once opt-in enforcement is enabled, API-token callers stop receiving it by default; use `dashboard_tiles` instead.
      */
     include_dashboards?: boolean;
     /**
@@ -69203,7 +69211,7 @@ export namespace Schemas {
     export type InsightsCreateParams = {
     format?: InsightsCreateFormat;
     /**
-     * Opt in to receiving the deprecated `dashboards` field in insight payloads. API-token callers no longer receive it by default; use `dashboard_tiles` instead.
+     * Opt in to receiving the deprecated `dashboards` field in insight payloads. Once opt-in enforcement is enabled, API-token callers stop receiving it by default; use `dashboard_tiles` instead.
      */
     include_dashboards?: boolean;
     };
@@ -69240,7 +69248,7 @@ export namespace Schemas {
      */
     from_dashboard?: number;
     /**
-     * Opt in to receiving the deprecated `dashboards` field in insight payloads. API-token callers no longer receive it by default; use `dashboard_tiles` instead.
+     * Opt in to receiving the deprecated `dashboards` field in insight payloads. Once opt-in enforcement is enabled, API-token callers stop receiving it by default; use `dashboard_tiles` instead.
      */
     include_dashboards?: boolean;
     /**
@@ -69285,7 +69293,7 @@ export namespace Schemas {
     export type InsightsUpdateParams = {
     format?: InsightsUpdateFormat;
     /**
-     * Opt in to receiving the deprecated `dashboards` field in insight payloads. API-token callers no longer receive it by default; use `dashboard_tiles` instead.
+     * Opt in to receiving the deprecated `dashboards` field in insight payloads. Once opt-in enforcement is enabled, API-token callers stop receiving it by default; use `dashboard_tiles` instead.
      */
     include_dashboards?: boolean;
     };
@@ -69301,7 +69309,7 @@ export namespace Schemas {
     export type InsightsPartialUpdateParams = {
     format?: InsightsPartialUpdateFormat;
     /**
-     * Opt in to receiving the deprecated `dashboards` field in insight payloads. API-token callers no longer receive it by default; use `dashboard_tiles` instead.
+     * Opt in to receiving the deprecated `dashboards` field in insight payloads. Once opt-in enforcement is enabled, API-token callers stop receiving it by default; use `dashboard_tiles` instead.
      */
     include_dashboards?: boolean;
     };
