@@ -147,6 +147,7 @@ the row lists both.
 | freshservice            | HTTP                        | requests                                                        | ✅                          |
 | elasticemail            | HTTP                        | requests                                                        | ✅                          |
 | elasticsearch           | HTTP                        | requests                                                        | ✅                          |
+| elevenlabs              | HTTP                        | requests                                                        | ✅                          |
 | emailoctopus            | HTTP                        | requests                                                        | ✅                          |
 | eventbrite              | HTTP                        | requests                                                        | ✅                          |
 | eventee                 | HTTP                        | requests                                                        | ✅                          |
@@ -518,7 +519,6 @@ doesn't conflict with concurrent PRs.
 - dynamodb
 - e2b
 - ebay
-- elevenlabs
 - eloqua
 - employment_hero
 - encharge
