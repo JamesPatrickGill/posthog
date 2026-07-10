@@ -186,6 +186,7 @@ the row lists both.
 | gorgias                 | HTTP                        | requests                                                        | ✅                          |
 | greenhouse              | HTTP                        | requests                                                        | ✅                          |
 | gridly                  | HTTP                        | requests                                                        | ✅                          |
+| groq                    | HTTP                        | requests                                                        | ✅                          |
 | guardian                | HTTP                        | requests                                                        | ✅                          |
 | guru                    | HTTP                        | requests                                                        | ✅                          |
 | height                  | HTTP                        | requests                                                        | ✅                          |
@@ -562,7 +563,6 @@ doesn't conflict with concurrent PRs.
 - google_workspace_admin_reports
 - grafana
 - greythr
-- groq
 - growthbook
 - gumloop
 - gusto
