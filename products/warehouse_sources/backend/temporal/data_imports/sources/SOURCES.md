@@ -377,6 +377,7 @@ the row lists both.
 | unleash                 | HTTP                        | requests                                                        | ✅                          |
 | vercel                  | HTTP                        | requests                                                        | ✅                          |
 | vitally                 | HTTP                        | requests + `rest_source.RESTClient`                             | ✅                          |
+| vultr                   | HTTP                        | requests + `rest_source.RESTClient`                             | ✅                          |
 | webflow                 | HTTP                        | requests                                                        | ✅                          |
 | woocommerce             | HTTP                        | requests + `rest_source.RESTClient`                             | ✅                          |
 | wordpress               | HTTP                        | requests                                                        | ✅                          |
@@ -829,7 +830,6 @@ doesn't conflict with concurrent PRs.
 - vellum
 - vespa
 - visma_economic
-- vultr
 - vwo
 - waiteraid
 - wasabi
