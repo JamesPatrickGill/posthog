@@ -7,7 +7,6 @@ import {
     IconDatabase,
     IconDownload,
     IconFlask,
-    IconHeadset,
     IconHome,
     IconLive,
     IconLlmAnalytics,
@@ -23,6 +22,7 @@ import {
     IconToggle,
     IconTrends,
     IconWarning,
+    IconSupport,
 } from '@posthog/icons'
 
 import { APIScopeObject } from '~/types'
@@ -78,7 +78,7 @@ export function ScopeIcon(props: { scope: APIScopeObject }): JSX.Element | null 
         case 'survey':
             return <IconMessage />
         case 'ticket':
-            return <IconHeadset />
+            return <IconSupport />
         case 'task':
             return <IconBug />
         case 'web_analytics':
