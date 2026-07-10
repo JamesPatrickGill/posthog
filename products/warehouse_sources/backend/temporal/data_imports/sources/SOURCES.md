@@ -216,6 +216,7 @@ the row lists both.
 | katana                  | HTTP                        | requests                                                        | ✅                          |
 | klaviyo                 | HTTP                        | requests                                                        | ✅                          |
 | lago                    | HTTP                        | requests                                                        | ✅                          |
+| lambda_labs             | HTTP                        | requests                                                        | ✅                          |
 | launchdarkly            | HTTP                        | requests                                                        | ✅                          |
 | kustomer                | HTTP                        | requests                                                        | ✅                          |
 | lattice                 | HTTP                        | requests                                                        | ✅                          |
@@ -610,7 +611,6 @@ doesn't conflict with concurrent PRs.
 - knock
 - koyeb
 - kyve
-- lambda_labs
 - langfuse
 - langsmith
 - leexi

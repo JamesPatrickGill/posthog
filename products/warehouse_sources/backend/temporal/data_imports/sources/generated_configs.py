@@ -2015,7 +2015,7 @@ class LagoSourceConfig(config.Config):
 
 @config.config
 class LambdaLabsSourceConfig(config.Config):
-    pass
+    api_key: str
 
 
 @config.config
