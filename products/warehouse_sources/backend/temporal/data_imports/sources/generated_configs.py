@@ -841,7 +841,7 @@ class CodySourceConfig(config.Config):
 
 @config.config
 class CohereSourceConfig(config.Config):
-    pass
+    api_key: str
 
 
 @config.config
