@@ -1365,7 +1365,8 @@ class FlowluSourceConfig(config.Config):
 
 @config.config
 class FlyIoSourceConfig(config.Config):
-    pass
+    api_token: str
+    organization_slug: str
 
 
 @config.config
