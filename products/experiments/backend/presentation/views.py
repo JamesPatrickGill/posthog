@@ -83,11 +83,8 @@ from products.experiments.backend.running_time_calculator import (
 from products.experiments.backend.temporal.models import (
     ExperimentMetricsRecalculationWorkflowInputs as MetricsRecalcInputs,
 )
-from products.feature_flags.backend.api.feature_flag import FeatureFlagSerializer
 from products.feature_flags.backend.models.evaluation_context import FeatureFlagEvaluationContext
 from products.feature_flags.backend.models.feature_flag import FeatureFlag
-from products.product_tours.backend.models import ProductTour
-from products.surveys.backend.models import Survey
 from products.tasks.backend.facade.access import has_tasks_access
 
 tracer = trace.get_tracer(__name__)
@@ -869,65 +866,6 @@ class EnterpriseExperimentsViewSet(
         )
         cohort_data = CohortSerializer(cohort, context={"request": request, "team": self.team}).data
         return Response({"cohort": cohort_data}, status=201)
-
-    @action(methods=["GET"], detail=False, required_scopes=["feature_flag:read"])
-    def eligible_feature_flags(self, request: Request, **kwargs: Any) -> Response:
-        """
-        Returns a paginated list of feature flags eligible for use in experiments.
-
-        Eligible flags must:
-        - Be multivariate with 2 to 20 variants
-        - Have "control" as the first variant key
-
-        Query parameters:
-        - search: Filter by flag key or name (case insensitive)
-        - limit: Number of results per page (default: 20)
-        - offset: Pagination offset (default: 0)
-        - active: Filter by active status ("true" or "false")
-        - created_by_id: Filter by creator user ID
-        - order: Sort order field
-        - evaluation_runtime: Filter by evaluation runtime
-        - has_evaluation_contexts: Filter by presence of evaluation contexts ("true" or "false")
-        """
-        # validate limit and offset
-        try:
-            limit = min(int(request.query_params.get("limit", 20)), 100)
-            offset = max(int(request.query_params.get("offset", 0)), 0)
-        except ValueError:
-            return Response({"error": "Invalid limit or offset"}, status=400)
-
-        survey_flag_ids = Survey.get_internal_flag_ids(project_id=self.project_id)
-        product_tour_internal_targeting_flags = ProductTour.all_objects.filter(
-            team__project_id=self.project_id, internal_targeting_flag__isnull=False
-        ).values_list("internal_targeting_flag_id", flat=True)
-        excluded_flag_ids = survey_flag_ids | set(product_tour_internal_targeting_flags)
-
-        service = ExperimentService(team=self.team, user=request.user)
-        eligible_feature_flags = service.get_eligible_feature_flags(
-            limit=limit,
-            offset=offset,
-            excluded_flag_ids=excluded_flag_ids,
-            search=request.query_params.get("search"),
-            active=request.query_params.get("active"),
-            created_by_id=request.query_params.get("created_by_id"),
-            order=request.query_params.get("order"),
-            evaluation_runtime=request.query_params.get("evaluation_runtime"),
-            has_evaluation_contexts=request.query_params.get("has_evaluation_contexts"),
-        )
-
-        # Serialize using the standard FeatureFlagSerializer
-        serializer = FeatureFlagSerializer(
-            eligible_feature_flags["results"],
-            many=True,
-            context=self.get_serializer_context(),
-        )
-
-        return Response(
-            {
-                "results": serializer.data,
-                "count": eligible_feature_flags["count"],
-            }
-        )
 
     @extend_schema(
         parameters=[

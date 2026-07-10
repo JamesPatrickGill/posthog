@@ -51,7 +51,6 @@ from products.experiments.backend.models.experiment import (
 )
 from products.experiments.backend.models.team_experiments_config import TeamExperimentsConfig
 from products.feature_flags.backend.api.feature_flag import FeatureFlagSerializer
-from products.feature_flags.backend.models.evaluation_context import EvaluationContext, FeatureFlagEvaluationContext
 from products.feature_flags.backend.models.feature_flag import FeatureFlag
 from products.warehouse_sources.backend.facade.models import DataWarehouseCredential, DataWarehouseTable
 
@@ -4685,58 +4684,6 @@ class TestExperimentService(APIBaseTest):
         assert ExperimentMetricResult.objects.filter(experiment=experiment, metric_uuid="m1").count() == 0
 
     # ------------------------------------------------------------------
-    # Eligible feature flags
-    # ------------------------------------------------------------------
-
-    def test_get_eligible_feature_flags_only_returns_control_first_multivariate_flags(self) -> None:
-        eligible_flag = self._create_flag(key="eligible-flag")
-        self._create_flag(
-            key="wrong-order-flag",
-            variants=[
-                {"key": "test", "name": "Test", "rollout_percentage": 50},
-                {"key": "control", "name": "Control", "rollout_percentage": 50},
-            ],
-        )
-        self._create_flag(
-            key="single-variant-flag",
-            variants=[{"key": "control", "name": "Control", "rollout_percentage": 100}],
-        )
-
-        result = self._service().get_eligible_feature_flags(order="key")
-
-        assert result["count"] == 1
-        assert [flag.key for flag in result["results"]] == [eligible_flag.key]
-
-    def test_get_eligible_feature_flags_applies_search_and_pagination(self) -> None:
-        self._create_flag(key="search-alpha")
-        self._create_flag(key="search-beta")
-        self._create_flag(key="other-flag")
-
-        result = self._service().get_eligible_feature_flags(
-            search="search",
-            order="key",
-            limit=1,
-            offset=1,
-        )
-
-        assert result["count"] == 2
-        assert [flag.key for flag in result["results"]] == ["search-beta"]
-
-    def test_get_eligible_feature_flags_filters_by_evaluation_contexts(self) -> None:
-        flag_with_tags = self._create_flag(key="flag-with-tags")
-        self._create_flag(key="flag-without-tags")
-        evaluation_context = EvaluationContext.objects.create(name="app", team=self.team)
-        FeatureFlagEvaluationContext.objects.create(feature_flag=flag_with_tags, evaluation_context=evaluation_context)
-
-        service = self._service()
-
-        flags_with_tags = service.get_eligible_feature_flags(has_evaluation_contexts="true", order="key")
-        flags_without_tags = service.get_eligible_feature_flags(has_evaluation_contexts="false", order="key")
-
-        assert [flag.key for flag in flags_with_tags["results"]] == ["flag-with-tags"]
-        assert [flag.key for flag in flags_without_tags["results"]] == ["flag-without-tags"]
-
-    # ------------------------------------------------------------------
     # Experiment list/querying
     # ------------------------------------------------------------------
 
@@ -5698,12 +5645,6 @@ class TestExperimentService(APIBaseTest):
         service = self._service()
         qs = service.filter_experiments_queryset(self._base_queryset(), action="list", query_params={"order": order})
         assert qs is not None
-
-    def test_eligible_flags_order_by_invalid_field_raises(self):
-        """Ordering eligible flags by a non-allowlisted field should be rejected."""
-        service = self._service()
-        with self.assertRaises(ValidationError):
-            service.get_eligible_feature_flags(order="team__organization__name")
 
     def test_launch_with_deleted_flag_raises(self):
         """Launching an experiment whose flag is soft-deleted should fail."""
