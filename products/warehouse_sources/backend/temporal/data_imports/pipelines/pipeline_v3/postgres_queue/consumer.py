@@ -106,7 +106,6 @@ class DeltaBatchConsumerAdapter:
             limit=limit,
             retry_backoff_base_seconds=retry_backoff_base_seconds,
             lease_ttl_seconds=lease_ttl_seconds,
-            use_state=self._use_state,
         )
 
     async def unlock(
@@ -228,7 +227,7 @@ class DeltaBatchConsumerAdapter:
     ) -> list[PendingBatch]:
         # keep_locks is meaningless for the lease sink: get_stale_executing holds
         # no locks and the lease LEFT JOIN already excludes live groups.
-        return await BatchQueue.get_stale_executing(conn, grace_seconds=grace_seconds, use_state=self._use_state)
+        return await BatchQueue.get_stale_executing(conn, grace_seconds=grace_seconds)
 
     async def reconcile_failed_runs(
         self,
@@ -248,7 +247,6 @@ class DeltaBatchConsumerAdapter:
             grace_seconds=grace_seconds,
             lookback_seconds=lookback_seconds,
             limit=limit,
-            use_state=self._use_state,
         )
         for ref in refs:
             try:
@@ -304,7 +302,7 @@ class DeltaBatchConsumerAdapter:
         """
         try:
             async with asyncio.timeout(FRESHNESS_PROBE_TIMEOUT_SECONDS):
-                age = await BatchQueue.get_oldest_unclaimed_batch_age_seconds(conn, use_state=self._use_state)
+                age = await BatchQueue.get_oldest_unclaimed_batch_age_seconds(conn)
         except TimeoutError:
             logger.error(  # noqa: TRY400 — designed degraded path, traceback is noise
                 "queue_freshness_probe_timed_out",
@@ -398,7 +396,7 @@ class BatchConsumer(SharedBatchConsumer):
         super().__init__(
             config=config,
             process_batch=process_batch,
-            adapter=DeltaBatchConsumerAdapter(use_state=config.claim_path == "state"),
+            adapter=DeltaBatchConsumerAdapter(),
             health_reporter=health_reporter,
         )
 
