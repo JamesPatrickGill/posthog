@@ -1,6 +1,7 @@
 from posthog.test.base import APIBaseTest
 from unittest.mock import patch
 
+from parameterized import parameterized
 from rest_framework.exceptions import ValidationError
 
 from posthog.constants import AvailableFeature
@@ -8,6 +9,7 @@ from posthog.constants import AvailableFeature
 from products.approvals.backend.exceptions import ApprovalRequired
 from products.approvals.backend.models import ApprovalPolicy
 from products.feature_flags.backend.facade.api import archive_flag, roll_out_variant
+from products.feature_flags.backend.facade.rules import ExperimentRuleConfig, HoldoutRef, experiment_rule_from_filters
 from products.feature_flags.backend.models.feature_flag import FeatureFlag
 
 
@@ -166,3 +168,48 @@ class TestRollOutVariant:
         assert result["groups"][1:] == [{"properties": [], "rollout_percentage": 100}]
         assert result["payloads"] == current_filters["payloads"]
         assert result["aggregation_group_type_index"] == 1
+
+
+class TestExperimentRuleFromFilters:
+    @parameterized.expand(
+        [
+            (
+                "full_v1_filters",
+                {
+                    "groups": [
+                        {"properties": [], "rollout_percentage": 40},
+                        {"properties": [], "rollout_percentage": 100},
+                    ],
+                    "multivariate": {
+                        "variants": [
+                            {"key": "control", "rollout_percentage": 50},
+                            {"key": "test", "rollout_percentage": 50},
+                        ]
+                    },
+                    "aggregation_group_type_index": 2,
+                    "holdout": {"id": 7, "exclusion_percentage": 10},
+                },
+                ExperimentRuleConfig(
+                    variants=[
+                        {"key": "control", "rollout_percentage": 50},
+                        {"key": "test", "rollout_percentage": 50},
+                    ],
+                    rollout_percentage=40,
+                    assign_variant_by=2,
+                    holdout=HoldoutRef(id=7, exclusion_percentage=10),
+                ),
+            ),
+            (
+                "empty_filters",
+                {},
+                ExperimentRuleConfig(variants=[], rollout_percentage=None, assign_variant_by=None, holdout=None),
+            ),
+            (
+                "group_without_rollout_and_null_holdout",
+                {"groups": [{"properties": []}], "holdout": None, "multivariate": {"variants": []}},
+                ExperimentRuleConfig(variants=[], rollout_percentage=None, assign_variant_by=None, holdout=None),
+            ),
+        ]
+    )
+    def test_derivation(self, _name, filters, expected):
+        assert experiment_rule_from_filters(filters) == expected
